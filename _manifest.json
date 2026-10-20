@@ -1,0 +1,33 @@
+{
+  "manifest_version": 2,
+  "id": "worldcopyist.mai-secretary",
+  "name": "麦麦小秘书",
+  "version": "0.1.0",
+  "description": "在指定时段随机发起贴合上下文的聊天，并让麦麦通过自然语言设置和执行定时任务。",
+  "author": {
+    "name": "worldcopyist",
+    "url": "https://github.com/worldcopyist"
+  },
+  "license": "UNLICENSED",
+  "urls": {
+    "repository": "https://example.com/pending-mai-secretary-repository"
+  },
+  "host_application": {
+    "min_version": "1.3.7",
+    "max_version": "999.999.999"
+  },
+  "sdk": {
+    "min_version": "2.12.0",
+    "max_version": "999.999.999"
+  },
+  "dependencies": [],
+  "plugin_type": "management",
+  "capabilities": [
+    "chat.open_session",
+    "maisaka.proactive.trigger"
+  ],
+  "i18n": {
+    "default_locale": "zh-CN",
+    "supported_locales": ["zh-CN"]
+  }
+}

@@ -1,0 +1,15 @@
+[plugin]
+config_version = "0.1.0"
+enabled = true
+timezone = "Asia/Shanghai"
+check_interval_seconds = 30
+misfire_grace_seconds = 600
+max_tasks_per_user = 30
+
+[proactive]
+enabled = true
+target_chats = []
+window_start = "09:00"
+window_end = "21:00"
+messages_per_window = 1
+intent = "请根据这个聊天流的最近对话、人物关系和已有记忆，找一个贴合上下文的话题，在当前聊天流发出一条自然的消息。避免复述最近说过的话；上下文较少时可聊轻松的日常话题。不要提及插件或定时器。"
