@@ -11,7 +11,7 @@ import random
 import uuid
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 from zoneinfo import ZoneInfo
 
 from maibot_sdk import Field, MaiBotPlugin, PluginConfigBase, Tool
@@ -19,6 +19,7 @@ from maibot_sdk.types import ToolParameterInfo, ToolParamType
 
 from .secretary_core import (
     ScheduledTask,
+    interval_slots,
     next_occurrence,
     next_window,
     parse_clock,
@@ -57,6 +58,15 @@ class ProactiveSettings(PluginConfigBase):
     )
     messages_per_window: int = Field(
         default=1, ge=1, le=5, description="每个聊天流每个窗口随机触发次数"
+    )
+    scheduling_mode: Literal["count", "interval"] = Field(
+        default="count", description="count 按窗口次数；interval 按平均间隔"
+    )
+    average_interval_hours: float = Field(
+        default=2.0, ge=0.25, le=24, description="interval 模式下平均每隔多少小时发言"
+    )
+    offset_minutes: int = Field(
+        default=15, ge=0, le=720, description="interval 模式下每次间隔的随机偏移，正负分钟"
     )
     intent: str = Field(
         default=(
@@ -210,15 +220,27 @@ class MaiSecretaryPlugin(MaiBotPlugin):
             parse_clock(settings.window_end),
         )
         window_key, first, last = next_window(now, start, end, zone)
-        signature = json.dumps(
-            [
+        if settings.scheduling_mode == "interval":
+            interval = settings.average_interval_hours * 60
+            if settings.offset_minutes >= interval:
+                raise ValueError("随机发言偏移分钟数须小于平均间隔")
+            signature_parts = [
+                settings.window_start,
+                settings.window_end,
+                "interval",
+                settings.average_interval_hours,
+                settings.offset_minutes,
+                self.config.plugin.timezone,
+            ]
+        else:
+            # Keep the old signature so an existing count-mode plan is not reshuffled.
+            signature_parts = [
                 settings.window_start,
                 settings.window_end,
                 settings.messages_per_window,
                 self.config.plugin.timezone,
-            ],
-            ensure_ascii=False,
-        )
+            ]
+        signature = json.dumps(signature_parts, ensure_ascii=False)
         configured = set(settings.target_chats)
         for key in list(self._plans):
             if key not in configured:
@@ -234,8 +256,19 @@ class MaiSecretaryPlugin(MaiBotPlugin):
                 plan = {
                     "window_key": window_key,
                     "signature": signature,
-                    "slots": random_slots(
-                        now, first, last, settings.messages_per_window, self._rng
+                    "slots": (
+                        interval_slots(
+                            now,
+                            first,
+                            last,
+                            settings.average_interval_hours,
+                            settings.offset_minutes,
+                            self._rng,
+                        )
+                        if settings.scheduling_mode == "interval"
+                        else random_slots(
+                            now, first, last, settings.messages_per_window, self._rng
+                        )
                     ),
                 }
                 self._plans[target] = plan

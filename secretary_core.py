@@ -145,3 +145,28 @@ def random_slots(
         rng.uniform(lower + index * width, lower + (index + 1) * width)
         for index in range(count)
     ]
+
+
+def interval_slots(
+    now: datetime,
+    first: datetime,
+    last: datetime,
+    average_interval_hours: float,
+    offset_minutes: int,
+    rng: random.Random,
+) -> list[float]:
+    """Schedule gaps uniformly around the requested average, inside one window."""
+    interval = average_interval_hours * 3600
+    offset = offset_minutes * 60
+    if interval <= 0 or offset < 0 or offset >= interval:
+        raise ValueError("随机发言偏移分钟数须小于平均间隔")
+
+    cursor = max(now.timestamp(), first.timestamp())
+    upper = last.timestamp()
+    slots: list[float] = []
+    while cursor < upper:
+        cursor += rng.uniform(interval - offset, interval + offset)
+        if cursor >= upper:
+            break
+        slots.append(cursor)
+    return slots

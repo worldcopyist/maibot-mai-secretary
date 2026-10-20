@@ -3,9 +3,11 @@ from __future__ import annotations
 import importlib
 import json
 import logging
+import random
 import sys
 import types
 from datetime import UTC, datetime
+from itertools import pairwise
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
@@ -75,6 +77,19 @@ def test_overnight_window_uses_previous_start_date():
     assert key == "2026-10-20"
     assert first == datetime(2026, 10, 20, 20, 0, tzinfo=zone)
     assert last == datetime(2026, 10, 21, 1, 0, tzinfo=zone)
+
+
+def test_interval_slots_keep_each_gap_within_requested_offset():
+    zone = ZoneInfo("Asia/Shanghai")
+    first = datetime(2026, 10, 20, 10, 0, tzinfo=zone)
+    last = datetime(2026, 10, 21, 2, 0, tzinfo=zone)
+    slots = core.interval_slots(first, first, last, 2, 15, random.Random(7))
+    gaps = [slots[0] - first.timestamp(), *(b - a for a, b in pairwise(slots))]
+    assert len(slots) >= 6
+    assert all(105 * 60 <= gap <= 135 * 60 for gap in gaps)
+    assert all(first.timestamp() < slot < last.timestamp() for slot in slots)
+    with pytest.raises(ValueError, match="小于平均间隔"):
+        core.interval_slots(first, first, last, 2, 120, random.Random(7))
 
 
 @pytest.mark.asyncio
@@ -169,6 +184,37 @@ async def test_random_proactive_plan_survives_reload(tmp_path):
     restored._load_state()
     await restored._tick(datetime.fromtimestamp(slot + 1, UTC))
     assert restored_proactive.calls == []
+
+
+@pytest.mark.asyncio
+async def test_interval_plan_survives_reload_and_replans_on_mode_change(tmp_path):
+    target = "qq:private:123"
+    config = {
+        "proactive": {
+            "target_chats": [target],
+            "window_start": "10:00",
+            "window_end": "02:00",
+            "scheduling_mode": "interval",
+            "average_interval_hours": 2,
+            "offset_minutes": 15,
+        }
+    }
+    plugin, _ = make_plugin(tmp_path, config)
+    plugin._rng.seed(7)
+    zone = ZoneInfo("Asia/Shanghai")
+    now = datetime(2026, 10, 20, 10, 0, tzinfo=zone)
+    await plugin._tick(now)
+    planned = plugin._plans[target]["slots"].copy()
+
+    restored, _ = make_plugin(tmp_path, config)
+    restored._load_state()
+    await restored._tick(datetime(2026, 10, 20, 10, 1, tzinfo=zone))
+    assert restored._plans[target]["slots"] == planned
+
+    restored.config.proactive.scheduling_mode = "count"
+    await restored._tick(datetime(2026, 10, 20, 10, 2, tzinfo=zone))
+    assert len(restored._plans[target]["slots"]) == 1
+    assert restored._plans[target]["slots"] != planned
 
 
 @pytest.mark.asyncio
