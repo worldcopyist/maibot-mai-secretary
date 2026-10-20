@@ -218,6 +218,94 @@ async def test_interval_plan_survives_reload_and_replans_on_mode_change(tmp_path
 
 
 @pytest.mark.asyncio
+async def test_next_proactive_chat_uses_only_a_successfully_sent_previous_message(tmp_path):
+    target = "qq:private:123"
+    config = {"proactive": {"target_chats": [target], "messages_per_window": 2}}
+    plugin, proactive = make_plugin(tmp_path, config)
+    plugin._rng.seed(7)
+    zone = ZoneInfo("Asia/Shanghai")
+    await plugin._tick(datetime(2026, 10, 20, 9, 0, tzinfo=zone))
+    first, second = plugin._plans[target]["slots"]
+    await plugin._tick(datetime.fromtimestamp(first + 1, UTC))
+    assert len(proactive.calls) == 1
+    assert "自己决定你此刻在做" in proactive.calls[0]["intent"]
+    assert "实际发出的文字" not in proactive.calls[0]["intent"]
+
+    message = {
+        "session_id": "real-stream-1",
+        "message_id": "sent-1",
+        "timestamp": str(first + 2),
+        "raw_message": [{"type": "text", "data": "我在吃饭"}],
+    }
+    await plugin.capture_proactive_reply(message, sent=False)
+    await plugin.capture_proactive_reply({**message, "session_id": "other-stream"}, sent=True)
+    assert "last_message" not in plugin._continuity[target]
+    await plugin.capture_proactive_reply(message, sent=True)
+    await plugin.capture_proactive_reply(message, sent=True)  # Duplicate hook delivery.
+    await plugin.capture_proactive_reply(
+        {**message, "message_id": "sent-2", "timestamp": str(first + 5),
+         "raw_message": [{"type": "text", "data": "这碗面真香"}]},
+        sent=True,
+    )
+    assert plugin._continuity[target]["last_message"] == "我在吃饭 这碗面真香"
+
+    restored, restored_proactive = make_plugin(tmp_path, config)
+    restored._load_state()
+    await restored._tick(datetime.fromtimestamp(second + 1, UTC))
+    assert len(restored_proactive.calls) == 1
+    intent = restored_proactive.calls[0]["intent"]
+    assert "我在吃饭 这碗面真香" in intent
+    assert "按经过的时间自然接续" in intent
+
+
+@pytest.mark.asyncio
+async def test_queued_without_sent_message_does_not_create_false_continuity(tmp_path):
+    target = "qq:private:123"
+    config = {"proactive": {"target_chats": [target], "messages_per_window": 2}}
+    plugin, proactive = make_plugin(tmp_path, config)
+    plugin._rng.seed(7)
+    zone = ZoneInfo("Asia/Shanghai")
+    await plugin._tick(datetime(2026, 10, 20, 9, 0, tzinfo=zone))
+    first, second = plugin._plans[target]["slots"]
+    await plugin._tick(datetime.fromtimestamp(first + 1, UTC))
+    await plugin._tick(datetime.fromtimestamp(second + 1, UTC))
+    assert len(proactive.calls) == 2
+    assert "实际发出的文字" not in proactive.calls[1]["intent"]
+
+
+@pytest.mark.asyncio
+async def test_inbound_message_prevents_claiming_an_ordinary_reply(tmp_path):
+    target = "qq:private:123"
+    plugin, proactive = make_plugin(
+        tmp_path, {"proactive": {"target_chats": [target], "messages_per_window": 2}}
+    )
+    plugin._rng.seed(7)
+    zone = ZoneInfo("Asia/Shanghai")
+    await plugin._tick(datetime(2026, 10, 20, 9, 0, tzinfo=zone))
+    first, second = plugin._plans[target]["slots"]
+    await plugin._tick(datetime.fromtimestamp(first + 1, UTC))
+    await plugin.cancel_pending_on_inbound(
+        {
+            "session_id": "real-stream-1",
+            "timestamp": str(first + 2),
+            "account_id": "bot-1",
+            "message_info": {"user_info": {"user_id": "user-1"}},
+        }
+    )
+    await plugin.capture_proactive_reply(
+        {
+            "session_id": "real-stream-1",
+            "timestamp": str(first + 3),
+            "raw_message": [{"type": "text", "data": "这是普通回复"}],
+        },
+        sent=True,
+    )
+    assert "last_message" not in plugin._continuity[target]
+    await plugin._tick(datetime.fromtimestamp(second + 1, UTC))
+    assert "这是普通回复" not in proactive.calls[1]["intent"]
+
+
+@pytest.mark.asyncio
 async def test_tools_restrict_tasks_to_current_user_and_chat(tmp_path):
     plugin, _ = make_plugin(tmp_path)
     identity = {"stream_id": "stream-1", "chat_id": "stream-1", "user_id": "user-1"}

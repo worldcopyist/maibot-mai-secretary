@@ -2,8 +2,8 @@
   "manifest_version": 2,
   "id": "worldcopyist.mai-secretary",
   "name": "麦麦小秘书",
-  "version": "0.2.1",
-  "description": "在指定时段随机发起贴合上下文的聊天，并让麦麦通过自然语言设置和执行定时任务。",
+  "version": "0.3.0",
+  "description": "在指定时段主动聊天并自然续接上次实际发出的内容，同时通过自然语言设置和执行定时任务。",
   "display": {
     "icon": {
       "type": "local",
