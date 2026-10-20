@@ -2,7 +2,7 @@
   "manifest_version": 2,
   "id": "worldcopyist.mai-secretary",
   "name": "麦麦小秘书",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "在指定时段主动聊天并自然续接上次实际发出的内容，同时通过自然语言设置和执行定时任务。",
   "display": {
     "icon": {
@@ -30,6 +30,7 @@
   "dependencies": [],
   "plugin_type": "management",
   "capabilities": [
+    "chat.get_all_streams",
     "chat.open_session",
     "maisaka.proactive.trigger"
   ],

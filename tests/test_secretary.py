@@ -31,7 +31,15 @@ class FakeProactive:
 
 
 class FakeChat:
+    def __init__(self) -> None:
+        self.streams = [{"stream_id": "other-stream", "platform": "qq", "chat_type": "private", "user_id": "other", "account_id": "bot-1", "scope": ""}]
+        self.open_calls: list[dict] = []
+
+    async def get_all_streams(self, **kwargs):
+        return {"success": True, "streams": self.streams}
+
     async def open_session(self, **kwargs):
+        self.open_calls.append(kwargs)
         return {"stream_id": "real-stream-1"}
 
 
@@ -47,6 +55,34 @@ def make_plugin(tmp_path: Path, config: dict | None = None):
     )
     plugin._state_path = tmp_path / "secretary-state.json"
     return plugin, proactive
+
+
+@pytest.mark.asyncio
+async def test_existing_account_scoped_private_stream_is_reused(tmp_path):
+    plugin, _ = make_plugin(tmp_path)
+    chat = plugin.ctx.chat
+    chat.streams = [
+        {"stream_id": "old-real-stream", "platform": "qq", "chat_type": "private", "user_id": "123", "account_id": "bot-1", "scope": ""},
+        {"stream_id": "duplicate-stream", "platform": "qq", "chat_type": "private", "user_id": "123", "account_id": "", "scope": ""},
+    ]
+
+    assert await plugin._resolve_stream("qq:private:123") == "old-real-stream"
+    assert chat.open_calls == []
+
+
+@pytest.mark.asyncio
+async def test_new_target_uses_known_bot_account_and_never_opens_without_it(tmp_path):
+    plugin, _ = make_plugin(tmp_path)
+    chat = plugin.ctx.chat
+
+    assert await plugin._resolve_stream("qq:private:123") == "real-stream-1"
+    assert chat.open_calls[0]["account_id"] == "bot-1"
+
+    chat.streams = []
+    plugin._streams.clear()
+    with pytest.raises(ValueError, match="无法确定"):
+        await plugin._resolve_stream("qq:private:123")
+    assert len(chat.open_calls) == 1
 
 
 def test_daily_weekly_and_once_time_calculation():
