@@ -43,4 +43,4 @@ uv venv --python 3.13 .venv
 uv pip install --python .venv/Scripts/python.exe -r requirements.txt
 ```
 
-**仓库地址仍待提供。** `_manifest.json` 中的 `urls.repository` 目前是明显的占位地址；收到 GitHub 仓库地址后必须替换，再做服务器加载验证。许可证也暂为 `UNLICENSED`，发布前需由仓库现有许可或用户决定。
+GitHub 仓库：[worldcopyist/maibot-mai-secretary](https://github.com/worldcopyist/maibot-mai-secretary)。插件按 MIT 许可证发布，详见 `LICENSE`。发布后仍需在服务器上验证从仓库安装或更新的流程。

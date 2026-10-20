@@ -15,9 +15,9 @@
     "name": "worldcopyist",
     "url": "https://github.com/worldcopyist"
   },
-  "license": "UNLICENSED",
+  "license": "MIT",
   "urls": {
-    "repository": "https://example.com/pending-mai-secretary-repository"
+    "repository": "https://github.com/worldcopyist/maibot-mai-secretary"
   },
   "host_application": {
     "min_version": "1.3.7",
