@@ -146,7 +146,20 @@ async def test_one_time_task_persists_and_does_not_repeat(tmp_path):
     await plugin._tick(now)
     await plugin._tick(now)
     assert len(proactive.calls) == 1
-    assert "可靠的实时数据" in proactive.calls[0]["intent"]
+    task_intent = proactive.calls[0]["intent"]
+    assert "可靠的实时数据" in task_intent
+    assert "不要调用 `secretary_create_task` 重复设置" in task_intent
+    assert all(
+        f"`{name}`" in task_intent
+        for name in (
+            "deepseek_search",
+            "deepseek_fetch",
+            "secretary_create_task",
+            "secretary_list_tasks",
+            "secretary_cancel_task",
+            "tool_search",
+        )
+    )
     assert plugin._tasks["abc"].status == "completed"
 
     restored, restored_proactive = make_plugin(tmp_path)
@@ -265,6 +278,9 @@ async def test_next_proactive_chat_uses_only_a_successfully_sent_previous_messag
     await plugin._tick(datetime.fromtimestamp(first + 1, UTC))
     assert len(proactive.calls) == 1
     assert "自己决定你此刻在做" in proactive.calls[0]["intent"]
+    assert "`deepseek_search`" in proactive.calls[0]["intent"]
+    assert "`tool_search`" in proactive.calls[0]["intent"]
+    assert "日常闲聊无需联网" in proactive.calls[0]["intent"]
     assert "实际发出的文字" not in proactive.calls[0]["intent"]
 
     message = {

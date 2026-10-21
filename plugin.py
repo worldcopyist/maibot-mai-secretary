@@ -28,6 +28,20 @@ from .secretary_core import (
 
 LOG = logging.getLogger(__name__)
 
+TOOL_ROUTING_PROMPT = (
+    "\n按需使用以下 MaiBot 工具，调用时使用准确的工具名："
+    "`deepseek_search` 接收 query，用于天气、新闻等实时信息的联网搜索；"
+    "`deepseek_fetch` 接收 url，用于读取已知链接的网页正文，不用它寻找未知链接；"
+    "`secretary_create_task` 接收 instruction、schedule、at，用于用户要求新建未来的定时任务；"
+    "`secretary_list_tasks` 用于查看用户已有的定时任务；"
+    "`secretary_cancel_task` 接收 task_id，用于取消用户指定的任务，先查看列表确认任务编号；"
+    "`tool_search` 只用于发现列在 deferred tools 中、但当前尚不可直接调用的工具，"
+    "发现后再按其实际参数调用。"
+    "定时任务管理工具只处理当前用户明确提出的请求，不因旧聊天内容重复操作。"
+    "只在对应场景调用；工具不存在、调用失败或查不到可靠信息时如实说明，"
+    "不要编造工具结果或声称任务已创建。"
+)
+
 
 class PluginSettings(PluginConfigBase):
     """控制小秘书运行和定时任务的通用设置。"""
@@ -309,7 +323,10 @@ class MaiSecretaryPlugin(MaiBotPlugin):
             intent = (
                 "用户之前设置的定时任务现在到点了。请在当前聊天流中完成这项请求："
                 f"{task.instruction}。结合当前上下文回答；如任务需要天气等实时信息，"
-                "请使用当前可用的查询工具。若无法取得可靠的实时数据，明确说明，勿编造。"
+                "请调用 `deepseek_search` 查证；已有链接需要正文时再调用 `deepseek_fetch`。"
+                "若无法取得可靠的实时数据，明确说明，勿编造。"
+                "本轮是在执行已创建的任务，不要调用 `secretary_create_task` 重复设置。"
+                f"{TOOL_ROUTING_PROMPT}"
             )
             try:
                 await self._trigger(
@@ -438,6 +455,8 @@ class MaiSecretaryPlugin(MaiBotPlugin):
         intent = (
             f"{base_intent}\n这次主动聊天时，请自己决定你此刻在做的一件符合人设的日常小事，"
             "自然地告诉用户；活动和具体细节由你来设定，不要像汇报行程。"
+            "日常闲聊无需联网，也不要无故创建定时任务。"
+            f"{TOOL_ROUTING_PROMPT}"
         )
         continuity = self._continuity.get(target, {})
         last_message = str(continuity.get("last_message") or "").strip()
