@@ -6,6 +6,9 @@ check_interval_seconds = 30
 misfire_grace_seconds = 600
 max_tasks_per_user = 30
 
+[scheduled_tasks]
+enabled = true
+
 [proactive]
 enabled = true
 target_chats = []

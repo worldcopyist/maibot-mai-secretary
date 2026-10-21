@@ -38,6 +38,14 @@ offset_minutes = 15
 
 ## 开发与安装
 
+### 模块结构
+
+`plugin.py` 是 MaiBot 的入口，只负责配置、模块注册、统一调度、状态文件读写，以及 SDK 工具和事件钩子的转发。`scheduled_tasks.py` 独立管理定时任务，`proactive_chat.py` 独立管理随机发言、聊天流路由和上次发言的续接；两者通过 `module_contract.py` 约定的接口接入。`secretary_core.py` 保留不依赖 MaiBot 的时间计算，`prompts.py` 集中放工具调用提示词。
+
+两个功能可分别用 `[scheduled_tasks].enabled` 和 `[proactive].enabled` 开关。旧配置没有 `[scheduled_tasks]` 时，定时任务默认保持启用。全局 `[plugin].enabled` 仍控制整个插件。
+
+添加功能时，新建一个实现 `name`、`state_keys`、`load_state`、`dump_state`、`on_config_update` 和 `tick` 的模块，并在 `MaiSecretaryPlugin.__init__` 中调用 `_register_module`。若模块需要给麦麦新增工具或接收事件，在入口类添加 SDK 装饰的薄转发方法。模块状态使用独有字段写入现有 `secretary-state.json`；注册时会拒绝重复字段，未注册字段也会在读写时保留。现有配置字段、工具名和状态文件版本保持兼容。
+
 本仓库直接作为 MaiBot `plugins/` 下的独立插件目录使用，不修改 MaiBot 主程序。安装依赖：
 
 ```powershell

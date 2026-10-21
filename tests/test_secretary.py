@@ -57,6 +57,17 @@ def make_plugin(tmp_path: Path, config: dict | None = None):
     return plugin, proactive
 
 
+def test_sdk_still_exposes_original_tools_and_hooks(tmp_path):
+    plugin, _ = make_plugin(tmp_path)
+    assert {(item["type"], item["name"]) for item in plugin.get_components()} == {
+        ("TOOL", "secretary_create_task"),
+        ("TOOL", "secretary_list_tasks"),
+        ("TOOL", "secretary_cancel_task"),
+        ("HOOK_HANDLER", "secretary_cancel_pending_on_inbound"),
+        ("HOOK_HANDLER", "secretary_capture_proactive_reply"),
+    }
+
+
 @pytest.mark.asyncio
 async def test_existing_account_scoped_private_stream_is_reused(tmp_path):
     plugin, _ = make_plugin(tmp_path)
@@ -66,7 +77,7 @@ async def test_existing_account_scoped_private_stream_is_reused(tmp_path):
         {"stream_id": "duplicate-stream", "platform": "qq", "chat_type": "private", "user_id": "123", "account_id": "", "scope": ""},
     ]
 
-    assert await plugin._resolve_stream("qq:private:123") == "old-real-stream"
+    assert await plugin.proactive._resolve_stream("qq:private:123") == "old-real-stream"
     assert chat.open_calls == []
 
 
@@ -75,13 +86,13 @@ async def test_new_target_uses_known_bot_account_and_never_opens_without_it(tmp_
     plugin, _ = make_plugin(tmp_path)
     chat = plugin.ctx.chat
 
-    assert await plugin._resolve_stream("qq:private:123") == "real-stream-1"
+    assert await plugin.proactive._resolve_stream("qq:private:123") == "real-stream-1"
     assert chat.open_calls[0]["account_id"] == "bot-1"
 
     chat.streams = []
-    plugin._streams.clear()
+    plugin.proactive.streams.clear()
     with pytest.raises(ValueError, match="无法确定"):
-        await plugin._resolve_stream("qq:private:123")
+        await plugin.proactive._resolve_stream("qq:private:123")
     assert len(chat.open_calls) == 1
 
 
@@ -132,7 +143,7 @@ def test_interval_slots_keep_each_gap_within_requested_offset():
 async def test_one_time_task_persists_and_does_not_repeat(tmp_path):
     plugin, proactive = make_plugin(tmp_path)
     now = datetime(2026, 10, 20, 8, 0, tzinfo=UTC)
-    plugin._tasks["abc"] = core.ScheduledTask(
+    plugin.scheduled.tasks["abc"] = core.ScheduledTask(
         id="abc",
         stream_id="stream-1",
         owner_user_id="user-1",
@@ -160,20 +171,20 @@ async def test_one_time_task_persists_and_does_not_repeat(tmp_path):
             "tool_search",
         )
     )
-    assert plugin._tasks["abc"].status == "completed"
+    assert plugin.scheduled.tasks["abc"].status == "completed"
 
     restored, restored_proactive = make_plugin(tmp_path)
     restored._load_state()
     await restored._tick(now)
     assert restored_proactive.calls == []
-    assert restored._tasks["abc"].status == "completed"
+    assert restored.scheduled.tasks["abc"].status == "completed"
 
 
 @pytest.mark.asyncio
 async def test_missed_one_time_task_is_not_sent_late(tmp_path):
     plugin, proactive = make_plugin(tmp_path, {"plugin": {"misfire_grace_seconds": 60}})
     now = datetime(2026, 10, 20, 8, 0, tzinfo=UTC)
-    plugin._tasks["late"] = core.ScheduledTask(
+    plugin.scheduled.tasks["late"] = core.ScheduledTask(
         id="late",
         stream_id="stream-1",
         owner_user_id="user-1",
@@ -186,7 +197,7 @@ async def test_missed_one_time_task_is_not_sent_late(tmp_path):
     )
     await plugin._tick(now)
     assert proactive.calls == []
-    assert plugin._tasks["late"].status == "missed"
+    assert plugin.scheduled.tasks["late"].status == "missed"
 
 
 @pytest.mark.asyncio
@@ -194,7 +205,7 @@ async def test_daily_task_moves_to_next_day_after_trigger(tmp_path):
     plugin, proactive = make_plugin(tmp_path)
     zone = ZoneInfo("Asia/Shanghai")
     now = datetime(2026, 10, 20, 8, 0, 10, tzinfo=zone)
-    plugin._tasks["daily"] = core.ScheduledTask(
+    plugin.scheduled.tasks["daily"] = core.ScheduledTask(
         id="daily",
         stream_id="stream-1",
         owner_user_id="user-1",
@@ -208,8 +219,8 @@ async def test_daily_task_moves_to_next_day_after_trigger(tmp_path):
     await plugin._tick(now)
     await plugin._tick(now)
     assert len(proactive.calls) == 1
-    assert plugin._tasks["daily"].status == "active"
-    assert datetime.fromtimestamp(plugin._tasks["daily"].next_run, zone) == datetime(
+    assert plugin.scheduled.tasks["daily"].status == "active"
+    assert datetime.fromtimestamp(plugin.scheduled.tasks["daily"].next_run, zone) == datetime(
         2026, 10, 21, 8, 0, tzinfo=zone
     )
 
@@ -221,7 +232,7 @@ async def test_random_proactive_plan_survives_reload(tmp_path):
     zone = ZoneInfo("Asia/Shanghai")
     now = datetime(2026, 10, 20, 10, 0, tzinfo=zone)
     await plugin._tick(now)
-    slot = plugin._plans["qq:group:123"]["slots"][0]
+    slot = plugin.proactive.plans["qq:group:123"]["slots"][0]
     assert (
         now.timestamp() < slot < datetime(2026, 10, 20, 21, 0, tzinfo=zone).timestamp()
     )
@@ -249,21 +260,21 @@ async def test_interval_plan_survives_reload_and_replans_on_mode_change(tmp_path
         }
     }
     plugin, _ = make_plugin(tmp_path, config)
-    plugin._rng.seed(7)
+    plugin.proactive.rng.seed(7)
     zone = ZoneInfo("Asia/Shanghai")
     now = datetime(2026, 10, 20, 10, 0, tzinfo=zone)
     await plugin._tick(now)
-    planned = plugin._plans[target]["slots"].copy()
+    planned = plugin.proactive.plans[target]["slots"].copy()
 
     restored, _ = make_plugin(tmp_path, config)
     restored._load_state()
     await restored._tick(datetime(2026, 10, 20, 10, 1, tzinfo=zone))
-    assert restored._plans[target]["slots"] == planned
+    assert restored.proactive.plans[target]["slots"] == planned
 
     restored.config.proactive.scheduling_mode = "count"
     await restored._tick(datetime(2026, 10, 20, 10, 2, tzinfo=zone))
-    assert len(restored._plans[target]["slots"]) == 1
-    assert restored._plans[target]["slots"] != planned
+    assert len(restored.proactive.plans[target]["slots"]) == 1
+    assert restored.proactive.plans[target]["slots"] != planned
 
 
 @pytest.mark.asyncio
@@ -271,10 +282,10 @@ async def test_next_proactive_chat_uses_only_a_successfully_sent_previous_messag
     target = "qq:private:123"
     config = {"proactive": {"target_chats": [target], "messages_per_window": 2}}
     plugin, proactive = make_plugin(tmp_path, config)
-    plugin._rng.seed(7)
+    plugin.proactive.rng.seed(7)
     zone = ZoneInfo("Asia/Shanghai")
     await plugin._tick(datetime(2026, 10, 20, 9, 0, tzinfo=zone))
-    first, second = plugin._plans[target]["slots"]
+    first, second = plugin.proactive.plans[target]["slots"]
     await plugin._tick(datetime.fromtimestamp(first + 1, UTC))
     assert len(proactive.calls) == 1
     assert "自己决定你此刻在做" in proactive.calls[0]["intent"]
@@ -291,7 +302,7 @@ async def test_next_proactive_chat_uses_only_a_successfully_sent_previous_messag
     }
     await plugin.capture_proactive_reply(message, sent=False)
     await plugin.capture_proactive_reply({**message, "session_id": "other-stream"}, sent=True)
-    assert "last_message" not in plugin._continuity[target]
+    assert "last_message" not in plugin.proactive.continuity[target]
     await plugin.capture_proactive_reply(message, sent=True)
     await plugin.capture_proactive_reply(message, sent=True)  # Duplicate hook delivery.
     await plugin.capture_proactive_reply(
@@ -299,7 +310,7 @@ async def test_next_proactive_chat_uses_only_a_successfully_sent_previous_messag
          "raw_message": [{"type": "text", "data": "这碗面真香"}]},
         sent=True,
     )
-    assert plugin._continuity[target]["last_message"] == "我在吃饭 这碗面真香"
+    assert plugin.proactive.continuity[target]["last_message"] == "我在吃饭 这碗面真香"
 
     restored, restored_proactive = make_plugin(tmp_path, config)
     restored._load_state()
@@ -315,10 +326,10 @@ async def test_queued_without_sent_message_does_not_create_false_continuity(tmp_
     target = "qq:private:123"
     config = {"proactive": {"target_chats": [target], "messages_per_window": 2}}
     plugin, proactive = make_plugin(tmp_path, config)
-    plugin._rng.seed(7)
+    plugin.proactive.rng.seed(7)
     zone = ZoneInfo("Asia/Shanghai")
     await plugin._tick(datetime(2026, 10, 20, 9, 0, tzinfo=zone))
-    first, second = plugin._plans[target]["slots"]
+    first, second = plugin.proactive.plans[target]["slots"]
     await plugin._tick(datetime.fromtimestamp(first + 1, UTC))
     await plugin._tick(datetime.fromtimestamp(second + 1, UTC))
     assert len(proactive.calls) == 2
@@ -331,10 +342,10 @@ async def test_inbound_message_prevents_claiming_an_ordinary_reply(tmp_path):
     plugin, proactive = make_plugin(
         tmp_path, {"proactive": {"target_chats": [target], "messages_per_window": 2}}
     )
-    plugin._rng.seed(7)
+    plugin.proactive.rng.seed(7)
     zone = ZoneInfo("Asia/Shanghai")
     await plugin._tick(datetime(2026, 10, 20, 9, 0, tzinfo=zone))
-    first, second = plugin._plans[target]["slots"]
+    first, second = plugin.proactive.plans[target]["slots"]
     await plugin._tick(datetime.fromtimestamp(first + 1, UTC))
     await plugin.cancel_pending_on_inbound(
         {
@@ -352,7 +363,7 @@ async def test_inbound_message_prevents_claiming_an_ordinary_reply(tmp_path):
         },
         sent=True,
     )
-    assert "last_message" not in plugin._continuity[target]
+    assert "last_message" not in plugin.proactive.continuity[target]
     await plugin._tick(datetime.fromtimestamp(second + 1, UTC))
     assert "这是普通回复" not in proactive.calls[1]["intent"]
 
@@ -382,3 +393,101 @@ async def test_tools_restrict_tasks_to_current_user_and_chat(tmp_path):
         ]
         == []
     )
+
+
+def test_old_state_is_loaded_without_losing_module_data(tmp_path):
+    plugin, _ = make_plugin(tmp_path)
+    task = core.ScheduledTask(
+        id="old-task",
+        stream_id="stream-1",
+        owner_user_id="user-1",
+        instruction="每天说天气",
+        schedule="daily",
+        at="08:00",
+        timezone="Asia/Shanghai",
+        weekdays="",
+        next_run=1790000000.0,
+    )
+    original = {
+        "schema_version": 1,
+        "tasks": [task.to_dict()],
+        "proactive_plans": {"qq:private:123": {"window_key": "2026-10-20", "slots": []}},
+        "proactive_continuity": {"qq:private:123": {"last_message": "我在吃饭"}},
+        "future_module_state": {"kept": True},
+    }
+    plugin._state_path.write_text(json.dumps(original), encoding="utf-8")
+
+    plugin._load_state()
+    assert plugin.scheduled.tasks["old-task"].instruction == "每天说天气"
+    assert plugin.proactive.continuity["qq:private:123"]["last_message"] == "我在吃饭"
+    plugin._save_state()
+    assert json.loads(plugin._state_path.read_text(encoding="utf-8")) == original
+
+
+@pytest.mark.asyncio
+async def test_new_module_can_join_dispatch_and_own_a_state_key(tmp_path):
+    class ExampleModule:
+        name = "example"
+        state_keys = frozenset({"example_state"})
+
+        def __init__(self):
+            self.value = 0
+
+        def load_state(self, data):
+            self.value = data.get("example_state", 0)
+
+        def dump_state(self, payload):
+            payload["example_state"] = self.value
+
+        def on_config_update(self):
+            pass
+
+        async def tick(self, now):
+            self.value += 1
+
+    plugin, _ = make_plugin(tmp_path)
+    example = ExampleModule()
+    plugin._register_module(example)
+    with pytest.raises(ValueError, match="状态字段重复"):
+        plugin._register_module(type("Conflicting", (), {"name": "conflict", "state_keys": frozenset({"tasks"})})())
+
+    await plugin._tick(datetime(2026, 10, 20, 8, 0, tzinfo=UTC))
+    assert example.value == 1
+    plugin._save_state()
+    assert json.loads(plugin._state_path.read_text(encoding="utf-8"))["example_state"] == 1
+
+
+@pytest.mark.asyncio
+async def test_scheduled_tasks_module_can_be_disabled_independently(tmp_path):
+    plugin, calls = make_plugin(
+        tmp_path,
+        {
+            "scheduled_tasks": {"enabled": False},
+            "proactive": {"target_chats": ["qq:private:123"]},
+        },
+    )
+    now = datetime(2026, 10, 20, 10, 0, tzinfo=ZoneInfo("Asia/Shanghai"))
+    plugin.scheduled.tasks["due"] = core.ScheduledTask(
+        id="due",
+        stream_id="stream-1",
+        owner_user_id="user-1",
+        instruction="说天气",
+        schedule="once",
+        at="2026-10-20T09:59:00+08:00",
+        timezone="Asia/Shanghai",
+        weekdays="",
+        next_run=now.timestamp() - 60,
+    )
+    await plugin._tick(now)
+    assert plugin.scheduled.tasks["due"].status == "active"
+    assert plugin.proactive.plans["qq:private:123"]["slots"]
+    assert calls.calls == []
+    result = await plugin.secretary_create_task(
+        stream_id="stream-1",
+        chat_id="stream-1",
+        user_id="user-1",
+        instruction="明天提醒我",
+        schedule="daily",
+        at="08:00",
+    )
+    assert result["success"] is False
