@@ -11,7 +11,7 @@ import random
 import uuid
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any, ClassVar, Literal
 from zoneinfo import ZoneInfo
 
 from maibot_sdk import Field, HookHandler, MaiBotPlugin, PluginConfigBase, Tool
@@ -30,43 +30,140 @@ LOG = logging.getLogger(__name__)
 
 
 class PluginSettings(PluginConfigBase):
-    config_version: str = Field(default="0.1.0", description="配置结构版本")
-    enabled: bool = Field(default=True, description="启用麦麦小秘书")
+    """控制小秘书运行和定时任务的通用设置。"""
+
+    __ui_label__: ClassVar[str] = "插件设置"
+
+    config_version: str = Field(
+        default="0.1.0",
+        description="配置结构版本",
+        json_schema_extra={"hidden": True},
+    )
+    enabled: bool = Field(
+        default=True,
+        description="启用麦麦小秘书",
+        json_schema_extra={
+            "label": "启用麦麦小秘书",
+            "hint": "关闭后不会主动发言，也不会创建或执行定时任务；已有任务仍可查看和取消。",
+        },
+    )
     timezone: str = Field(
-        default="Asia/Shanghai", description="默认时区，如 Asia/Shanghai"
+        default="Asia/Shanghai",
+        description="默认时区，如 Asia/Shanghai",
+        json_schema_extra={
+            "label": "默认时区",
+            "hint": "用于主动发言时间窗口和定时任务；北京时间填写 Asia/Shanghai。",
+        },
     )
     check_interval_seconds: int = Field(
-        default=30, ge=5, le=300, description="调度检查间隔"
+        default=30,
+        ge=5,
+        le=300,
+        description="调度检查间隔",
+        json_schema_extra={
+            "label": "任务检查间隔（秒）",
+            "hint": "每隔多少秒检查一次是否有任务到点，范围为 5–300 秒。",
+        },
     )
     misfire_grace_seconds: int = Field(
-        default=600, ge=0, le=3600, description="停机后补执行的最长延迟"
+        default=600,
+        ge=0,
+        le=3600,
+        description="停机后补执行的最长延迟",
+        json_schema_extra={
+            "label": "错过任务的补执行期限（秒）",
+            "hint": "服务恢复后，超过这个期限的过期任务会跳过；0 表示不补执行。",
+        },
     )
     max_tasks_per_user: int = Field(
-        default=30, ge=1, le=200, description="每人最多保留的活动任务"
+        default=30,
+        ge=1,
+        le=200,
+        description="每人最多保留的活动任务",
+        json_schema_extra={
+            "label": "每人活动任务上限",
+            "hint": "限制同一用户在同一聊天流中可同时保留的定时任务数量。",
+        },
     )
 
 
 class ProactiveSettings(PluginConfigBase):
-    enabled: bool = Field(default=True, description="启用随机主动聊天")
+    """设置随机主动发言的聊天目标、时间窗口和频率。"""
+
+    __ui_label__: ClassVar[str] = "随机主动发言"
+
+    enabled: bool = Field(
+        default=True,
+        description="启用随机主动聊天",
+        json_schema_extra={
+            "label": "启用随机主动发言",
+            "hint": "只影响随机主动聊天，不影响定时任务。",
+        },
+    )
     target_chats: list[str] = Field(
         default_factory=list,
         description='目标，例如 ["qq:group:123456", "qq:private:123456"]',
+        json_schema_extra={
+            "label": "目标聊天流",
+            "hint": "每行添加一个目标，例如 qq:group:123456 或 qq:private:123456。留空则不主动发言。",
+            "placeholder": "qq:private:123456",
+        },
     )
-    window_start: str = Field(default="09:00", description="每天窗口开始时间 HH:MM")
+    window_start: str = Field(
+        default="09:00",
+        description="每天窗口开始时间 HH:MM",
+        json_schema_extra={
+            "label": "每天开始时间",
+            "hint": "使用 24 小时制，例如 09:00。",
+            "placeholder": "09:00",
+        },
+    )
     window_end: str = Field(
-        default="21:00", description="每天窗口结束时间 HH:MM，可跨午夜"
+        default="21:00",
+        description="每天窗口结束时间 HH:MM，可跨午夜",
+        json_schema_extra={
+            "label": "每天结束时间",
+            "hint": "可跨午夜，例如开始 10:00、结束 02:00 表示到次日凌晨两点。",
+            "placeholder": "21:00",
+        },
     )
     messages_per_window: int = Field(
-        default=1, ge=1, le=5, description="每个聊天流每个窗口随机触发次数"
+        default=1,
+        ge=1,
+        le=5,
+        description="每个聊天流每个窗口随机触发次数",
+        json_schema_extra={
+            "label": "每个时间窗口的发言次数",
+            "hint": "仅“按次数”模式生效；每个目标每个窗口随机发言 1–5 次。",
+        },
     )
     scheduling_mode: Literal["count", "interval"] = Field(
-        default="count", description="count 按窗口次数；interval 按平均间隔"
+        default="count",
+        description="count 按窗口次数；interval 按平均间隔",
+        json_schema_extra={
+            "label": "发言频率模式",
+            "hint": "count 表示按窗口次数；interval 表示按平均间隔。选项中的英文是配置值。",
+        },
     )
     average_interval_hours: float = Field(
-        default=2.0, ge=0.25, le=24, description="interval 模式下平均每隔多少小时发言"
+        default=2.0,
+        ge=0.25,
+        le=24,
+        description="interval 模式下平均每隔多少小时发言",
+        json_schema_extra={
+            "label": "平均发言间隔（小时）",
+            "hint": "仅“按平均间隔”模式生效，范围为 0.25–24 小时。",
+        },
     )
     offset_minutes: int = Field(
-        default=15, ge=0, le=720, description="interval 模式下每次间隔的随机偏移，正负分钟"
+        default=15,
+        ge=0,
+        le=720,
+        description="interval 模式下每次间隔的随机偏移，正负分钟",
+        json_schema_extra={
+            "label": "随机偏移（分钟）",
+            "hint": "每次间隔在平均值的基础上随机提前或推迟，偏移必须小于平均间隔。",
+        },
     )
     intent: str = Field(
         default=(
@@ -75,6 +172,12 @@ class ProactiveSettings(PluginConfigBase):
             "不要提及插件或定时器。"
         ),
         description="交给麦麦主动任务的发言意图",
+        json_schema_extra={
+            "label": "主动发言的引导文字",
+            "hint": "麦麦会结合当前聊天和上次实际发出的内容自行选话题。",
+            "x-widget": "textarea",
+            "rows": 4,
+        },
     )
 
 
@@ -401,10 +504,15 @@ class MaiSecretaryPlugin(MaiBotPlugin):
             changed = False
             for continuity in self._continuity.values():
                 pending = continuity.get("pending")
-                if not isinstance(pending, dict) or pending.get("stream_id") != stream_id:
+                if (
+                    not isinstance(pending, dict)
+                    or pending.get("stream_id") != stream_id
+                ):
                     continue
-                if float(pending.get("since", 0)) <= received_at <= float(
-                    pending.get("until", 0)
+                if (
+                    float(pending.get("since", 0))
+                    <= received_at
+                    <= float(pending.get("until", 0))
                 ):
                     continuity.pop("pending", None)
                     changed = True
@@ -432,10 +540,15 @@ class MaiSecretaryPlugin(MaiBotPlugin):
         async with self._lock:
             for continuity in self._continuity.values():
                 pending = continuity.get("pending")
-                if not isinstance(pending, dict) or pending.get("stream_id") != stream_id:
+                if (
+                    not isinstance(pending, dict)
+                    or pending.get("stream_id") != stream_id
+                ):
                     continue
-                if not float(pending.get("since", 0)) <= sent_at <= float(
-                    pending.get("until", 0)
+                if (
+                    not float(pending.get("since", 0))
+                    <= sent_at
+                    <= float(pending.get("until", 0))
                 ):
                     continue
                 message_ids = pending.setdefault("message_ids", [])
@@ -479,7 +592,9 @@ class MaiSecretaryPlugin(MaiBotPlugin):
             and str(item.get("account_id") or "").strip()
         ]
         if len(existing) == 1:
-            stream_id = str(existing[0].get("stream_id") or existing[0].get("session_id") or "").strip()
+            stream_id = str(
+                existing[0].get("stream_id") or existing[0].get("session_id") or ""
+            ).strip()
             if not stream_id:
                 raise ValueError("现有聊天流缺少 stream_id")
             self._streams[target] = stream_id
@@ -487,14 +602,19 @@ class MaiSecretaryPlugin(MaiBotPlugin):
         if len(existing) > 1:
             raise ValueError(f"目标 {target} 对应多个机器人账号，请先消除路由歧义")
         routes = {
-            (str(item.get("account_id") or "").strip(), str(item.get("scope") or "").strip())
+            (
+                str(item.get("account_id") or "").strip(),
+                str(item.get("scope") or "").strip(),
+            )
             for item in streams
             if isinstance(item, dict)
             and item.get("platform") == platform
             and str(item.get("account_id") or "").strip()
         }
         if len(routes) != 1:
-            raise ValueError(f"无法确定 {target} 使用的机器人账号，请先让目标与麦麦建立聊天流")
+            raise ValueError(
+                f"无法确定 {target} 使用的机器人账号，请先让目标与麦麦建立聊天流"
+            )
         account_id, scope = next(iter(routes))
         result = await self.ctx.chat.open_session(
             platform=platform,
