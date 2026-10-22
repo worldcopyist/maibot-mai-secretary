@@ -131,8 +131,24 @@ class DailyReportSettings(PluginConfigBase):
     enabled: bool = Field(
         default=False,
         json_schema_extra={
-            "label": "启用日报",
-            "hint": "设置目标聊天流和总结时间后开启；每天每个目标最多发一张 Azure 主题图片。",
+            "label": "启用定时日报",
+            "hint": "设置目标聊天流和总结时间后开启；每天每个目标最多发一张 Azure 主题图片。即时生成另由下方开关控制。",
+        },
+    )
+    manual_enabled: bool = Field(
+        default=True,
+        json_schema_extra={
+            "label": "允许聊天中即时生成日报",
+            "hint": "用户在聊天里让麦麦总结今天时，麦麦可用 secretary_generate_daily_report 为当前聊天流立即生成图片；不需要开启定时日报。",
+        },
+    )
+    manual_cooldown_minutes: int = Field(
+        default=10,
+        ge=0,
+        le=1440,
+        json_schema_extra={
+            "label": "同一聊天流即时日报间隔（分钟）",
+            "hint": "避免重复发图和模型费用；0 表示不限制。同一聊天流正在生成时仍不会重复启动。",
         },
     )
     target_chats: list[str] = Field(
@@ -781,6 +797,20 @@ class MaiSecretaryPlugin(MaiBotPlugin):
     )
     async def secretary_cancel_task(self, **kwargs: Any) -> dict[str, Any]:
         return await self.scheduled.cancel_task(**kwargs)
+
+    @Tool(
+        "secretary_generate_daily_report",
+        description=(
+            "用户明确要求现在生成、总结或发送今天的聊天日报时使用，例如‘蓝天，现在给我出今日日报’。"
+            "立即总结当前聊天流从今天零点到现在的聊天记录，生成 Azure 主题图片并发回当前聊天流；"
+            "不需要等待定时日报时间，也不能指定其他聊天流。工具返回已开始只表示任务入队，"
+            "图片实际发出后才算完成；不要在没有用户请求时调用，不要声称图片已经发出。"
+        ),
+        parameters=[],
+        visibility="visible",
+    )
+    async def secretary_generate_daily_report(self, **kwargs: Any) -> dict[str, Any]:
+        return await self.daily_report.request_manual(**kwargs)
 
     @Tool(
         "secretary_search_knowledge",

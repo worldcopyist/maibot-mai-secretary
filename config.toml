@@ -12,6 +12,8 @@ enabled = true
 
 [daily_report]
 enabled = false
+manual_enabled = true
+manual_cooldown_minutes = 10
 target_chats = []
 summary_time = "21:00"
 

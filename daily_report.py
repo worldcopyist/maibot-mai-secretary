@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import base64
 import logging
+import uuid
 from datetime import UTC, date, datetime, time, timedelta
 from typing import Any
 from zoneinfo import ZoneInfo
@@ -113,6 +114,46 @@ class DailyReportModule:
             self.jobs[key] = task
             task.add_done_callback(lambda _task, current=key: self.jobs.pop(current, None))
 
+    async def request_manual(self, **kwargs: Any) -> dict[str, Any]:
+        """Queue a report for the caller's verified current stream only."""
+        stream_id = str(kwargs.get("stream_id") or "").strip()
+        chat_id = str(kwargs.get("chat_id") or "").strip()
+        user_id = str(kwargs.get("user_id") or "").strip()
+        if not stream_id or stream_id != chat_id or not user_id:
+            return {"success": False, "error": "无法确认当前聊天流和请求者，不能生成日报"}
+        settings = self.plugin.config.daily_report
+        if not self.plugin.config.plugin.enabled or not settings.manual_enabled:
+            return {"success": False, "error": "即时日报功能尚未启用"}
+        now = datetime.now(UTC)
+        local = now.astimezone(ZoneInfo(self.plugin.config.plugin.timezone))
+        async with self.plugin._lock:
+            for key, record in self.records.items():
+                if record.get("mode") != "manual" or record.get("stream_id") != stream_id:
+                    continue
+                if key in self.jobs:
+                    return {"success": False, "error": "这个聊天流的日报正在生成，请稍等"}
+                cooldown = settings.manual_cooldown_minutes * 60
+                if record.get("status") in {"sent", "sending", "send_unknown"} and now.timestamp() - float(record.get("requested_at", 0)) < cooldown:
+                    return {"success": False, "error": f"这个聊天流刚生成过或可能已发送日报，请至少间隔 {settings.manual_cooldown_minutes} 分钟"}
+            key = f"manual|{stream_id}|{uuid.uuid4().hex[:12]}"
+            self.records[key] = {
+                "mode": "manual", "status": "preparing", "stream_id": stream_id,
+                "requested_by": user_id, "requested_at": now.timestamp(),
+                "date": local.date().isoformat(),
+            }
+            self.plugin._save_state()
+            task = asyncio.create_task(
+                self._run_report(key, stream_id, local.date(), local, manual_stream_id=stream_id),
+                name="mai-secretary-manual-daily-report",
+            )
+            self.jobs[key] = task
+            task.add_done_callback(lambda _task, current=key: self.jobs.pop(current, None))
+        return {
+            "success": True,
+            "status": "queued",
+            "content": f"已开始总结当前聊天流 {local:%Y-%m-%d 00:00} 至 {local:%H:%M} 的记录。完成后会在这里发送 Azure 主题图片；现在尚未生成或发送完成。",
+        }
+
     async def stop(self) -> None:
         jobs = list(self.jobs.values())
         for job in jobs:
@@ -126,14 +167,21 @@ class DailyReportModule:
             self.records[key] = {**self.records[key], "status": status, **extra}
             self.plugin._save_state()
 
-    async def _run_report(self, key: str, target: str, day: date, due: datetime) -> None:
+    async def _run_report(
+        self, key: str, target: str, day: date, due: datetime,
+        *, manual_stream_id: str | None = None,
+    ) -> None:
         try:
-            stream_id = await resolve_stream(self.plugin.ctx, target, self.streams)
+            stream_id = manual_stream_id or await resolve_stream(self.plugin.ctx, target, self.streams)
             messages = await self._read_day(stream_id, day, due)
             summary = await self._summarize(day, messages)
             png = await asyncio.to_thread(render_azure_report, day, summary)
             settings = self.plugin.config.daily_report
-            if not self.plugin.config.plugin.enabled or not settings.enabled or target not in settings.target_chats:
+            permitted = (
+                settings.manual_enabled if manual_stream_id else
+                settings.enabled and target in settings.target_chats
+            )
+            if not self.plugin.config.plugin.enabled or not permitted:
                 await self._status(key, "cancelled", message_count=len(messages))
                 return
             await self._status(key, "sending", message_count=len(messages))
@@ -151,6 +199,13 @@ class DailyReportModule:
             LOG.exception("日报生成或发送失败：%s，%s", target, day)
             status = "send_unknown" if self.records[key]["status"] == "sending" else "failed"
             await self._status(key, status, error=str(exc)[:500])
+            if manual_stream_id and status == "failed":
+                try:
+                    await self.plugin.ctx.send.text(
+                        "今日日报暂时生成失败了，请稍后再试。", manual_stream_id,
+                    )
+                except Exception:
+                    LOG.exception("即时日报失败通知也未能发送：%s", manual_stream_id)
 
     async def _read_day(self, stream_id: str, day: date, due: datetime) -> list[dict[str, Any]]:
         zone = due.tzinfo
