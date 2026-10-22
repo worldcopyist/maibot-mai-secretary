@@ -36,7 +36,7 @@ class FakeChat:
         self.open_calls: list[dict] = []
 
     async def get_all_streams(self, **kwargs):
-        return {"success": True, "streams": self.streams}
+        return self.streams
 
     async def open_session(self, **kwargs):
         self.open_calls.append(kwargs)
@@ -79,6 +79,21 @@ async def test_existing_account_scoped_private_stream_is_reused(tmp_path):
 
     assert await plugin.proactive._resolve_stream("qq:private:123") == "old-real-stream"
     assert chat.open_calls == []
+
+
+@pytest.mark.asyncio
+async def test_wrapped_stream_result_is_still_accepted(tmp_path):
+    plugin, _ = make_plugin(tmp_path)
+    chat = plugin.ctx.chat
+    chat.streams = [
+        {"stream_id": "old-real-stream", "platform": "qq", "chat_type": "private", "user_id": "123", "account_id": "bot-1", "scope": ""}
+    ]
+
+    async def wrapped(**kwargs):
+        return {"success": True, "streams": chat.streams}
+
+    chat.get_all_streams = wrapped
+    assert await plugin.proactive._resolve_stream("qq:private:123") == "old-real-stream"
 
 
 @pytest.mark.asyncio

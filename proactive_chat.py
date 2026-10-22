@@ -293,9 +293,12 @@ class ProactiveChatModule:
             raise ValueError("目标格式须为 platform:group:id 或 platform:private:id")
         platform, chat_type, target_id = parts
         discovered = await self.plugin.ctx.chat.get_all_streams(platform=platform)
-        if not isinstance(discovered, dict) or discovered.get("success") is False:
+        if isinstance(discovered, list):
+            streams = discovered
+        elif isinstance(discovered, dict) and discovered.get("success") is not False:
+            streams = discovered.get("streams")
+        else:
             raise RuntimeError("无法查询现有聊天流")
-        streams = discovered.get("streams")
         if not isinstance(streams, list):
             raise TypeError("现有聊天流查询未返回列表")
         existing = [
