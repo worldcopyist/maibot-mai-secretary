@@ -17,8 +17,10 @@
   const status = (message, error = false) => { $('status').textContent = message; $('status').classList.toggle('error', error); };
   const busy = value => { for (const id of ['upload','paste','refresh','search']) $(id).disabled = value; };
   const add = (parent, tag, text, className) => { const node = document.createElement(tag); node.textContent = text; if (className) node.className = className; parent.append(node); return node; };
+  const query = async (name, args={}) => { const result = await maibot.query(name,args); if (result?.error) throw Error(result.error); return result; };
+  const action = async (name, args={}) => { const result = await maibot.action(name,args); if (result?.error) throw Error(result.error); return result; };
   async function refresh() {
-    const data = await maibot.query('list');
+    const data = await query('list');
     const list = $('documents'); list.replaceChildren();
     if (!data.documents.length) add(list, 'li', '还没有文档');
     for (const doc of data.documents) {
@@ -28,9 +30,9 @@
       add(info, 'div', `${state} · ${doc.chunk_count} 段 · ${(doc.size/1024).toFixed(1)} KiB${doc.error ? ' · '+doc.error : ''}`, 'badge');
       row.append(info); const actions = document.createElement('div');
       const rebuild = add(actions, 'button', '重建', 'secondary');
-      rebuild.addEventListener('click', async () => { try { busy(true); await maibot.action('rebuild', {document_id:doc.id}); status('正在重建 '+doc.name); await refresh(); } catch (e) {status(String(e),true);} finally {busy(false);} });
+      rebuild.addEventListener('click', async () => { try { busy(true); await action('rebuild', {document_id:doc.id}); status('正在重建 '+doc.name); await refresh(); } catch (e) {status(String(e),true);} finally {busy(false);} });
       const button = add(actions, 'button', '删除', 'danger'); row.append(actions);
-      button.addEventListener('click', async () => { try { busy(true); await maibot.action('delete', {document_id:doc.id}); status('已删除 '+doc.name); await refresh(); } catch (e) {status(String(e),true);} finally {busy(false);} });
+      button.addEventListener('click', async () => { try { busy(true); await action('delete', {document_id:doc.id}); status('已删除 '+doc.name); await refresh(); } catch (e) {status(String(e),true);} finally {busy(false);} });
       list.append(row);
     }
   }
@@ -38,30 +40,30 @@
   $('upload').addEventListener('click', () => run(async () => {
     const file = $('file').files[0]; if (!file) throw Error('请先选文件');
     if (!file.size || file.size > 8*1024*1024) throw Error('文件须小于 8 MiB');
-    const {upload_id} = await maibot.action('start',{filename:file.name,size:file.size});
+    const {upload_id} = await action('start',{filename:file.name,size:file.size});
     const step = 36*1024; let sequence = 0;
     for (let offset=0; offset<file.size; offset+=step) {
       const bytes = new Uint8Array(await file.slice(offset,offset+step).arrayBuffer());
       let binary = ''; for (const byte of bytes) binary += String.fromCharCode(byte);
-      await maibot.action('append',{upload_id,sequence:sequence++,data:btoa(binary)});
+      await action('append',{upload_id,sequence:sequence++,data:btoa(binary)});
       $('progress').style.width = Math.round(Math.min(1,(offset+bytes.length)/file.size)*100)+'%';
       status(`正在上传：${Math.min(offset+bytes.length,file.size)} / ${file.size} 字节`);
     }
-    const result = await maibot.action('finish',{upload_id});
+    const result = await action('finish',{upload_id});
     status(result.duplicate ? '相同内容已存在' : '已接收文档，正在后台建立索引；请刷新状态');
     $('file').value = ''; await refresh();
   }));
   $('paste').addEventListener('click', () => run(async () => {
     const title = $('title').value.trim(), content = $('content').value.trim();
     if (!title || !content) throw Error('请填写标题和正文');
-    const result = await maibot.action('add_text',{title,content});
+    const result = await action('add_text',{title,content});
     status(result.duplicate ? '相同内容已存在' : '已保存文本，正在后台建立索引');
     $('content').value = ''; await refresh();
   }));
   $('refresh').addEventListener('click', () => run(async () => {await refresh(); status('状态已刷新');}));
   $('search').addEventListener('click', () => run(async () => {
     const query = $('query').value.trim(); if (!query) throw Error('请输入检索词');
-    const data = await maibot.query('search',{query});
+    const data = await query('search',{query});
     const results = $('results'); results.replaceChildren();
     if (!data.results.length) add(results,'p','没有找到相关内容');
     for (const hit of data.results) { const card = document.createElement('article'); add(card,'small',`${hit.source} · 第 ${hit.chunk} 段`); add(card,'p',hit.text); results.append(card); }

@@ -9,14 +9,14 @@ import logging
 import os
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, ClassVar, Literal
+from typing import Any, Awaitable, ClassVar, Literal
 
 from maibot_sdk import API, Field, HookHandler, MaiBotPlugin, PluginConfigBase, Tool
 from maibot_sdk.types import HookMode, ToolParameterInfo, ToolParamType
 from pydantic import field_validator, model_validator
 
 from .anti_bullying import AntiBullyingModule, normalize_admin_account
-from .knowledge_base import KnowledgeBaseModule
+from .knowledge_base import KnowledgeBaseModule, KnowledgeError
 from .module_contract import SecretaryModule
 from .proactive_chat import ProactiveChatModule
 from .scheduled_tasks import ScheduledTasksModule
@@ -571,45 +571,52 @@ class MaiSecretaryPlugin(MaiBotPlugin):
     async def secretary_search_knowledge(self, query: str, **kwargs: Any) -> dict[str, Any]:
         return await self.knowledge_base.tool_search(query, **kwargs)
 
+    @staticmethod
+    async def _kb_api(operation: Awaitable[dict[str, Any]]) -> dict[str, Any]:
+        try:
+            return await operation
+        except KnowledgeError as exc:
+            return {"error": str(exc)}
+
     @API("secretary_kb_list", description="WebUI 知识库文档列表")
     async def secretary_kb_list(self, **kwargs: Any) -> dict[str, Any]:
         del kwargs
-        return await self.knowledge_base.list_documents()
+        return await self._kb_api(self.knowledge_base.list_documents())
 
     @API("secretary_kb_start", description="WebUI 开始上传知识库文档")
     async def secretary_kb_start(self, filename: str, size: int, **kwargs: Any) -> dict[str, Any]:
         del kwargs
-        return await self.knowledge_base.start_upload(filename, size)
+        return await self._kb_api(self.knowledge_base.start_upload(filename, size))
 
     @API("secretary_kb_append", description="WebUI 上传一段文档内容")
     async def secretary_kb_append(self, upload_id: str, sequence: int, data: str, **kwargs: Any) -> dict[str, Any]:
         del kwargs
-        return await self.knowledge_base.append_upload(upload_id, sequence, data)
+        return await self._kb_api(self.knowledge_base.append_upload(upload_id, sequence, data))
 
     @API("secretary_kb_finish", description="WebUI 完成上传并开始建索引")
     async def secretary_kb_finish(self, upload_id: str, **kwargs: Any) -> dict[str, Any]:
         del kwargs
-        return await self.knowledge_base.finish_upload(upload_id)
+        return await self._kb_api(self.knowledge_base.finish_upload(upload_id))
 
     @API("secretary_kb_add_text", description="WebUI 粘贴文本入库")
     async def secretary_kb_add_text(self, title: str, content: str, **kwargs: Any) -> dict[str, Any]:
         del kwargs
-        return await self.knowledge_base.add_text(title, content)
+        return await self._kb_api(self.knowledge_base.add_text(title, content))
 
     @API("secretary_kb_delete", description="WebUI 删除知识库文档")
     async def secretary_kb_delete(self, document_id: str, **kwargs: Any) -> dict[str, Any]:
         del kwargs
-        return await self.knowledge_base.delete_document(document_id)
+        return await self._kb_api(self.knowledge_base.delete_document(document_id))
 
     @API("secretary_kb_rebuild", description="WebUI 重建知识库文档索引")
     async def secretary_kb_rebuild(self, document_id: str, **kwargs: Any) -> dict[str, Any]:
         del kwargs
-        return await self.knowledge_base.rebuild_document(document_id)
+        return await self._kb_api(self.knowledge_base.rebuild_document(document_id))
 
     @API("secretary_kb_search", description="WebUI 测试知识库检索")
     async def secretary_kb_search(self, query: str, **kwargs: Any) -> dict[str, Any]:
         del kwargs
-        return await self.knowledge_base.search(query)
+        return await self._kb_api(self.knowledge_base.search(query))
 
 
 def create_plugin() -> MaiSecretaryPlugin:

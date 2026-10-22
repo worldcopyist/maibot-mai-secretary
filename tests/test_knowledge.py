@@ -132,3 +132,11 @@ def test_webui_bindings_match_plugin_api_components():
     api_names = {item["name"] for item in plugin_module.MaiSecretaryPlugin().get_components() if item["type"] == "API"}
     assert {binding["api"] for binding in [*page["queries"].values(), *page["actions"].values()]} <= api_names
     assert (ROOT / page["entry"]).exists()
+
+
+@pytest.mark.asyncio
+async def test_webui_reports_expected_input_errors():
+    async def fails():
+        raise kb.KnowledgeError("文件格式不受支持")
+
+    assert await plugin_module.MaiSecretaryPlugin._kb_api(fails()) == {"error": "文件格式不受支持"}
