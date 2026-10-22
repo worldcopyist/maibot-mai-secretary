@@ -58,12 +58,21 @@ def make_plugin(tmp_path: Path, config: dict | None = None):
     return plugin, proactive
 
 
-def test_sdk_still_exposes_original_tools_and_hooks(tmp_path):
+def test_sdk_exposes_secretary_tools_apis_and_hooks(tmp_path):
     plugin, _ = make_plugin(tmp_path)
     assert {(item["type"], item["name"]) for item in plugin.get_components()} == {
         ("TOOL", "secretary_create_task"),
         ("TOOL", "secretary_list_tasks"),
         ("TOOL", "secretary_cancel_task"),
+        ("TOOL", "secretary_search_knowledge"),
+        ("API", "secretary_kb_list"),
+        ("API", "secretary_kb_search"),
+        ("API", "secretary_kb_start"),
+        ("API", "secretary_kb_append"),
+        ("API", "secretary_kb_finish"),
+        ("API", "secretary_kb_add_text"),
+        ("API", "secretary_kb_delete"),
+        ("API", "secretary_kb_rebuild"),
         ("HOOK_HANDLER", "secretary_cancel_pending_on_inbound"),
         ("HOOK_HANDLER", "secretary_capture_proactive_reply"),
         ("HOOK_HANDLER", "secretary_anti_bullying_inspect"),

@@ -26,3 +26,10 @@ enabled = true
 forbidden_words = []
 confidence_threshold = 0.8
 alert_cooldown_minutes = 10
+
+[knowledge_base]
+enabled = true
+allowed_chats = []
+chunk_chars = 800
+overlap_chars = 120
+semantic_search = true

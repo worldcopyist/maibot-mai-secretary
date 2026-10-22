@@ -1,0 +1,72 @@
+<style>
+  :root{font-family:system-ui,-apple-system,"Microsoft YaHei",sans-serif;color:#243047;background:transparent}
+  *{box-sizing:border-box}body{margin:0;padding:20px;max-width:1100px}h1{font-size:1.6rem;margin:0 0 7px}h2{font-size:1.1rem;margin:0 0 14px}.muted{color:#66758b;font-size:.9rem}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(310px,1fr));gap:16px;margin:18px 0}.card{background:rgba(255,255,255,.88);border:1px solid #d9e1ef;border-radius:14px;padding:18px;box-shadow:0 3px 18px #2944670b}.dark .card{background:#202a3a;color:#e8edf6;border-color:#3c4b61}.dark{color:#e8edf6}label{display:block;font-size:.88rem;font-weight:600;margin:12px 0 6px}input,textarea{width:100%;border:1px solid #bccada;border-radius:8px;padding:9px 11px;font:inherit;color:inherit;background:transparent}textarea{min-height:150px;resize:vertical}button{border:0;border-radius:8px;background:#3478dd;color:white;padding:9px 14px;font:inherit;cursor:pointer;margin-top:12px}button:disabled{opacity:.55;cursor:not-allowed}button.secondary{background:#e9eff9;color:#253d5d}.dark button.secondary{background:#3b4a61;color:#eaf0fa}button.danger{background:#c64252}#status{min-height:24px;font-size:.9rem}#status.error{color:#bb3146}.bar{height:8px;background:#e6ecf5;border-radius:8px;overflow:hidden;margin-top:10px}.bar>i{display:block;height:100%;width:0;background:#3a85e9}ul{list-style:none;margin:0;padding:0}li{border-top:1px solid #dfe6f0;padding:11px 0;display:flex;gap:12px;align-items:center;justify-content:space-between}.dark li{border-color:#3b4a61}.name{font-weight:600;overflow-wrap:anywhere}.badge{font-size:.8rem;color:#5b6e85}.results article{border-top:1px solid #dfe6f0;padding:12px 0}.results p{white-space:pre-wrap;line-height:1.5;margin:6px 0}.results small{color:#59708c}
+</style>
+<h1>麦麦小秘书 · 知识库</h1>
+<div class="muted">资料保存在插件自己的目录中。只有插件配置里授权的聊天流能让麦麦查询；空名单表示不对任何聊天开放。</div>
+<div class="grid">
+  <section class="card"><h2>上传文档</h2><p class="muted">支持 PDF、DOCX、XLSX、PPTX、TXT、Markdown、HTML、CSV、JSON、RTF、EPUB、ODT/ODS/ODP 等。单文件最大 8 MiB；扫描版 PDF 需先做文字识别。</p><label for="file">选择文件</label><input id="file" type="file" accept=".pdf,.docx,.xlsx,.pptx,.txt,.md,.markdown,.html,.htm,.csv,.tsv,.json,.jsonl,.xml,.yaml,.yml,.log,.rst,.tex,.rtf,.epub,.odt,.ods,.odp"><button id="upload">上传并建立索引</button><div class="bar"><i id="progress"></i></div></section>
+  <section class="card"><h2>粘贴文本</h2><label for="title">标题</label><input id="title" maxlength="100" placeholder="例如：项目使用说明"><label for="content">正文</label><textarea id="content" maxlength="45000" placeholder="在这里粘贴要让麦麦查阅的内容"></textarea><button id="paste">保存并建立索引</button></section>
+</div>
+<p id="status" role="status"></p>
+<section class="card"><h2>已上传资料 <button id="refresh" class="secondary">刷新状态</button></h2><ul id="documents"></ul></section>
+<section class="card" style="margin-top:16px"><h2>测试检索</h2><label for="query">想查什么？</label><input id="query" maxlength="500" placeholder="输入关键词或自然语言问题"><button id="search">检索</button><div id="results" class="results"></div></section>
+<script>
+(() => {
+  const $ = id => document.getElementById(id);
+  const status = (message, error = false) => { $('status').textContent = message; $('status').classList.toggle('error', error); };
+  const busy = value => { for (const id of ['upload','paste','refresh','search']) $(id).disabled = value; };
+  const add = (parent, tag, text, className) => { const node = document.createElement(tag); node.textContent = text; if (className) node.className = className; parent.append(node); return node; };
+  async function refresh() {
+    const data = await maibot.query('list');
+    const list = $('documents'); list.replaceChildren();
+    if (!data.documents.length) add(list, 'li', '还没有文档');
+    for (const doc of data.documents) {
+      const row = document.createElement('li'); const info = document.createElement('div');
+      add(info, 'div', doc.name, 'name');
+      const state = {queued:'等待建索引',indexing:'正在建索引',ready:'可检索',failed:'失败'}[doc.status] || doc.status;
+      add(info, 'div', `${state} · ${doc.chunk_count} 段 · ${(doc.size/1024).toFixed(1)} KiB${doc.error ? ' · '+doc.error : ''}`, 'badge');
+      row.append(info); const actions = document.createElement('div');
+      const rebuild = add(actions, 'button', '重建', 'secondary');
+      rebuild.addEventListener('click', async () => { try { busy(true); await maibot.action('rebuild', {document_id:doc.id}); status('正在重建 '+doc.name); await refresh(); } catch (e) {status(String(e),true);} finally {busy(false);} });
+      const button = add(actions, 'button', '删除', 'danger'); row.append(actions);
+      button.addEventListener('click', async () => { try { busy(true); await maibot.action('delete', {document_id:doc.id}); status('已删除 '+doc.name); await refresh(); } catch (e) {status(String(e),true);} finally {busy(false);} });
+      list.append(row);
+    }
+  }
+  async function run(work) { try {busy(true); await work();} catch (error) {status(String(error),true);} finally {busy(false);} }
+  $('upload').addEventListener('click', () => run(async () => {
+    const file = $('file').files[0]; if (!file) throw Error('请先选文件');
+    if (!file.size || file.size > 8*1024*1024) throw Error('文件须小于 8 MiB');
+    const {upload_id} = await maibot.action('start',{filename:file.name,size:file.size});
+    const step = 36*1024; let sequence = 0;
+    for (let offset=0; offset<file.size; offset+=step) {
+      const bytes = new Uint8Array(await file.slice(offset,offset+step).arrayBuffer());
+      let binary = ''; for (const byte of bytes) binary += String.fromCharCode(byte);
+      await maibot.action('append',{upload_id,sequence:sequence++,data:btoa(binary)});
+      $('progress').style.width = Math.round(Math.min(1,(offset+bytes.length)/file.size)*100)+'%';
+      status(`正在上传：${Math.min(offset+bytes.length,file.size)} / ${file.size} 字节`);
+    }
+    const result = await maibot.action('finish',{upload_id});
+    status(result.duplicate ? '相同内容已存在' : '已接收文档，正在后台建立索引；请刷新状态');
+    $('file').value = ''; await refresh();
+  }));
+  $('paste').addEventListener('click', () => run(async () => {
+    const title = $('title').value.trim(), content = $('content').value.trim();
+    if (!title || !content) throw Error('请填写标题和正文');
+    const result = await maibot.action('add_text',{title,content});
+    status(result.duplicate ? '相同内容已存在' : '已保存文本，正在后台建立索引');
+    $('content').value = ''; await refresh();
+  }));
+  $('refresh').addEventListener('click', () => run(async () => {await refresh(); status('状态已刷新');}));
+  $('search').addEventListener('click', () => run(async () => {
+    const query = $('query').value.trim(); if (!query) throw Error('请输入检索词');
+    const data = await maibot.query('search',{query});
+    const results = $('results'); results.replaceChildren();
+    if (!data.results.length) add(results,'p','没有找到相关内容');
+    for (const hit of data.results) { const card = document.createElement('article'); add(card,'small',`${hit.source} · 第 ${hit.chunk} 段`); add(card,'p',hit.text); results.append(card); }
+    status(`找到 ${data.results.length} 个相关片段`);
+  }));
+  maibot.ready.then(() => refresh().catch(e => status(String(e),true)));
+})();
+</script>
