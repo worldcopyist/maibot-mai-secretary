@@ -35,11 +35,50 @@
   .task-meta { margin-top: 5px; overflow-wrap: anywhere; }
   .task-row .button { flex-shrink: 0; padding: 6px 10px; font-size: .8125rem; }
   .empty { padding: 14px 0; }
-  @media (max-width: 720px) { .fields { grid-template-columns: 1fr; } .task-row { flex-direction: column; } }
+  .calendar-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+  .calendar-tools .input { width: auto; }
+  .calendar-tools .button { padding: 7px 11px; }
+  .calendar-weekdays, .calendar-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 6px; }
+  .calendar-weekdays { margin-bottom: 8px; text-align: center; color: var(--maibot-muted, #667085); font-size: .8125rem; }
+  .calendar-weekdays span { padding: 4px 0; }
+  .calendar-day { min-width: 0; min-height: 82px; padding: 8px; border: 1px solid var(--maibot-border, #d0d5dd); border-radius: var(--maibot-radius, 6px); background: var(--maibot-background, #fff); color: var(--maibot-foreground, #18212f); font: inherit; text-align: left; cursor: pointer; }
+  .calendar-day:hover { border-color: var(--maibot-primary, #3478dd); }
+  .calendar-day[aria-pressed="true"] { border-color: var(--maibot-primary, #3478dd); box-shadow: inset 0 0 0 1px var(--maibot-primary, #3478dd); background: var(--maibot-soft, #f2f4f7); }
+  .calendar-day.today .calendar-number { color: var(--maibot-primary, #3478dd); font-weight: 700; }
+  .calendar-day.past { opacity: .72; }
+  .calendar-number { display: block; font-size: .875rem; font-weight: 600; }
+  .calendar-count { display: block; margin-top: 9px; padding: 3px 5px; border-radius: 4px; background: var(--maibot-soft, #f2f4f7); color: var(--maibot-foreground, #18212f); font-size: .75rem; line-height: 1.3; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .calendar-blank { min-height: 82px; }
+  .day-detail { margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--maibot-border, #d0d5dd); }
+  .day-detail h3 { margin: 0 0 8px; font-size: .9375rem; }
+  .day-detail ul { margin: 8px 0 0; padding-left: 20px; }
+  .day-detail li { margin: 7px 0; line-height: 1.5; overflow-wrap: anywhere; }
+  @media (max-width: 720px) {
+    .fields { grid-template-columns: 1fr; } .task-row, .card-header { align-items: flex-start; flex-direction: column; }
+    .calendar-tools { width: 100%; } .calendar-tools .input { flex: 1; min-width: 0; }
+    .calendar-day { min-height: 58px; padding: 5px; }
+    .calendar-blank { min-height: 58px; } .calendar-count { margin-top: 4px; font-size: .6875rem; }
+  }
 </style>
 <main class="page">
   <p class="intro">这里显示小秘书保存的定时任务，包括在聊天中创建的任务。手动创建的任务会在所选聊天流中执行；下方时间按填写的时区计算。</p>
   <p id="status" role="status" aria-live="polite" hidden></p>
+  <section class="card" aria-labelledby="calendar-heading">
+    <div class="card-header">
+      <h2 id="calendar-heading">任务日历</h2>
+      <div class="calendar-tools">
+        <button class="button" id="previous-month" type="button" aria-label="上个月">‹</button>
+        <select class="input" id="calendar-year" aria-label="选择年份"></select>
+        <select class="input" id="calendar-month" aria-label="选择月份"></select>
+        <button class="button" id="next-month" type="button" aria-label="下个月">›</button>
+        <button class="button" id="today" type="button">今天</button>
+      </div>
+    </div>
+    <p class="muted">可切换月份和年份，支持选择 2030 年及之后的日期。点击某天会选中它，并把日期填入下方的单次任务表单。日历按每项任务自己的时区标记；周期任务只显示下次执行及之后的日期。</p>
+    <div class="calendar-weekdays" aria-hidden="true"><span>周一</span><span>周二</span><span>周三</span><span>周四</span><span>周五</span><span>周六</span><span>周日</span></div>
+    <div class="calendar-grid" id="calendar-grid" role="group" aria-label="选择任务日期"></div>
+    <div class="day-detail" id="day-detail" aria-live="polite"></div>
+  </section>
   <section class="card" aria-labelledby="create-heading">
     <div class="card-header"><h2 id="create-heading">手动创建任务</h2></div>
     <div class="fields">
@@ -66,8 +105,110 @@
   const query = async (name, args = {}) => { const result = await maibot.query(name, args); if (result?.error) throw Error(result.error); return result; };
   const action = async (name, args = {}) => { const result = await maibot.action(name, args); if (result?.error) throw Error(result.error); return result; };
   const labels = new Map();
+  const firstYear = 2020, lastYear = 2100;
+  let calendarYear, calendarMonth, selectedDay = '', calendarTasks = [];
   let busy = false, moduleEnabled = true;
   function setBusy(value) { busy = value; $('create').disabled = value || !moduleEnabled; $('refresh').disabled = value; }
+  const dayKey = (year, month, day) => `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+  const weekday = (year, month, day) => (new Date(Date.UTC(year, month - 1, day)).getUTCDay() + 6) % 7 + 1;
+  function todayInZone() {
+    try {
+      const parts = new Intl.DateTimeFormat('en-US', {
+        timeZone: $('timezone').value.trim() || 'Asia/Shanghai',
+        year: 'numeric', month: '2-digit', day: '2-digit',
+      }).formatToParts(new Date());
+      const value = Object.fromEntries(parts.map(part => [part.type, part.value]));
+      return dayKey(Number(value.year), Number(value.month), Number(value.day));
+    } catch (_) {
+      const now = new Date(); return dayKey(now.getFullYear(), now.getMonth() + 1, now.getDate());
+    }
+  }
+  function occursOn(task, date, year, month, day) {
+    if (task.schedule === 'once') return String(task.at || '').slice(0, 10) === date;
+    if (task.status !== 'active' || date < String(task.next_run || '').slice(0, 10)) return false;
+    if (task.schedule === 'daily') return true;
+    return task.schedule === 'weekly' && String(task.weekdays || '').split(',').includes(String(weekday(year, month, day)));
+  }
+  function tasksOn(date, year, month, day) { return calendarTasks.filter(task => occursOn(task, date, year, month, day)); }
+  function renderDayDetail() {
+    const area = $('day-detail'); area.replaceChildren();
+    if (!selectedDay) { add(area, 'p', '点击日期查看当天任务，或为当天创建单次任务。', 'muted'); return; }
+    const [year, month, day] = selectedDay.split('-').map(Number);
+    add(area, 'h3', `${year} 年 ${month} 月 ${day} 日`);
+    const matches = tasksOn(selectedDay, year, month, day);
+    if (!matches.length) add(area, 'p', '这一天没有已安排的任务。', 'muted');
+    else {
+      const list = document.createElement('ul');
+      for (const task of matches) {
+        const time = task.schedule === 'once' ? String(task.at).slice(11, 16) : task.at;
+        add(list, 'li', `${time} · ${task.instruction} · ${labels.get(task.stream_id) || task.stream_id}（${task.timezone}）`);
+      }
+      area.append(list);
+    }
+    const button = add(area, 'button', '为这一天创建任务', 'button primary'); button.type = 'button';
+    button.disabled = !moduleEnabled || selectedDay < todayInZone();
+    button.addEventListener('click', () => {
+      selectDay(selectedDay);
+      $('create-heading').scrollIntoView({behavior: 'smooth', block: 'start'});
+      $('once-at').focus({preventScroll: true});
+    });
+    if (selectedDay < todayInZone()) add(area, 'p', '这一天已过去，不能新建单次任务。', 'muted');
+  }
+  function renderCalendar() {
+    if (!calendarYear || !calendarMonth) return;
+    $('calendar-year').value = String(calendarYear);
+    $('calendar-month').value = String(calendarMonth);
+    $('previous-month').disabled = calendarYear === firstYear && calendarMonth === 1;
+    $('next-month').disabled = calendarYear === lastYear && calendarMonth === 12;
+    const grid = $('calendar-grid'); grid.replaceChildren();
+    const offset = weekday(calendarYear, calendarMonth, 1) - 1;
+    for (let index = 0; index < offset; index++) add(grid, 'span', '', 'calendar-blank');
+    const total = new Date(Date.UTC(calendarYear, calendarMonth, 0)).getUTCDate();
+    const today = todayInZone();
+    for (let day = 1; day <= total; day++) {
+      const date = dayKey(calendarYear, calendarMonth, day);
+      const matches = tasksOn(date, calendarYear, calendarMonth, day);
+      const button = document.createElement('button'); button.type = 'button';
+      button.className = `calendar-day${date === today ? ' today' : ''}${date < today ? ' past' : ''}`;
+      button.setAttribute('aria-pressed', String(date === selectedDay));
+      button.setAttribute('aria-label', `${calendarYear}年${calendarMonth}月${day}日，${matches.length}项任务`);
+      add(button, 'span', String(day), 'calendar-number');
+      if (matches.length) add(button, 'span', `${matches.length} 项 · ${matches[0].instruction}`, 'calendar-count');
+      button.addEventListener('click', () => selectDay(date)); grid.append(button);
+    }
+    renderDayDetail();
+  }
+  function selectDay(date) {
+    selectedDay = date;
+    if (date >= todayInZone()) {
+      const time = $('once-at').value.split('T')[1] || '08:00';
+      $('schedule').value = 'once'; updateSchedule();
+      $('once-at').value = `${date}T${time}`;
+      showStatus(`已选择 ${date}，请在下方填写时间、聊天流和任务内容。`);
+    } else showStatus(`已选择 ${date}。过去的日期只能查看任务。`);
+    renderCalendar();
+  }
+  function moveMonth(delta) {
+    const next = new Date(Date.UTC(calendarYear, calendarMonth - 1 + delta, 1));
+    const year = next.getUTCFullYear();
+    if (year < firstYear || year > lastYear) return;
+    calendarYear = year; calendarMonth = next.getUTCMonth() + 1;
+    selectedDay = ''; renderCalendar();
+  }
+  for (let year = firstYear; year <= lastYear; year++) {
+    const option = document.createElement('option'); option.value = String(year); option.textContent = `${year} 年`; $('calendar-year').append(option);
+  }
+  for (let month = 1; month <= 12; month++) {
+    const option = document.createElement('option'); option.value = String(month); option.textContent = `${month} 月`; $('calendar-month').append(option);
+  }
+  $('previous-month').addEventListener('click', () => moveMonth(-1));
+  $('next-month').addEventListener('click', () => moveMonth(1));
+  $('calendar-year').addEventListener('change', () => { calendarYear = Number($('calendar-year').value); selectedDay = ''; renderCalendar(); });
+  $('calendar-month').addEventListener('change', () => { calendarMonth = Number($('calendar-month').value); selectedDay = ''; renderCalendar(); });
+  $('today').addEventListener('click', () => {
+    const date = todayInZone(); [calendarYear, calendarMonth] = date.split('-').map(Number); selectDay(date);
+  });
+  $('timezone').addEventListener('change', renderCalendar);
   function updateSchedule() {
     const once = $('schedule').value === 'once';
     $('once-field').hidden = !once;
@@ -121,7 +262,14 @@
     $('create').disabled = busy || !moduleEnabled;
     try { renderStreams((await query('streams')).streams || []); }
     catch (error) { renderStreams([]); showStatus('聊天流读取失败：' + String(error), true); }
-    renderTasks(data.tasks || []);
+    calendarTasks = data.tasks || [];
+    renderTasks(calendarTasks);
+    if (!calendarYear) {
+      const today = todayInZone();
+      [calendarYear, calendarMonth] = today.split('-').map(Number);
+      selectedDay = today;
+    }
+    renderCalendar();
     if (!moduleEnabled) showStatus('定时任务模块当前已关闭。已有任务仍会显示，开启后才可创建和执行。', true);
   }
   $('refresh').addEventListener('click', async () => {
