@@ -2,7 +2,7 @@
   "manifest_version": 2,
   "id": "worldcopyist.mai-secretary",
   "name": "麦麦小秘书",
-  "version": "0.6.1",
+  "version": "0.6.2",
   "description": "主动聊天、自然语言定时任务、AI 反霸凌，以及可上传文档的私有知识库。",
   "display": {
     "icon": {
