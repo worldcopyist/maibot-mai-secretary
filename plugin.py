@@ -155,7 +155,7 @@ class DailyReportSettings(PluginConfigBase):
         default="",
         json_schema_extra={
             "label": "日报文字总结模型",
-            "hint": "填写 MaiBot 已配置的文字模型名称；留空使用 utils 任务。模型只写文字，插件将文字填入 Azure 图片模板。",
+            "hint": "填写 MaiBot 模型配置中的 name（例如 mimo-v2.6-flash），不是 model_identifier；留空使用 utils 任务。模型只写文字，插件将文字填入 Azure 图片模板。",
             "placeholder": "mimo-v2.6-flash",
         },
     )
@@ -654,9 +654,9 @@ class MaiSecretaryPlugin(MaiBotPlugin):
 
     async def _trigger(
         self, stream_id: str, intent: str, reason: str, event_id: str,
-        *, target: str = "",
+        *, target: str = "", requester_account: str = "",
     ) -> None:
-        self.role_recognition.mark_proactive(stream_id, target)
+        self.role_recognition.mark_proactive(stream_id, target, account=requester_account)
         try:
             result = await self.ctx.maisaka.proactive.trigger(
                 stream_id=stream_id,

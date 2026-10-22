@@ -166,24 +166,21 @@ async def test_natural_language_tool_queues_current_chat_only_without_schedule(t
 
 @pytest.mark.asyncio
 async def test_manual_report_failure_notifies_same_chat_and_allows_retry(tmp_path):
-    plugin, _ = make_plugin(tmp_path, {"plugin": {"admin_accounts": ["qq:123456789"]}})
+    plugin, proactive = make_plugin(tmp_path, {"plugin": {"admin_accounts": ["qq:123456789"]}})
     plugin.ctx.chat.streams = [{
         "stream_id": "my-chat", "platform": "qq", "chat_type": "private",
         "user_id": "123456789", "account_id": "bot-1",
     }]
     sender = {"stream_id": "my-chat", "chat_id": "my-chat", "user_id": "123456789"}
-    notices: list[tuple[str, str]] = []
-
     async def get_by_time_in_chat(**kwargs):
         stamp = float(kwargs["end_time"]) - 1
         return [{"message_id": "one", "timestamp": stamp, "processed_plain_text": "今天的事"}]
 
     async def generate(**kwargs):
-        raise RuntimeError("模型暂时不可用")
+        return {"success": False, "error": "未找到名为 'deepseek-flash' 的模型"}
 
     async def send_text(message, stream_id):
-        notices.append((message, stream_id))
-        return True
+        raise AssertionError("失败消息必须由麦麦按人设回复，插件不能直接发文字")
 
     plugin.ctx.message = types.SimpleNamespace(get_by_time_in_chat=get_by_time_in_chat)
     plugin.ctx.llm = types.SimpleNamespace(generate=generate)
@@ -191,7 +188,12 @@ async def test_manual_report_failure_notifies_same_chat_and_allows_retry(tmp_pat
     queued = await plugin.secretary_generate_daily_report(**sender)
     assert queued["success"] is True
     await next(iter(plugin.daily_report.jobs.values()))
-    assert notices == [("今日日报暂时生成失败了，请稍后再试。", "my-chat")]
+    assert len(proactive.calls) == 1
+    assert proactive.calls[0]["stream_id"] == "my-chat"
+    assert "当前配置的人物身份" in proactive.calls[0]["intent"]
+    assert "文字模型的名称在 MaiBot 配置中找不到" in proactive.calls[0]["intent"]
+    assert "不要再次调用 `secretary_generate_daily_report`" in proactive.calls[0]["intent"]
+    assert plugin.role_recognition._proactive_sessions["my-chat"] == "qq:123456789"
     assert any(record["status"] == "failed" for record in plugin.daily_report.records.values())
     retry = await plugin.secretary_generate_daily_report(**sender)
     assert retry["success"] is True

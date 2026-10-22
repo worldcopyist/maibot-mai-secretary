@@ -68,15 +68,15 @@ class RoleRecognitionModule:
     async def start(self) -> None:
         await self._refresh_host_owners(force=True)
 
-    def mark_proactive(self, session_id: str, target: str = "") -> None:
+    def mark_proactive(self, session_id: str, target: str = "", *, account: str = "") -> None:
         parts = target.split(":", 2)
-        account = None
-        if len(parts) == 3 and parts[1] == "private":
+        verified_account = normalize_admin_account(account) if account else None
+        if verified_account is None and len(parts) == 3 and parts[1] == "private":
             try:
-                account = normalize_admin_account(f"{parts[0]}:{parts[2]}")
+                verified_account = normalize_admin_account(f"{parts[0]}:{parts[2]}")
             except ValueError:
                 pass
-        self._proactive_sessions[session_id] = account
+        self._proactive_sessions[session_id] = verified_account
 
     def clear_proactive(self, session_id: str) -> None:
         self._proactive_sessions.pop(session_id, None)
@@ -203,7 +203,7 @@ class RoleRecognitionModule:
             return result
         if session_id in self._proactive_sessions:
             account = self._proactive_sessions[session_id]
-            source = "当前主动发言的私聊目标账号已由插件配置核验"
+            source = "当前主动任务的目标账号已由插件核验"
         else:
             message_id = str(kwargs.get("reply_message_id") or "").strip()
             account = self._find_speaker(session_id, message_id) if message_id else None

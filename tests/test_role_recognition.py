@@ -149,12 +149,17 @@ async def test_private_proactive_target_uses_its_account_and_preserves_host_pers
         assert request["items"][1]["item_type"] == "UserMessageItem"
         assert "以 MaiBot 人设为准" in note
         assert f"级别：{level}" in note
-        assert "当前主动发言的私聊目标账号" in note
+        assert "当前主动任务的目标账号" in note
 
     role.mark_proactive("stream", "qq:group:2767263382")
     group_request = _request("old")
     await role.inject(group_request)
     assert _note(group_request) == ""
+
+    role.mark_proactive("stream", account="qq:2767263382")
+    manual_report_request = _request("old")
+    await role.inject(manual_report_request)
+    assert "级别：主人" in _note(manual_report_request)
 
 
 @pytest.mark.asyncio

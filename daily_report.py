@@ -12,6 +12,7 @@ from zoneinfo import ZoneInfo
 
 from .anti_bullying import normalize_admin_account
 from .daily_report_renderer import render_azure_report
+from .prompts import PERSONA_PRIORITY_PROMPT
 from .secretary_core import parse_clock
 from .stream_router import resolve_stream
 
@@ -234,11 +235,32 @@ class DailyReportModule:
             await self._status(key, status, error=str(exc)[:500])
             if manual_stream_id and status == "failed":
                 try:
-                    await self.plugin.ctx.send.text(
-                        "今日日报暂时生成失败了，请稍后再试。", manual_stream_id,
+                    detail = str(exc)
+                    if "未找到名为" in detail and "模型" in detail:
+                        cause = "日报文字模型的名称在 MaiBot 配置中找不到"
+                        advice = "请管理员检查插件页面的“日报文字总结模型”设置后再试"
+                    elif "超时" in detail or "E_TIMEOUT" in detail:
+                        cause = "日报文字总结等待超时"
+                        advice = "可以稍后再试"
+                    elif "留白" in detail:
+                        cause = "总结文字超出了图片可排版区域"
+                        advice = "可以稍后再试，并把问题反馈给插件维护者"
+                    else:
+                        cause = "后台生成过程出错，具体原因尚未确认"
+                        advice = "可以稍后再试"
+                    intent = (
+                        f"{PERSONA_PRIORITY_PROMPT}\n"
+                        "这是刚才管理员请求的今日日报的后台结果，不是新的生成请求。"
+                        f"本次日报未能完成，图片没有发出；可确认原因：{cause}。"
+                        f"请结合当前聊天和你的人设，用自己的话简短告诉对方，并表达这个处理建议：{advice}。"
+                        "不要照念技术指令，不要声称图片已发送，也不要再次调用 `secretary_generate_daily_report`。"
+                    )
+                    await self.plugin._trigger(
+                        manual_stream_id, intent, "管理员请求的日报生成失败",
+                        f"{key}:failed", requester_account=str(self.records[key].get("requested_by") or ""),
                     )
                 except Exception:
-                    LOG.exception("即时日报失败通知也未能发送：%s", manual_stream_id)
+                    LOG.exception("即时日报失败结果未能交给麦麦回复：%s", manual_stream_id)
 
     async def _read_day(self, stream_id: str, day: date, due: datetime) -> list[dict[str, Any]]:
         zone = due.tzinfo
@@ -278,8 +300,10 @@ class DailyReportModule:
             max_tokens=max(4096, max_tokens),
             rpc_timeout_ms=130000,
         )
-        if not isinstance(result, dict) or result.get("success") is False:
-            raise RuntimeError("日报总结模型调用失败")
+        if not isinstance(result, dict):
+            raise TypeError("日报总结模型未返回有效结果")
+        if result.get("success") is False:
+            raise RuntimeError(f"日报总结模型调用失败：{result.get('error') or '未知错误'}")
         answer = str(result.get("response") or result.get("content") or "").strip()
         if not answer:
             raise RuntimeError("日报总结模型返回空内容")
