@@ -138,8 +138,8 @@ class DailyReportSettings(PluginConfigBase):
     manual_enabled: bool = Field(
         default=True,
         json_schema_extra={
-            "label": "允许聊天中即时生成日报",
-            "hint": "用户在聊天里让麦麦总结今天时，麦麦可用 secretary_generate_daily_report 为当前聊天流立即生成图片；不需要开启定时日报。",
+            "label": "允许管理员在聊天中即时生成日报",
+            "hint": "只有插件管理员账号可请麦麦调用 secretary_generate_daily_report，为当前聊天流立即生成图片；管理员名单留空时继承 MaiBot 插件管理权限。不需要开启定时日报。",
         },
     )
     manual_cooldown_minutes: int = Field(
@@ -801,9 +801,9 @@ class MaiSecretaryPlugin(MaiBotPlugin):
     @Tool(
         "secretary_generate_daily_report",
         description=(
-            "用户明确要求现在生成、总结或发送今天的聊天日报时使用，例如‘蓝天，现在给我出今日日报’。"
+            "只有插件管理员账号明确要求现在生成、总结或发送今天的聊天日报时使用，例如‘蓝天，现在给我出今日日报’。"
             "立即总结当前聊天流从今天零点到现在的聊天记录，生成 Azure 主题图片并发回当前聊天流；"
-            "不需要等待定时日报时间，也不能指定其他聊天流。工具返回已开始只表示任务入队，"
+            "非管理员请求不能调用；不需要等待定时日报时间，也不能指定其他聊天流。工具返回已开始只表示任务入队，"
             "图片实际发出后才算完成；不要在没有用户请求时调用，不要声称图片已经发出。"
         ),
         parameters=[],

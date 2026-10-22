@@ -95,14 +95,26 @@ def test_interrupted_preparation_can_retry_but_uncertain_send_cannot(tmp_path):
 
 @pytest.mark.asyncio
 async def test_natural_language_tool_queues_current_chat_only_without_schedule(tmp_path):
-    plugin, _ = make_plugin(tmp_path)
+    plugin, _ = make_plugin(tmp_path, {"plugin": {"admin_accounts": ["qq:123456789"]}})
+    plugin.ctx.chat.streams = [{
+        "stream_id": "my-chat", "platform": "qq", "chat_type": "private",
+        "user_id": "123456789", "account_id": "bot-1",
+    }, {
+        "stream_id": "group-chat", "platform": "qq", "chat_type": "group",
+        "group_id": "10001", "account_id": "bot-1",
+    }]
     assert plugin.config.daily_report.enabled is False
     assert plugin.config.daily_report.manual_enabled is True
-    sender = {"stream_id": "my-chat", "chat_id": "my-chat", "user_id": "owner"}
+    sender = {"stream_id": "my-chat", "chat_id": "my-chat", "user_id": "123456789"}
     wrong = await plugin.secretary_generate_daily_report(
-        stream_id="another-chat", chat_id="my-chat", user_id="owner",
+        stream_id="another-chat", chat_id="my-chat", user_id="123456789",
     )
     assert wrong["success"] is False
+    stranger = await plugin.secretary_generate_daily_report(
+        stream_id="group-chat", chat_id="group-chat", user_id="987654321",
+    )
+    assert stranger["success"] is False
+    assert "只有插件管理员" in stranger["error"]
     assert not plugin.daily_report.jobs
 
     stamp = datetime.now(UTC).timestamp() - 60
@@ -148,8 +160,12 @@ async def test_natural_language_tool_queues_current_chat_only_without_schedule(t
 
 @pytest.mark.asyncio
 async def test_manual_report_failure_notifies_same_chat_and_allows_retry(tmp_path):
-    plugin, _ = make_plugin(tmp_path)
-    sender = {"stream_id": "my-chat", "chat_id": "my-chat", "user_id": "owner"}
+    plugin, _ = make_plugin(tmp_path, {"plugin": {"admin_accounts": ["qq:123456789"]}})
+    plugin.ctx.chat.streams = [{
+        "stream_id": "my-chat", "platform": "qq", "chat_type": "private",
+        "user_id": "123456789", "account_id": "bot-1",
+    }]
+    sender = {"stream_id": "my-chat", "chat_id": "my-chat", "user_id": "123456789"}
     notices: list[tuple[str, str]] = []
 
     async def get_by_time_in_chat(**kwargs):
@@ -174,3 +190,40 @@ async def test_manual_report_failure_notifies_same_chat_and_allows_retry(tmp_pat
     retry = await plugin.secretary_generate_daily_report(**sender)
     assert retry["success"] is True
     await plugin.daily_report.stop()
+
+
+@pytest.mark.asyncio
+async def test_manual_report_uses_maibot_permission_when_plugin_admins_empty(tmp_path):
+    plugin, _ = make_plugin(tmp_path)
+    plugin.ctx.chat.streams = [{
+        "stream_id": "my-chat", "platform": "qq", "chat_type": "private",
+        "user_id": "123456789", "account_id": "bot-1",
+    }]
+
+    permissions = ["qq:123456789"]
+
+    async def get_config(key):
+        assert key == "plugin.permission"
+        return permissions
+
+    async def get_by_time_in_chat(**kwargs):
+        return []
+
+    async def send_image(encoded, stream_id, return_details=False):
+        return {"sent": True}
+
+    plugin.ctx.config = types.SimpleNamespace(get=get_config)
+    plugin.ctx.message = types.SimpleNamespace(get_by_time_in_chat=get_by_time_in_chat)
+    plugin.ctx.send = types.SimpleNamespace(image=send_image)
+    result = await plugin.secretary_generate_daily_report(
+        stream_id="my-chat", chat_id="my-chat", user_id="123456789",
+    )
+    assert result["success"] is True
+    await next(iter(plugin.daily_report.jobs.values()))
+    assert any(row["status"] == "sent" for row in plugin.daily_report.records.values())
+    permissions.clear()
+    revoked = await plugin.secretary_generate_daily_report(
+        stream_id="my-chat", chat_id="my-chat", user_id="123456789",
+    )
+    assert revoked["success"] is False
+    assert "只有插件管理员" in revoked["error"]

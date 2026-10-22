@@ -106,6 +106,14 @@ class RoleRecognitionModule:
             self._permission_refresh_at = now + 30
             self.plugin.ctx.logger.warning("角色识别暂时无法读取 MaiBot 管理权限：%s", exc)
 
+    async def admin_accounts(self, *, force_refresh: bool = False) -> set[str]:
+        """Configured admins, or MaiBot plugin managers when the list is empty."""
+        configured = set(self.plugin.config.plugin.admin_accounts)
+        if configured:
+            return configured
+        await self._refresh_host_owners(force=force_refresh)
+        return set(self.host_owners)
+
     def _prune(self) -> None:
         cutoff = time.time() - _TTL_SECONDS
         self.records = dict(
@@ -204,9 +212,8 @@ class RoleRecognitionModule:
             source = "当前消息的真实发送者已核验"
         if account is None:
             return result
-        await self._refresh_host_owners()
+        owners = await self.admin_accounts()
         config = self.plugin.config.role_recognition
-        owners = set(self.plugin.config.plugin.admin_accounts) or self.host_owners
         if account in owners:
             level, prompt = "主人", config.owner_prompt
         elif account in config.familiar_accounts:

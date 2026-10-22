@@ -10,6 +10,7 @@ from datetime import UTC, date, datetime, time, timedelta
 from typing import Any
 from zoneinfo import ZoneInfo
 
+from .anti_bullying import normalize_admin_account
 from .daily_report_renderer import render_azure_report
 from .secretary_core import parse_clock
 from .stream_router import resolve_stream
@@ -121,6 +122,33 @@ class DailyReportModule:
         user_id = str(kwargs.get("user_id") or "").strip()
         if not stream_id or stream_id != chat_id or not user_id:
             return {"success": False, "error": "无法确认当前聊天流和请求者，不能生成日报"}
+        try:
+            streams = await self.plugin.ctx.chat.get_all_streams(platform="all_platforms")
+            if isinstance(streams, dict) and streams.get("success") is not False:
+                streams = streams.get("streams")
+            if not isinstance(streams, list):
+                raise TypeError("无法读取聊天流")
+            matches = [
+                item for item in streams
+                if isinstance(item, dict)
+                and str(item.get("stream_id") or item.get("session_id") or "") == stream_id
+            ]
+            platforms = {str(item.get("platform") or "").strip().lower() for item in matches}
+            if len(platforms) != 1:
+                raise ValueError("无法确定当前聊天流的平台")
+            if any(
+                item.get("chat_type") == "private"
+                and str(item.get("user_id") or "").strip() != user_id
+                for item in matches
+            ):
+                raise ValueError("当前私聊账号与请求者不一致")
+            requester_account = normalize_admin_account(f"{next(iter(platforms))}:{user_id}")
+            admins = await self.plugin.role_recognition.admin_accounts(force_refresh=True)
+        except Exception as exc:  # noqa: BLE001 - identity checks must fail closed on Host errors
+            LOG.warning("即时日报无法核验请求者身份：%s", exc)
+            return {"success": False, "error": "无法核验当前聊天流和管理员身份，不能生成日报"}
+        if requester_account not in admins:
+            return {"success": False, "error": "只有插件管理员账号可以生成日报"}
         settings = self.plugin.config.daily_report
         if not self.plugin.config.plugin.enabled or not settings.manual_enabled:
             return {"success": False, "error": "即时日报功能尚未启用"}
@@ -138,7 +166,7 @@ class DailyReportModule:
             key = f"manual|{stream_id}|{uuid.uuid4().hex[:12]}"
             self.records[key] = {
                 "mode": "manual", "status": "preparing", "stream_id": stream_id,
-                "requested_by": user_id, "requested_at": now.timestamp(),
+                "requested_by": requester_account, "requested_at": now.timestamp(),
                 "date": local.date().isoformat(),
             }
             self.plugin._save_state()
@@ -177,6 +205,11 @@ class DailyReportModule:
             summary = await self._summarize(day, messages)
             png = await asyncio.to_thread(render_azure_report, day, summary)
             settings = self.plugin.config.daily_report
+            if manual_stream_id:
+                admins = await self.plugin.role_recognition.admin_accounts(force_refresh=True)
+                if self.records[key].get("requested_by") not in admins:
+                    await self._status(key, "cancelled", error="管理员权限已变化")
+                    return
             permitted = (
                 settings.manual_enabled if manual_stream_id else
                 settings.enabled and target in settings.target_chats
