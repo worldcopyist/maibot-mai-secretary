@@ -269,7 +269,10 @@ class KnowledgeBaseSettings(PluginConfigBase):
     enabled: bool = Field(
         default=True,
         description="启用知识库模块",
-        json_schema_extra={"label": "启用知识库", "hint": "关闭后暂停导入和聊天检索，资料仍保留。"},
+        json_schema_extra={
+            "label": "启用知识库",
+            "hint": "关闭后暂停导入和聊天检索，资料仍保留。上传入口在本插件的「详情」页。",
+        },
     )
     allowed_chats: list[str] = Field(
         default_factory=list,

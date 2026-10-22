@@ -7,7 +7,7 @@
       "id": "knowledge",
       "title": "麦麦小秘书 · 知识库",
       "description": "上传资料、粘贴文本并测试检索。聊天读取权限在插件配置页设置。",
-      "placement": "sidebar",
+      "placement": "workspace",
       "icon": "database",
       "mode": "custom",
       "entry": "assets/knowledge.html",

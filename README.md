@@ -1,5 +1,7 @@
 # 麦麦小秘书
 
+**[打开知识库：上传文档或粘贴文本](/extensions/worldcopyist.mai-secretary/knowledge)**
+
 面向 MaiBot 1.3.7 / 插件 SDK 2.12.0 的独立插件。它提供四项功能：
 
 插件列表中的头像使用 `assets/icon.png`，在 `_manifest.json` 的 `display.icon` 中声明。
@@ -7,7 +9,7 @@
 1. 在配置的每天时间窗口内，为指定聊天流按固定次数或平均间隔安排随机主动聊天。麦麦会自己决定当下在做的日常小事；插件保存这次实际发出的文字，下次主动聊天时交给麦麦自然续接，同时结合最新的聊天上下文。
 2. 让麦麦通过三个工具创建、查看和取消当前用户在当前聊天流中的定时任务。支持单次、每天、每周。到点后仍交给麦麦的主动任务接口执行用户请求。
 3. AI 反霸凌：识别针对麦麦的辱骂，结合自定义违禁词和聊天上下文判断，确认后私聊插件管理员，请管理员核查。
-4. 私有知识库：管理员在插件页面上传文档或粘贴文本，插件提取文字、分段、建立关键词和语义向量索引，让麦麦在授权聊天流调用 `secretary_search_knowledge` 查询，并附来源。
+4. 私有知识库：管理员从本插件的 WebUI 详情页进入知识库工作区，上传文档或粘贴文本；插件提取文字、分段、建立关键词和语义向量索引，让麦麦在授权聊天流调用 `secretary_search_knowledge` 查询，并附来源。
 
 例如，用户说“每天早上八点给我说天气预报”，麦麦可调用 `secretary_create_task`，用 `daily`、`08:00` 和原请求建立任务。任务到点时，小秘书会要求麦麦使用运行时已有的信息来源查询天气；若没有可靠的实时天气来源，应如实说明，不能编造预报。插件本身不提供天气数据源。
 
@@ -45,7 +47,11 @@ alert_cooldown_minutes = 10
 
 ### 知识库
 
-MaiBot WebUI 左侧的「麦麦小秘书 · 知识库」页面可上传文件、粘贴文本、查看建索引状态、重建或删除资料，以及直接测试检索。插件使用 MaiBot 1.3.7 的隔离自定义页面和已登录的 WebUI API。宿主自带的上传接口只接收图片，因此文档由页面按 36 KiB 一段传到插件 API；单文件上限为 8 MiB。页面只传当前管理员选中的文件，不会扫描本地文件夹。
+在 MaiBot WebUI 打开「插件」→「麦麦小秘书」→「详情」，点击下面的入口。上传页面位于本插件的独立工作区，不在通用「插件扩展」设置侧边栏。
+
+**[打开麦麦小秘书知识库：上传文档、粘贴文本、管理资料与测试检索](/extensions/worldcopyist.mai-secretary/knowledge)**
+
+插件使用 MaiBot 1.3.7 的隔离自定义页面和已登录的 WebUI API。宿主自带的上传接口只接收图片，因此文档由页面按 36 KiB 一段传到插件 API；单文件上限为 8 MiB。页面只传当前管理员选中的文件，不会扫描本地文件夹。
 
 支持文本、Markdown、CSV/TSV、JSON/JSONL、XML/YAML、HTML、RTF、PDF、DOCX、XLSX、PPTX、EPUB、ODT/ODS/ODP 等格式。PDF 使用 `pypdf` 提取已有文字；扫描图片 PDF 需要先做 OCR。旧版 `.doc/.xls/.ppt` 不在支持范围内，建议另存为对应的现代格式。受密码保护或损坏的文件会显示入库失败。
 
@@ -78,7 +84,7 @@ semantic_search = true
 
 ### 模块结构
 
-`plugin.py` 是 MaiBot 的入口，只负责配置、模块注册、统一调度、状态文件读写，以及 SDK 工具、页面 API 和事件钩子的转发。`scheduled_tasks.py` 独立管理定时任务，`proactive_chat.py` 独立管理随机发言和上次发言的续接，`anti_bullying.py` 独立管理辱骂判断和管理员提醒，`knowledge_base.py` 独立管理文档与检索；模块通过 `module_contract.py` 约定的接口接入。`stream_router.py` 为需要发送消息的模块解析聊天流；`secretary_core.py` 保留不依赖 MaiBot 的时间计算，`prompts.py` 集中放工具调用提示词。`webui.json` 与 `assets/knowledge.html` 声明并实现独立的知识库页面。
+`plugin.py` 是 MaiBot 的入口，只负责配置、模块注册、统一调度、状态文件读写，以及 SDK 工具、页面 API 和事件钩子的转发。`scheduled_tasks.py` 独立管理定时任务，`proactive_chat.py` 独立管理随机发言和上次发言的续接，`anti_bullying.py` 独立管理辱骂判断和管理员提醒，`knowledge_base.py` 独立管理文档与检索；模块通过 `module_contract.py` 约定的接口接入。`stream_router.py` 为需要发送消息的模块解析聊天流；`secretary_core.py` 保留不依赖 MaiBot 的时间计算，`prompts.py` 集中放工具调用提示词。`webui.json` 与 `assets/knowledge.html` 声明并实现从插件详情页进入的知识库工作区。
 
 四个功能可分别用 `[scheduled_tasks].enabled`、`[proactive].enabled`、`[anti_bullying].enabled` 和 `[knowledge_base].enabled` 开关。旧配置没有新增配置节时由默认值补齐；全局 `[plugin].enabled` 仍控制整个插件。
 
