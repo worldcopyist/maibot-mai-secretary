@@ -1,4 +1,4 @@
-"""麦麦小秘书：随机主动聊天与由自然语言创建的定时任务。"""
+"""麦麦小秘书：主动聊天、定时任务和 AI 反霸凌。"""
 
 from __future__ import annotations
 
@@ -13,7 +13,9 @@ from typing import Any, ClassVar, Literal
 
 from maibot_sdk import Field, HookHandler, MaiBotPlugin, PluginConfigBase, Tool
 from maibot_sdk.types import HookMode, ToolParameterInfo, ToolParamType
+from pydantic import field_validator
 
+from .anti_bullying import AntiBullyingModule, normalize_admin_account
 from .module_contract import SecretaryModule
 from .proactive_chat import ProactiveChatModule
 from .scheduled_tasks import ScheduledTasksModule
@@ -22,7 +24,7 @@ LOG = logging.getLogger(__name__)
 
 
 class PluginSettings(PluginConfigBase):
-    """控制小秘书运行和定时任务的通用设置。"""
+    """控制小秘书运行和管理员账号的通用设置。"""
 
     __ui_label__: ClassVar[str] = "插件设置"
 
@@ -36,7 +38,7 @@ class PluginSettings(PluginConfigBase):
         description="启用麦麦小秘书",
         json_schema_extra={
             "label": "启用麦麦小秘书",
-            "hint": "关闭后不会主动发言，也不会创建或执行定时任务；已有任务仍可查看和取消。",
+            "hint": "关闭后不会主动发言、执行定时任务或检查辱骂；已有任务仍可查看和取消。",
         },
     )
     timezone: str = Field(
@@ -77,6 +79,22 @@ class PluginSettings(PluginConfigBase):
             "hint": "限制同一用户在同一聊天流中可同时保留的定时任务数量。",
         },
     )
+    admin_accounts: list[str] = Field(
+        default_factory=list,
+        description="接收 AI 反霸凌提醒的管理员账号，格式为 平台:用户号",
+        json_schema_extra={
+            "label": "管理员账号",
+            "hint": "每行一个账号，例如 qq:123456789；也接受中文冒号。留空时不会发送告状。",
+            "placeholder": "qq:123456789",
+        },
+    )
+
+    @field_validator("admin_accounts")
+    @classmethod
+    def validate_admin_accounts(cls, accounts: list[str]) -> list[str]:
+        if len(accounts) > 20:
+            raise ValueError("管理员账号最多 20 个")
+        return list(dict.fromkeys(normalize_admin_account(account) for account in accounts))
 
 
 class ScheduledTasksSettings(PluginConfigBase):
@@ -188,12 +206,67 @@ class ProactiveSettings(PluginConfigBase):
     )
 
 
+class AntiBullyingSettings(PluginConfigBase):
+    """独立控制 AI 反霸凌的识别与提醒。"""
+
+    __ui_label__: ClassVar[str] = "AI 反霸凌"
+
+    enabled: bool = Field(
+        default=True,
+        description="启用 AI 反霸凌",
+        json_schema_extra={
+            "label": "启用 AI 反霸凌",
+            "hint": "管理员账号留空时不检查消息，也不发送提醒。",
+        },
+    )
+    forbidden_words: list[str] = Field(
+        default_factory=list,
+        description="帮助 AI 识别针对麦麦的辱骂的违禁词",
+        json_schema_extra={
+            "label": "违禁词",
+            "hint": "每行一个词；命中后仍由 AI 判断是否真的在辱骂麦麦，避免把引用或讨论误报。",
+            "placeholder": "填写要留意的词语",
+        },
+    )
+    confidence_threshold: float = Field(
+        default=0.8,
+        ge=0.5,
+        le=1.0,
+        description="AI 把握度达到该值才提醒管理员",
+        json_schema_extra={
+            "label": "提醒把握度",
+            "hint": "范围 0.5–1.0；越高越谨慎，默认 0.8。",
+        },
+    )
+    alert_cooldown_minutes: int = Field(
+        default=10,
+        ge=0,
+        le=1440,
+        description="同一人同一聊天流两次提醒的最短间隔",
+        json_schema_extra={
+            "label": "同一人提醒间隔（分钟）",
+            "hint": "避免短时间重复告状；0 表示不限制。",
+        },
+    )
+
+    @field_validator("forbidden_words")
+    @classmethod
+    def validate_forbidden_words(cls, words: list[str]) -> list[str]:
+        if len(words) > 100:
+            raise ValueError("违禁词最多 100 个")
+        cleaned = [str(word).strip() for word in words if str(word).strip()]
+        if any(len(word) > 50 for word in cleaned):
+            raise ValueError("每个违禁词最多 50 字")
+        return list(dict.fromkeys(cleaned))
+
+
 class SecretaryConfig(PluginConfigBase):
     plugin: PluginSettings = Field(default_factory=PluginSettings)
     scheduled_tasks: ScheduledTasksSettings = Field(
         default_factory=ScheduledTasksSettings
     )
     proactive: ProactiveSettings = Field(default_factory=ProactiveSettings)
+    anti_bullying: AntiBullyingSettings = Field(default_factory=AntiBullyingSettings)
 
 
 class MaiSecretaryPlugin(MaiBotPlugin):
@@ -205,9 +278,11 @@ class MaiSecretaryPlugin(MaiBotPlugin):
         super().__init__()
         self.scheduled = ScheduledTasksModule(self)
         self.proactive = ProactiveChatModule(self)
+        self.anti_bullying = AntiBullyingModule(self)
         self._modules: dict[str, SecretaryModule] = {}
         self._register_module(self.scheduled)
         self._register_module(self.proactive)
+        self._register_module(self.anti_bullying)
         self._state_path: Path | None = None
         self._extra_state: dict[str, Any] = {}
         self._lock = asyncio.Lock()
@@ -226,12 +301,14 @@ class MaiSecretaryPlugin(MaiBotPlugin):
         self._state_path = Path(self.ctx.paths.data_dir) / "secretary-state.json"
         self._state_path.parent.mkdir(parents=True, exist_ok=True)
         self._load_state()
+        await self.anti_bullying.start()
         self._runner = asyncio.create_task(self._run(), name="mai-secretary-scheduler")
         self.ctx.logger.info(
             "麦麦小秘书已加载：%s 个定时任务", len(self.scheduled.tasks)
         )
 
     async def on_unload(self) -> None:
+        await self.anti_bullying.stop()
         if self._runner is not None:
             self._runner.cancel()
             with contextlib.suppress(asyncio.CancelledError):
@@ -329,6 +406,18 @@ class MaiSecretaryPlugin(MaiBotPlugin):
         self, message: dict[str, Any] | None = None, **kwargs: Any
     ) -> None:
         await self.proactive.cancel_pending_on_inbound(message, **kwargs)
+
+    @HookHandler(
+        "chat.receive.after_process",
+        name="secretary_anti_bullying_inspect",
+        mode=HookMode.OBSERVE,
+        description="旁路判断针对麦麦的辱骂，并私聊管理员",
+    )
+    async def inspect_anti_bullying(
+        self, message: dict[str, Any] | None = None, **kwargs: Any
+    ) -> None:
+        del kwargs
+        await self.anti_bullying.on_inbound(message)
 
     @HookHandler(
         "send_service.after_send",

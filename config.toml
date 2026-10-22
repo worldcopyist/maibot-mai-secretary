@@ -5,6 +5,7 @@ timezone = "Asia/Shanghai"
 check_interval_seconds = 30
 misfire_grace_seconds = 600
 max_tasks_per_user = 30
+admin_accounts = []
 
 [scheduled_tasks]
 enabled = true
@@ -19,3 +20,9 @@ scheduling_mode = "count"
 average_interval_hours = 2.0
 offset_minutes = 15
 intent = "请根据这个聊天流的最近对话、人物关系和已有记忆，找一个贴合上下文的话题，在当前聊天流发出一条自然的消息。避免复述最近说过的话；上下文较少时可聊轻松的日常话题。不要提及插件或定时器。"
+
+[anti_bullying]
+enabled = true
+forbidden_words = []
+confidence_threshold = 0.8
+alert_cooldown_minutes = 10

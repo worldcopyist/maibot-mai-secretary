@@ -19,6 +19,7 @@ package.__path__ = [str(ROOT)]
 sys.modules.setdefault("mai_secretary", package)
 core = importlib.import_module("mai_secretary.secretary_core")
 module = importlib.import_module("mai_secretary.plugin")
+stream_router = importlib.import_module("mai_secretary.stream_router")
 
 
 class FakeProactive:
@@ -65,7 +66,187 @@ def test_sdk_still_exposes_original_tools_and_hooks(tmp_path):
         ("TOOL", "secretary_cancel_task"),
         ("HOOK_HANDLER", "secretary_cancel_pending_on_inbound"),
         ("HOOK_HANDLER", "secretary_capture_proactive_reply"),
+        ("HOOK_HANDLER", "secretary_anti_bullying_inspect"),
     }
+
+
+def test_admin_account_format_and_new_config_defaults():
+    settings = module.PluginSettings.model_validate(
+        {"admin_accounts": ["qq：123456789", "qq:123456789"]}
+    )
+    assert settings.admin_accounts == ["qq:123456789"]
+    with pytest.raises(ValueError, match="管理员账号"):
+        module.PluginSettings.model_validate({"admin_accounts": ["qq:someone"]})
+    assert module.SecretaryConfig().anti_bullying.forbidden_words == []
+
+
+@pytest.mark.asyncio
+async def test_anti_bullying_reports_only_confirmed_direct_abuse(tmp_path):
+    plugin, _ = make_plugin(
+        tmp_path,
+        {
+            "plugin": {"admin_accounts": ["qq:123456789"]},
+            "anti_bullying": {"forbidden_words": ["坏词"]},
+        },
+    )
+    plugin.anti_bullying.bot_names = ("蓝天",)
+    plugin.ctx.chat.streams = [
+        {
+            "stream_id": "admin-stream",
+            "platform": "qq",
+            "chat_type": "private",
+            "user_id": "123456789",
+            "account_id": "bot-1",
+            "scope": "",
+        }
+    ]
+    llm_calls = []
+    sent = []
+
+    async def classify(**kwargs):
+        llm_calls.append(kwargs)
+        return {
+            "success": True,
+            "response": json.dumps(
+                {
+                    "targeted": True,
+                    "abusive": True,
+                    "confidence": 0.95,
+                    "reason": "直接辱骂麦麦",
+                }
+            ),
+        }
+
+    async def get_recent(chat_id, limit):
+        assert chat_id == "group-stream"
+        assert limit == 6
+        return []
+
+    async def send_text(text, stream_id):
+        sent.append((text, stream_id))
+        return True
+
+    plugin.ctx.llm = types.SimpleNamespace(generate=classify)
+    plugin.ctx.message = types.SimpleNamespace(get_recent=get_recent)
+    plugin.ctx.send = types.SimpleNamespace(text=send_text)
+    inbound = {
+        "message_id": "msg-1",
+        "session_id": "group-stream",
+        "platform": "qq",
+        "account_id": "bot-1",
+        "processed_plain_text": "蓝天你这个坏词",
+        "message_info": {
+            "user_info": {"user_id": "user-1", "user_nickname": "甲"},
+            "group_info": {"group_id": "group-1", "group_name": "测试群"},
+        },
+    }
+    await plugin.anti_bullying.on_inbound(inbound)
+    assert plugin.anti_bullying.queue.qsize() == 1
+    await plugin.anti_bullying._process(plugin.anti_bullying.queue.get_nowait())
+    assert len(llm_calls) == 1
+    assert len(sent) == 1
+    assert sent[0][1] == "admin-stream"
+    assert "测试群" in sent[0][0]
+    assert "msg-1" in sent[0][0]
+    assert "anti_bullying_alerts" in json.loads(plugin._state_path.read_text(encoding="utf-8"))
+    await plugin.anti_bullying.on_inbound(inbound)
+    assert plugin.anti_bullying.queue.empty()
+    await plugin.anti_bullying.on_inbound({**inbound, "message_id": "msg-2"})
+    await plugin.anti_bullying._process(plugin.anti_bullying.queue.get_nowait())
+    assert len(llm_calls) == 1  # Per-sender cooldown also avoids another model call.
+    assert len(sent) == 1
+
+
+@pytest.mark.asyncio
+async def test_anti_bullying_skips_unrelated_group_and_rejected_quote(tmp_path):
+    plugin, _ = make_plugin(
+        tmp_path,
+        {
+            "plugin": {"admin_accounts": ["qq:123456789"]},
+            "anti_bullying": {"forbidden_words": ["坏词"]},
+        },
+    )
+    plugin.anti_bullying.bot_names = ("蓝天",)
+    llm_calls = []
+    sent = []
+
+    async def classify(**kwargs):
+        llm_calls.append(kwargs)
+        return {
+            "success": True,
+            "response": '{"targeted":false,"abusive":false,"confidence":0.99,"reason":"在引用"}',
+        }
+
+    async def get_recent(chat_id, limit):
+        return []
+
+    async def send_text(text, stream_id):
+        sent.append((text, stream_id))
+        return True
+
+    plugin.ctx.llm = types.SimpleNamespace(generate=classify)
+    plugin.ctx.message = types.SimpleNamespace(get_recent=get_recent)
+    plugin.ctx.send = types.SimpleNamespace(text=send_text)
+    base = {
+        "session_id": "group-stream",
+        "platform": "qq",
+        "account_id": "bot-1",
+        "message_info": {
+            "user_info": {"user_id": "user-1", "user_nickname": "甲"},
+            "group_info": {"group_id": "group-1", "group_name": "测试群"},
+        },
+    }
+    await plugin.anti_bullying.on_inbound(
+        {**base, "message_id": "other", "processed_plain_text": "别人今天很开心"}
+    )
+    assert plugin.anti_bullying.queue.empty()
+    await plugin.anti_bullying.on_inbound(
+        {**base, "message_id": "quote", "processed_plain_text": "蓝天，坏词是什么意思？"}
+    )
+    await plugin.anti_bullying._process(plugin.anti_bullying.queue.get_nowait())
+    assert len(llm_calls) == 1
+    assert sent == []
+
+
+@pytest.mark.asyncio
+async def test_anti_bullying_without_admin_does_not_queue(tmp_path):
+    plugin, _ = make_plugin(tmp_path)
+    await plugin.anti_bullying.on_inbound(
+        {
+            "session_id": "private-stream",
+            "platform": "qq",
+            "processed_plain_text": "蓝天你真坏",
+            "message_info": {"user_info": {"user_id": "user-1"}},
+        }
+    )
+    assert plugin.anti_bullying.queue.empty()
+
+
+@pytest.mark.asyncio
+async def test_admin_route_uses_the_same_bot_account(tmp_path):
+    plugin, _ = make_plugin(tmp_path)
+    plugin.ctx.chat.streams = [
+        {
+            "stream_id": "right-admin-stream",
+            "platform": "qq",
+            "chat_type": "private",
+            "user_id": "123456789",
+            "account_id": "bot-1",
+        },
+        {
+            "stream_id": "other-bot-admin-stream",
+            "platform": "qq",
+            "chat_type": "private",
+            "user_id": "123456789",
+            "account_id": "bot-2",
+        },
+    ]
+    assert await stream_router.resolve_stream(
+        plugin.ctx,
+        "qq:private:123456789",
+        {},
+        preferred_account_id="bot-1",
+    ) == "right-admin-stream"
 
 
 @pytest.mark.asyncio
