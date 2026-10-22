@@ -692,7 +692,7 @@ class MaiSecretaryPlugin(MaiBotPlugin):
         description="规划回复时加入已核验发送者的角色提示词",
     )
     async def inject_role_for_planner(self, **kwargs: Any) -> dict[str, Any]:
-        return await self.role_recognition.inject(kwargs)
+        return await self.role_recognition.inject(kwargs, track_for_tools=True)
 
     @HookHandler(
         "maisaka.replyer.before_model_request",

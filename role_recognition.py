@@ -14,6 +14,7 @@ from .anti_bullying import normalize_admin_account
 from .prompts import PERSONA_PRIORITY_PROMPT
 
 _TTL_SECONDS = 6 * 3600
+_TOOL_SPEAKER_TTL_SECONDS = 120
 _MAX_RECORDS = 512
 _MARKER = "【麦麦小秘书·角色识别】"
 _PLANNER_ID = re.compile(r'^\s*<message\s+[^>]*?\bmsg_id="([^"]+)"')
@@ -37,6 +38,7 @@ class RoleRecognitionModule:
         self.host_owners: set[str] = set()
         self._permission_refresh_at = 0.0
         self._proactive_sessions: dict[str, str | None] = {}
+        self._planner_speakers: dict[str, dict[str, Any]] = {}
 
     def load_state(self, data: dict[str, Any]) -> None:
         raw = data.get("role_speakers", {})
@@ -142,6 +144,8 @@ class RoleRecognitionModule:
             return
         message_id = str(message.get("message_id") or "").strip()
         session_id = str(message.get("session_id") or "").strip()
+        if session_id:
+            self._planner_speakers.pop(session_id, None)
         platform = str(message.get("platform") or "").strip().lower()
         user_id = str(user.get("user_id") or "").strip()
         bot_id = str(message.get("account_id") or "").strip()
@@ -161,20 +165,20 @@ class RoleRecognitionModule:
         }
         self.plugin._save_state()
 
-    def _find_speaker(self, session_id: str, message_id: str) -> str | None:
+    def _find_speaker_record(self, session_id: str, message_id: str) -> dict[str, Any] | None:
         if not session_id or not message_id:
             return None
         record = self.records.get(f"{session_id}:{message_id}")
         if record is not None:
-            return str(record["account"])
+            return record
         for item in reversed(tuple(self.records.values())):
             if item["session_id"] == session_id and _display_id(item["message_id"]) == message_id:
-                return str(item["account"])
+                return item
         return None
 
-    def _speaker_from_items(self, session_id: str, items: list[Any]) -> str | None:
+    def _speaker_record_from_items(self, session_id: str, items: list[Any]) -> dict[str, Any] | None:
         for item in reversed(items):
-            if not isinstance(item, dict) or item.get("item_type") == "SystemMessageItem":
+            if not isinstance(item, dict) or item.get("item_type") != "UserMessageItem":
                 continue
             for part in reversed(item.get("parts") or []):
                 if not isinstance(part, dict) or not isinstance(part.get("text"), str):
@@ -182,10 +186,29 @@ class RoleRecognitionModule:
                 first_line = part["text"].split("\n", 1)[0][:400]
                 match = _PLANNER_ID.search(first_line) or _REPLYER_ID.search(first_line)
                 if match:
-                    return self._find_speaker(session_id, match.group(1))
+                    return self._find_speaker_record(session_id, match.group(1))
         return None
 
-    async def inject(self, kwargs: dict[str, Any]) -> dict[str, Any]:
+    def consume_planner_speaker(self, session_id: str) -> str | None:
+        """Resolve the real speaker captured for this planner turn, once."""
+        marker = self._planner_speakers.pop(session_id, None)
+        if marker is None or session_id in self._proactive_sessions:
+            return None
+        if time.time() - float(marker["verified_at"]) > _TOOL_SPEAKER_TTL_SECONDS:
+            return None
+        record = self._find_speaker_record(session_id, str(marker["message_id"]))
+        if record is None or record["account"] != marker["account"]:
+            return None
+        latest = max(
+            (row for row in self.records.values() if row["session_id"] == session_id),
+            key=lambda row: float(row["seen_at"]),
+            default=None,
+        )
+        if latest is None or latest["message_id"] != record["message_id"]:
+            return None
+        return str(record["account"])
+
+    async def inject(self, kwargs: dict[str, Any], *, track_for_tools: bool = False) -> dict[str, Any]:
         result = {"action": "continue", "modified_kwargs": kwargs}
         if not self.plugin.config.plugin.enabled or not self.plugin.config.role_recognition.enabled:
             return result
@@ -206,9 +229,18 @@ class RoleRecognitionModule:
             source = "当前主动任务的目标账号已由插件核验"
         else:
             message_id = str(kwargs.get("reply_message_id") or "").strip()
-            account = self._find_speaker(session_id, message_id) if message_id else None
-            if account is None:
-                account = self._speaker_from_items(session_id, items)
+            record = self._find_speaker_record(session_id, message_id) if message_id else None
+            if record is None:
+                record = self._speaker_record_from_items(session_id, items)
+            account = str(record["account"]) if record is not None else None
+            if track_for_tools:
+                self._planner_speakers.pop(session_id, None)
+                if record is not None and time.time() - float(record["seen_at"]) <= _TOOL_SPEAKER_TTL_SECONDS:
+                    self._planner_speakers[session_id] = {
+                        "account": account,
+                        "message_id": record["message_id"],
+                        "verified_at": time.time(),
+                    }
             source = "当前消息的真实发送者已核验"
         if account is None:
             return result

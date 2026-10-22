@@ -121,7 +121,7 @@ class DailyReportModule:
         stream_id = str(kwargs.get("stream_id") or "").strip()
         chat_id = str(kwargs.get("chat_id") or "").strip()
         user_id = str(kwargs.get("user_id") or "").strip()
-        if not stream_id or stream_id != chat_id or not user_id:
+        if not stream_id or stream_id != chat_id:
             return {"success": False, "error": "无法确认当前聊天流和请求者，不能生成日报"}
         try:
             streams = await self.plugin.ctx.chat.get_all_streams(platform="all_platforms")
@@ -137,13 +137,22 @@ class DailyReportModule:
             platforms = {str(item.get("platform") or "").strip().lower() for item in matches}
             if len(platforms) != 1:
                 raise ValueError("无法确定当前聊天流的平台")
-            if any(
-                item.get("chat_type") == "private"
-                and str(item.get("user_id") or "").strip() != user_id
-                for item in matches
-            ):
-                raise ValueError("当前私聊账号与请求者不一致")
-            requester_account = normalize_admin_account(f"{next(iter(platforms))}:{user_id}")
+            platform = next(iter(platforms))
+            chat_types = {str(item.get("chat_type") or "").strip().lower() for item in matches}
+            if len(chat_types) != 1:
+                raise ValueError("无法确定当前聊天流的类型")
+            if "group" in chat_types:
+                requester_account = self.plugin.role_recognition.consume_planner_speaker(stream_id)
+                if requester_account is None:
+                    raise ValueError("群聊中无法核验本轮消息的真实发送者")
+                if user_id and normalize_admin_account(f"{platform}:{user_id}") != requester_account:
+                    raise ValueError("群聊请求者身份不一致")
+            else:
+                if not user_id or any(
+                    str(item.get("user_id") or "").strip() != user_id for item in matches
+                ):
+                    raise ValueError("当前私聊账号与请求者不一致")
+                requester_account = normalize_admin_account(f"{platform}:{user_id}")
             admins = await self.plugin.role_recognition.admin_accounts(force_refresh=True)
         except Exception as exc:  # noqa: BLE001 - identity checks must fail closed on Host errors
             LOG.warning("即时日报无法核验请求者身份：%s", exc)

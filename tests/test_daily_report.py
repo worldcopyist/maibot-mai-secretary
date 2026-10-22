@@ -120,7 +120,7 @@ async def test_natural_language_tool_queues_current_chat_only_without_schedule(t
         stream_id="group-chat", chat_id="group-chat", user_id="987654321",
     )
     assert stranger["success"] is False
-    assert "只有插件管理员" in stranger["error"]
+    assert "无法核验" in stranger["error"]
     assert not plugin.daily_report.jobs
 
     stamp = datetime.now(UTC).timestamp() - 60
@@ -235,3 +235,72 @@ async def test_manual_report_uses_maibot_permission_when_plugin_admins_empty(tmp
     )
     assert revoked["success"] is False
     assert "只有插件管理员" in revoked["error"]
+
+
+@pytest.mark.asyncio
+async def test_group_report_uses_verified_planner_speaker_without_group_user_id(tmp_path):
+    plugin, _ = make_plugin(tmp_path, {"plugin": {"admin_accounts": ["qq:123456789"]}})
+    plugin.ctx.chat.streams = [{
+        "stream_id": "group-chat", "platform": "qq", "chat_type": "group",
+        "group_id": "10001", "user_id": "", "account_id": "bot-1",
+    }]
+
+    def inbound(message_id: str, account: str) -> dict:
+        return {
+            "message_id": message_id, "session_id": "group-chat", "platform": "qq",
+            "account_id": "bot-1", "message_info": {"user_info": {"user_id": account}},
+        }
+
+    async def planner(message_id: str) -> None:
+        await plugin.inject_role_for_planner(
+            session_id="group-chat",
+            items=[{"item_type": "UserMessageItem", "parts": [{
+                "type": "text", "text": f'<message msg_id="{message_id}" time="10:00">\n生成群日报',
+            }]}],
+        )
+
+    plugin.role_recognition.remember(inbound("stranger", "987654321"))
+    await planner("stranger")
+    denied = await plugin.secretary_generate_daily_report(
+        stream_id="group-chat", chat_id="group-chat",
+    )
+    assert denied["success"] is False
+    assert "只有插件管理员" in denied["error"]
+
+    plugin.role_recognition.remember(inbound("owner", "123456789"))
+    await planner("owner")
+    spoofed = await plugin.secretary_generate_daily_report(
+        stream_id="group-chat", chat_id="group-chat", user_id="987654321",
+    )
+    assert spoofed["success"] is False
+    assert "无法核验" in spoofed["error"]
+
+    await planner("owner")
+    plugin.role_recognition.remember(inbound("new-stranger", "987654321"))
+    stale = await plugin.secretary_generate_daily_report(
+        stream_id="group-chat", chat_id="group-chat",
+    )
+    assert stale["success"] is False
+    assert "无法核验" in stale["error"]
+
+    plugin.role_recognition.remember(inbound("owner-again", "123456789"))
+    await planner("owner-again")
+
+    async def get_by_time_in_chat(**kwargs):
+        assert kwargs["chat_id"] == "group-chat"
+        return []
+
+    async def send_image(encoded, stream_id, return_details=False):
+        assert stream_id == "group-chat"
+        assert Image.open(io.BytesIO(base64.b64decode(encoded))).format == "PNG"
+        return {"sent": True}
+
+    plugin.ctx.message = types.SimpleNamespace(get_by_time_in_chat=get_by_time_in_chat)
+    plugin.ctx.send = types.SimpleNamespace(image=send_image)
+    queued = await plugin.secretary_generate_daily_report(
+        stream_id="group-chat", chat_id="group-chat",
+    )
+    assert queued["success"] is True
+    await next(iter(plugin.daily_report.jobs.values()))
+    assert any(row["status"] == "sent" and row["stream_id"] == "group-chat"
+               for row in plugin.daily_report.records.values())
