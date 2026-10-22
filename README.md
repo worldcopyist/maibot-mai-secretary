@@ -2,6 +2,8 @@
 
 **[打开知识库：上传文档或粘贴文本](/extensions/worldcopyist.mai-secretary/knowledge)**
 
+**[打开定时任务：查看任务或手动创建](/extensions/worldcopyist.mai-secretary/tasks)**
+
 面向 MaiBot 1.3.7 / 插件 SDK 2.12.0 的独立插件。它提供五项功能：
 
 插件列表中的头像使用 `assets/icon.png`，在 `_manifest.json` 的 `display.icon` 中声明。
@@ -13,6 +15,8 @@
 5. DeepSeek 联网搜索：小秘书自带 `secretary_deepseek_search` 和 `secretary_deepseek_fetch`，按需调用 DeepSeek Search / Fetch API 查询实时网页、读取已知网址。
 
 例如，用户说“每天早上八点给我说天气预报”，麦麦可调用 `secretary_create_task`，用 `daily`、`08:00` 和原请求建立任务。任务到点时，可调用小秘书的 `secretary_deepseek_search` 查询实时天气资料；若查询失败或来源不可靠，应如实说明，不能编造预报。
+
+定时任务页面会列出插件已保存的所有任务，包括聊天中创建的任务、触发状态与最近错误。页面的“已触发”只表示 MaiBot 接受了到点请求，不保证消息已经实际发出。管理员可以选择麦麦已建立的聊天流，手动创建单次、每天或每周任务，也可以取消任务或删除已结束任务的记录。单次时间在页面中按所填时区解释；默认时区使用插件设置。页面创建与聊天创建共用校验、去重、数量限制及状态文件。页面需要 MaiBot WebUI 登录；聊天工具仍只允许用户操作自己在当前聊天流的任务。尚未建立的聊天流不会出现在页面下拉列表中。
 
 ## 配置
 

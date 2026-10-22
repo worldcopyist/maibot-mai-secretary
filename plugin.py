@@ -680,6 +680,31 @@ class MaiSecretaryPlugin(MaiBotPlugin):
         except KnowledgeError as exc:
             return {"error": str(exc)}
 
+    @API("secretary_tasks_list", description="WebUI 查看所有定时任务")
+    async def secretary_tasks_list(self, **kwargs: Any) -> dict[str, Any]:
+        del kwargs
+        return await self.scheduled.webui_list_tasks()
+
+    @API("secretary_tasks_streams", description="WebUI 列出可选聊天流")
+    async def secretary_tasks_streams(self, **kwargs: Any) -> dict[str, Any]:
+        del kwargs
+        return await self.scheduled.webui_streams()
+
+    @API("secretary_tasks_create", description="WebUI 手动创建定时任务")
+    async def secretary_tasks_create(
+        self, stream_id: str, instruction: str, schedule: str, at: str,
+        weekdays: str = "", timezone: str = "", **kwargs: Any,
+    ) -> dict[str, Any]:
+        del kwargs
+        return await self.scheduled.webui_create_task(
+            stream_id, instruction, schedule, at, weekdays, timezone
+        )
+
+    @API("secretary_tasks_cancel", description="WebUI 取消定时任务")
+    async def secretary_tasks_cancel(self, task_id: str, **kwargs: Any) -> dict[str, Any]:
+        del kwargs
+        return await self.scheduled.webui_cancel_task(task_id)
+
     @API("secretary_kb_list", description="WebUI 知识库文档列表")
     async def secretary_kb_list(self, **kwargs: Any) -> dict[str, Any]:
         del kwargs

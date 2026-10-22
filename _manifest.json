@@ -2,7 +2,7 @@
   "manifest_version": 2,
   "id": "worldcopyist.mai-secretary",
   "name": "麦麦小秘书",
-  "version": "0.7.0",
+  "version": "0.8.0",
   "description": "主动聊天、自然语言定时任务、AI 反霸凌、私有知识库与 DeepSeek 联网搜索。",
   "display": {
     "icon": {

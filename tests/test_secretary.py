@@ -75,6 +75,10 @@ def test_sdk_exposes_secretary_tools_apis_and_hooks(tmp_path):
         ("API", "secretary_kb_add_text"),
         ("API", "secretary_kb_delete"),
         ("API", "secretary_kb_rebuild"),
+        ("API", "secretary_tasks_list"),
+        ("API", "secretary_tasks_streams"),
+        ("API", "secretary_tasks_create"),
+        ("API", "secretary_tasks_cancel"),
         ("HOOK_HANDLER", "secretary_cancel_pending_on_inbound"),
         ("HOOK_HANDLER", "secretary_capture_proactive_reply"),
         ("HOOK_HANDLER", "secretary_anti_bullying_inspect"),
@@ -600,6 +604,68 @@ async def test_tools_restrict_tasks_to_current_user_and_chat(tmp_path):
         ]
         == []
     )
+
+
+@pytest.mark.asyncio
+async def test_webui_shows_chat_tasks_and_creates_for_existing_stream(tmp_path):
+    plugin, _ = make_plugin(tmp_path)
+    plugin.ctx.chat.streams = [{
+        "stream_id": "real-stream-1", "platform": "qq", "chat_type": "private",
+        "user_id": "123456789", "user_nickname": "测试用户",
+    }]
+    identity = {"stream_id": "real-stream-1", "chat_id": "real-stream-1", "user_id": "123456789"}
+    chat_created = await plugin.secretary_create_task(
+        **identity, instruction="每天说早安", schedule="daily", at="08:00",
+    )
+    assert chat_created["success"] is True
+    streams = await plugin.secretary_tasks_streams()
+    assert streams["streams"] == [{
+        "stream_id": "real-stream-1", "label": "qq:private:123456789 · 测试用户",
+    }]
+    plugin.ctx.chat.streams.append({
+        "stream_id": "real-stream-2", "platform": "qq", "chat_type": "private",
+        "user_id": "123456789", "user_nickname": "测试用户",
+    })
+    duplicate_labels = [item["label"] for item in (await plugin.secretary_tasks_streams())["streams"]]
+    assert len(set(duplicate_labels)) == 2
+    assert all("会话" in label for label in duplicate_labels)
+    listed = await plugin.secretary_tasks_list()
+    assert [item["id"] for item in listed["tasks"]] == [chat_created["task_id"]]
+    invalid = await plugin.secretary_tasks_create(
+        "not-an-existing-stream", "提醒喝水", "daily", "09:00",
+    )
+    assert "error" in invalid
+    created = await plugin.secretary_tasks_create(
+        "real-stream-1", "提醒喝水", "daily", "09:00",
+    )
+    assert created["success"] is True
+    assert plugin.scheduled.tasks[created["task_id"]].owner_user_id == "__secretary_webui__"
+    repeated = await plugin.secretary_tasks_create(
+        "real-stream-1", "每天说早安", "daily", "08:00",
+    )
+    assert repeated["task_id"] == chat_created["task_id"]
+    restored, _ = make_plugin(tmp_path)
+    restored._load_state()
+    assert len((await restored.secretary_tasks_list())["tasks"]) == 2
+    assert (await plugin.secretary_list_tasks(**identity))["tasks"][0]["id"] == chat_created["task_id"]
+    assert (await plugin.secretary_tasks_cancel(chat_created["task_id"]))["content"]
+    assert len((await plugin.secretary_tasks_list())["tasks"]) == 1
+
+
+@pytest.mark.asyncio
+async def test_webui_once_task_uses_selected_timezone_and_rejects_past(tmp_path):
+    plugin, _ = make_plugin(tmp_path)
+    plugin.ctx.chat.streams = [{"stream_id": "real-stream-1", "platform": "qq", "chat_type": "private", "user_id": "123"}]
+    future = datetime.now(ZoneInfo("Asia/Shanghai")).replace(year=2035).strftime("%Y-%m-%dT%H:%M")
+    created = await plugin.secretary_tasks_create(
+        "real-stream-1", "未来提醒", "once", future, timezone="Asia/Shanghai",
+    )
+    assert created["success"] is True
+    assert plugin.scheduled.tasks[created["task_id"]].at.endswith("+08:00")
+    past = await plugin.secretary_tasks_create(
+        "real-stream-1", "过去提醒", "once", "2020-01-01T08:00", timezone="Asia/Shanghai",
+    )
+    assert "error" in past
 
 
 def test_old_state_is_loaded_without_losing_module_data(tmp_path):

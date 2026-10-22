@@ -4,6 +4,33 @@
   "workspace_title": "麦麦小秘书",
   "pages": [
     {
+      "id": "tasks",
+      "title": "麦麦小秘书 · 定时任务",
+      "description": "查看已创建的任务，并为现有聊天流手动安排单次或周期任务。",
+      "placement": "workspace",
+      "icon": "list",
+      "mode": "custom",
+      "entry": "assets/tasks.html",
+      "layout": "document",
+      "queries": {
+        "list": {"api": "secretary_tasks_list"},
+        "streams": {"api": "secretary_tasks_streams"}
+      },
+      "actions": {
+        "create": {"api": "secretary_tasks_create", "parameters": {
+          "stream_id": {"type": "string", "required": true, "max_length": 200},
+          "instruction": {"type": "string", "required": true, "max_length": 1000},
+          "schedule": {"type": "string", "required": true, "choices": ["once", "daily", "weekly"]},
+          "at": {"type": "string", "required": true, "max_length": 50},
+          "weekdays": {"type": "string", "required": false, "max_length": 30},
+          "timezone": {"type": "string", "required": false, "max_length": 80}
+        }},
+        "cancel": {"api": "secretary_tasks_cancel", "parameters": {
+          "task_id": {"type": "string", "required": true, "max_length": 32}
+        }, "confirmation": "确定取消这项定时任务吗？"}
+      }
+    },
+    {
       "id": "knowledge",
       "title": "麦麦小秘书 · 知识库",
       "description": "上传资料、粘贴文本并测试检索。聊天读取权限在插件配置页设置。",

@@ -1,0 +1,150 @@
+<style>
+  :root { color-scheme: light; font-family: var(--maibot-font-body, system-ui, "Microsoft YaHei", sans-serif); color: var(--maibot-foreground, #18212f); }
+  :root.dark { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--maibot-background, #fff); }
+  .page { max-width: 1120px; margin: 0 auto; padding: 2px 0 12px; }
+  .intro, .muted { color: var(--maibot-muted, #667085); font-size: .875rem; line-height: 1.6; }
+  .intro { margin: 0 0 18px; }
+  .card { padding: 20px; margin-bottom: 16px; border: 1px solid var(--maibot-border, #d0d5dd); border-radius: var(--maibot-radius, 8px); background: var(--maibot-surface, #fff); color: var(--maibot-foreground, #18212f); }
+  .card-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 16px; padding-bottom: 12px; border-bottom: 1px solid var(--maibot-border, #d0d5dd); }
+  h2 { margin: 0; font-size: 1rem; line-height: 1.45; }
+  label { display: block; margin: 12px 0 7px; font-size: .875rem; font-weight: 600; }
+  .input { display: block; width: 100%; min-width: 0; padding: 8px 12px; border: 1px solid var(--maibot-border, #d0d5dd); border-radius: var(--maibot-radius, 6px); background: var(--maibot-soft, #fff); color: var(--maibot-foreground, #18212f); font: inherit; }
+  textarea.input { min-height: 94px; resize: vertical; }
+  .input::placeholder { color: var(--maibot-muted, #667085); }
+  :is(.input, .button, .weekday input):focus-visible { outline: 2px solid var(--maibot-primary, #3478dd); outline-offset: 2px; }
+  .fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 16px; }
+  .wide { grid-column: 1 / -1; }
+  .hint { margin: 6px 0 0; }
+  .weekdays { display: flex; flex-wrap: wrap; gap: 8px 14px; margin-top: 8px; }
+  .weekday { display: inline-flex; align-items: center; gap: 5px; margin: 0; font-weight: 400; }
+  .actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 16px; }
+  .button { padding: 8px 16px; border: 1px solid var(--maibot-border, #d0d5dd); border-radius: var(--maibot-radius, 6px); background: var(--maibot-background, #fff); color: var(--maibot-foreground, #18212f); font: inherit; cursor: pointer; }
+  .primary { border-color: var(--maibot-primary, #3478dd); background: var(--maibot-primary, #3478dd); color: var(--maibot-primary-foreground, #fff); }
+  .danger { border-color: var(--maibot-danger, #c2414d); color: var(--maibot-danger, #c2414d); }
+  .button:disabled { opacity: .55; cursor: not-allowed; }
+  #status { padding: 10px 12px; margin: 0 0 16px; border: 1px solid var(--maibot-border, #d0d5dd); border-radius: var(--maibot-radius, 6px); background: var(--maibot-soft, #f2f4f7); font-size: .875rem; }
+  #status[data-tone="error"] { border-color: var(--maibot-danger, #c2414d); color: var(--maibot-danger, #c2414d); }
+  [hidden] { display: none !important; }
+  .task-list { list-style: none; margin: 0; padding: 0; }
+  .task-row { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; padding: 15px 0; border-top: 1px solid var(--maibot-border, #d0d5dd); }
+  .task-row:first-child { border-top: 0; padding-top: 0; }
+  .task-info { min-width: 0; }
+  .task-title { font-size: .9375rem; font-weight: 600; white-space: pre-wrap; overflow-wrap: anywhere; }
+  .task-meta { margin-top: 5px; overflow-wrap: anywhere; }
+  .task-row .button { flex-shrink: 0; padding: 6px 10px; font-size: .8125rem; }
+  .empty { padding: 14px 0; }
+  @media (max-width: 720px) { .fields { grid-template-columns: 1fr; } .task-row { flex-direction: column; } }
+</style>
+<main class="page">
+  <p class="intro">这里显示小秘书保存的定时任务，包括在聊天中创建的任务。手动创建的任务会在所选聊天流中执行；下方时间按填写的时区计算。</p>
+  <p id="status" role="status" aria-live="polite" hidden></p>
+  <section class="card" aria-labelledby="create-heading">
+    <div class="card-header"><h2 id="create-heading">手动创建任务</h2></div>
+    <div class="fields">
+      <div class="wide"><label for="stream">发送到哪个聊天流？</label><select class="input" id="stream"><option value="">正在读取聊天流…</option></select><p class="muted hint">只能选择麦麦已经建立的聊天流；列表为空时，先在目标聊天中发一条消息。</p></div>
+      <div class="wide"><label for="instruction">到点要麦麦做什么？</label><textarea class="input" id="instruction" maxlength="1000" placeholder="例如：告诉我今天的天气预报，并附上查询来源"></textarea></div>
+      <div><label for="schedule">执行方式</label><select class="input" id="schedule"><option value="once">仅一次</option><option value="daily">每天</option><option value="weekly">每周</option></select></div>
+      <div><label for="timezone">时区</label><input class="input" id="timezone" maxlength="80" placeholder="Asia/Shanghai" autocomplete="off"></div>
+      <div id="once-field"><label for="once-at">执行日期和时间</label><input class="input" id="once-at" type="datetime-local"></div>
+      <div id="repeat-field" hidden><label for="repeat-at">每天执行时间</label><input class="input" id="repeat-at" type="time" value="08:00"></div>
+      <div id="weekdays-field" class="wide" hidden><label>星期几执行？</label><div class="weekdays" id="weekdays"></div></div>
+    </div>
+    <div class="actions"><button class="button primary" id="create" type="button">创建定时任务</button></div>
+  </section>
+  <section class="card" aria-labelledby="tasks-heading">
+    <div class="card-header"><h2 id="tasks-heading">已创建的任务</h2><button class="button" id="refresh" type="button">刷新</button></div>
+    <ul id="tasks" class="task-list"><li class="muted empty">正在读取任务…</li></ul>
+  </section>
+</main>
+<script>
+(() => {
+  const $ = id => document.getElementById(id);
+  const add = (parent, tag, content, className) => { const node = document.createElement(tag); node.textContent = content; if (className) node.className = className; parent.append(node); return node; };
+  const showStatus = (message, error = false) => { $('status').hidden = !message; $('status').textContent = message; $('status').dataset.tone = error ? 'error' : 'info'; };
+  const query = async (name, args = {}) => { const result = await maibot.query(name, args); if (result?.error) throw Error(result.error); return result; };
+  const action = async (name, args = {}) => { const result = await maibot.action(name, args); if (result?.error) throw Error(result.error); return result; };
+  const labels = new Map();
+  let busy = false, moduleEnabled = true;
+  function setBusy(value) { busy = value; $('create').disabled = value || !moduleEnabled; $('refresh').disabled = value; }
+  function updateSchedule() {
+    const once = $('schedule').value === 'once';
+    $('once-field').hidden = !once;
+    $('repeat-field').hidden = once;
+    $('weekdays-field').hidden = $('schedule').value !== 'weekly';
+  }
+  for (const [day, name] of ['一','二','三','四','五','六','日'].entries()) {
+    const label = document.createElement('label'); label.className = 'weekday';
+    const box = document.createElement('input'); box.type = 'checkbox'; box.value = String(day + 1);
+    label.append(box, document.createTextNode('周' + name)); $('weekdays').append(label);
+  }
+  $('schedule').addEventListener('change', updateSchedule);
+  function renderStreams(streams) {
+    const selected = $('stream').value;
+    labels.clear(); $('stream').replaceChildren();
+    const placeholder = document.createElement('option'); placeholder.value = '';
+    placeholder.textContent = streams.length ? '请选择聊天流' : '暂无可选聊天流'; $('stream').append(placeholder);
+    for (const stream of streams) {
+      labels.set(stream.stream_id, stream.label);
+      const option = document.createElement('option'); option.value = stream.stream_id; option.textContent = stream.label; $('stream').append(option);
+    }
+    if (labels.has(selected)) $('stream').value = selected;
+  }
+  function renderTasks(tasks) {
+    const list = $('tasks'); list.replaceChildren();
+    if (!tasks.length) { add(list, 'li', '还没有定时任务', 'muted empty'); return; }
+    const statusName = {active:'等待执行', completed:'已触发（未确认消息发出）', missed:'已错过', failed:'触发失败'};
+    const scheduleName = {once:'单次', daily:'每天', weekly:'每周'};
+    for (const task of tasks) {
+      const row = document.createElement('li'); row.className = 'task-row';
+      const info = document.createElement('div'); info.className = 'task-info';
+      add(info, 'div', task.instruction, 'task-title');
+      const when = task.schedule === 'weekly' ? `周 ${task.weekdays} ${task.at}` : task.schedule === 'daily' ? `每天 ${task.at}` : task.at;
+      add(info, 'div', `${statusName[task.status] || task.status} · ${scheduleName[task.schedule] || task.schedule} · ${when} · ${task.timezone}`, 'muted task-meta');
+      add(info, 'div', `聊天流：${labels.get(task.stream_id) || task.stream_id} · ${task.status === 'active' ? '下次执行' : '原计划时间'}：${task.next_run}`, 'muted task-meta');
+      if (task.last_error) add(info, 'div', `最近错误：${task.last_error}`, 'muted task-meta');
+      add(info, 'div', `任务编号：${task.id} · 来源：${task.owner_user_id === '__secretary_webui__' ? '插件页面' : '聊天用户 '+task.owner_user_id}`, 'muted task-meta');
+      const button = add(row, 'button', task.status === 'active' ? '取消任务' : '删除记录', 'button danger'); button.type = 'button';
+      button.addEventListener('click', async () => {
+        if (busy) return;
+        try { setBusy(true); await action('cancel', {task_id: task.id}); await refresh(); showStatus('任务已取消'); }
+        catch (error) { showStatus(String(error), true); } finally { setBusy(false); }
+      });
+      row.prepend(info); list.append(row);
+    }
+  }
+  async function refresh() {
+    const data = await query('list');
+    $('timezone').value ||= data.timezone || 'Asia/Shanghai';
+    moduleEnabled = Boolean(data.enabled);
+    $('create').disabled = busy || !moduleEnabled;
+    try { renderStreams((await query('streams')).streams || []); }
+    catch (error) { renderStreams([]); showStatus('聊天流读取失败：' + String(error), true); }
+    renderTasks(data.tasks || []);
+    if (!moduleEnabled) showStatus('定时任务模块当前已关闭。已有任务仍会显示，开启后才可创建和执行。', true);
+  }
+  $('refresh').addEventListener('click', async () => {
+    try { setBusy(true); await refresh(); showStatus('任务列表已刷新'); }
+    catch (error) { showStatus(String(error), true); } finally { setBusy(false); }
+  });
+  $('create').addEventListener('click', async () => {
+    if (busy) return;
+    const schedule = $('schedule').value;
+    const weekdays = [...$('weekdays').querySelectorAll('input:checked')].map(item => item.value).join(',');
+    const args = {
+      stream_id: $('stream').value, instruction: $('instruction').value.trim(), schedule,
+      at: (schedule === 'once' ? $('once-at').value : $('repeat-at').value),
+      timezone: $('timezone').value.trim(), weekdays: schedule === 'weekly' ? weekdays : '',
+    };
+    if (!args.stream_id || !args.instruction || !args.at || (schedule === 'weekly' && !args.weekdays)) {
+      showStatus('请填写聊天流、任务内容、执行时间；每周任务还要选择星期。', true); return;
+    }
+    try {
+      setBusy(true); const result = await action('create', args);
+      await refresh(); showStatus(result.content || '定时任务已创建'); $('instruction').value = '';
+    } catch (error) { showStatus(String(error), true); } finally { setBusy(false); }
+  });
+  maibot.ready.then(() => refresh().catch(error => showStatus(String(error), true)));
+})();
+</script>
