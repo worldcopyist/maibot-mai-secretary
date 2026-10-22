@@ -151,6 +151,14 @@ class DailyReportSettings(PluginConfigBase):
             "hint": "避免重复发图和模型费用；0 表示不限制。同一聊天流正在生成时仍不会重复启动。",
         },
     )
+    text_model: str = Field(
+        default="",
+        json_schema_extra={
+            "label": "日报文字总结模型",
+            "hint": "填写 MaiBot 已配置的文字模型名称；留空使用 utils 任务。模型只写文字，插件将文字填入 Azure 图片模板。",
+            "placeholder": "mimo-v2.6-flash",
+        },
+    )
     target_chats: list[str] = Field(
         default_factory=list,
         json_schema_extra={

@@ -2,7 +2,7 @@
   "manifest_version": 2,
   "id": "worldcopyist.mai-secretary",
   "name": "麦麦小秘书",
-  "version": "0.11.1",
+  "version": "0.11.2",
   "description": "角色识别、主动聊天、自然语言定时任务、可即时生成的 Azure 主题日报、AI 反霸凌、私有知识库与 DeepSeek 联网搜索。",
   "display": {
     "icon": {

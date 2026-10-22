@@ -14,6 +14,7 @@ enabled = true
 enabled = false
 manual_enabled = true
 manual_cooldown_minutes = 10
+text_model = ""
 target_chats = []
 summary_time = "21:00"
 

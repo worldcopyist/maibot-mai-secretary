@@ -271,7 +271,12 @@ class DailyReportModule:
 
     async def _ask(self, prompt: str, max_tokens: int) -> str:
         result = await self.plugin.ctx.llm.generate(
-            prompt=prompt, task_name="utils", temperature=0.2, max_tokens=max_tokens,
+            prompt="只返回总结文字，不生成图片，不调用工具。\n" + prompt,
+            task_name="utils",
+            model_name=self.plugin.config.daily_report.text_model.strip(),
+            temperature=0.2,
+            max_tokens=max(4096, max_tokens),
+            rpc_timeout_ms=130000,
         )
         if not isinstance(result, dict) or result.get("success") is False:
             raise RuntimeError("日报总结模型调用失败")
