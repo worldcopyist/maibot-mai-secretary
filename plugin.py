@@ -23,6 +23,7 @@ from maibot_sdk.types import (
 from pydantic import field_validator, model_validator
 
 from .anti_bullying import AntiBullyingModule, normalize_admin_account
+from .daily_report import DailyReportModule
 from .deepseek_web import DeepSeekWebModule
 from .knowledge_base import KnowledgeBaseModule, KnowledgeError
 from .module_contract import SecretaryModule
@@ -120,6 +121,60 @@ class ScheduledTasksSettings(PluginConfigBase):
             "hint": "关闭后不再创建或执行任务；已有任务仍可查看和取消。",
         },
     )
+
+
+class DailyReportSettings(PluginConfigBase):
+    """管理员配置的每日聊天总结。"""
+
+    __ui_label__: ClassVar[str] = "日报 · Azure 主题"
+
+    enabled: bool = Field(
+        default=False,
+        json_schema_extra={
+            "label": "启用日报",
+            "hint": "设置目标聊天流和总结时间后开启；每天每个目标最多发一张 Azure 主题图片。",
+        },
+    )
+    target_chats: list[str] = Field(
+        default_factory=list,
+        json_schema_extra={
+            "label": "日报聊天流",
+            "hint": "每行一个目标，例如 qq:private:123456 或 qq:group:123456。仅这些聊天流的记录会用于各自的日报。",
+            "placeholder": "qq:private:123456",
+        },
+    )
+    summary_time: str = Field(
+        default="21:00",
+        json_schema_extra={
+            "label": "每日总结时间",
+            "hint": "24 小时制 HH:MM；使用插件设置中的默认时区。总结当天零点到这个时间的聊天记录。",
+            "placeholder": "21:00",
+        },
+    )
+
+    @field_validator("target_chats")
+    @classmethod
+    def validate_targets(cls, targets: list[str]) -> list[str]:
+        if len(targets) > 20:
+            raise ValueError("日报聊天流最多 20 个")
+        cleaned = [str(target).strip().replace("：", ":") for target in targets if str(target).strip()]
+        if any(
+            len(parts := target.split(":", 2)) != 3
+            or parts[1] not in {"group", "private"}
+            or not all(parts)
+            for target in cleaned
+        ):
+            raise ValueError("日报聊天流须为 platform:group:id 或 platform:private:id")
+        return list(dict.fromkeys(cleaned))
+
+    @field_validator("summary_time")
+    @classmethod
+    def validate_time(cls, value: str) -> str:
+        from .secretary_core import parse_clock
+
+        cleaned = value.strip().replace("：", ":")
+        parse_clock(cleaned)
+        return cleaned
 
 
 class ProactiveSettings(PluginConfigBase):
@@ -438,6 +493,7 @@ class SecretaryConfig(PluginConfigBase):
     scheduled_tasks: ScheduledTasksSettings = Field(
         default_factory=ScheduledTasksSettings
     )
+    daily_report: DailyReportSettings = Field(default_factory=DailyReportSettings)
     proactive: ProactiveSettings = Field(default_factory=ProactiveSettings)
     anti_bullying: AntiBullyingSettings = Field(default_factory=AntiBullyingSettings)
     knowledge_base: KnowledgeBaseSettings = Field(default_factory=KnowledgeBaseSettings)
@@ -452,6 +508,7 @@ class MaiSecretaryPlugin(MaiBotPlugin):
     def __init__(self) -> None:
         super().__init__()
         self.scheduled = ScheduledTasksModule(self)
+        self.daily_report = DailyReportModule(self)
         self.role_recognition = RoleRecognitionModule(self)
         self.proactive = ProactiveChatModule(self)
         self.anti_bullying = AntiBullyingModule(self)
@@ -459,6 +516,7 @@ class MaiSecretaryPlugin(MaiBotPlugin):
         self.deepseek_web = DeepSeekWebModule(self)
         self._modules: dict[str, SecretaryModule] = {}
         self._register_module(self.scheduled)
+        self._register_module(self.daily_report)
         self._register_module(self.role_recognition)
         self._register_module(self.proactive)
         self._register_module(self.anti_bullying)
@@ -491,6 +549,7 @@ class MaiSecretaryPlugin(MaiBotPlugin):
         )
 
     async def on_unload(self) -> None:
+        await self.daily_report.stop()
         await self.anti_bullying.stop()
         await self.knowledge_base.stop()
         await self.deepseek_web.stop()

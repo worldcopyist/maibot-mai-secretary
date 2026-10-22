@@ -4,7 +4,7 @@
 
 **[打开定时任务：日历、任务列表与手动创建](/extensions/worldcopyist.mai-secretary/tasks)**
 
-面向 MaiBot 1.3.7 / 插件 SDK 2.12.0 的独立插件。它提供六项功能：
+面向 MaiBot 1.3.7 / 插件 SDK 2.12.0 的独立插件。它提供七项功能：
 
 插件列表中的头像使用 `assets/icon.png`，在 `_manifest.json` 的 `display.icon` 中声明。
 
@@ -14,6 +14,7 @@
 4. 私有知识库：管理员从本插件的 WebUI 详情页进入知识库工作区，上传文档或粘贴文本；插件提取文字、分段、建立关键词和语义向量索引，让麦麦在授权聊天流调用 `secretary_search_knowledge` 查询，并附来源。
 5. DeepSeek 联网搜索：小秘书自带 `secretary_deepseek_search` 和 `secretary_deepseek_fetch`，按需调用 DeepSeek Search / Fetch API 查询实时网页、读取已知网址。
 6. 角色识别：按当前消息的真实平台账号分为主人、熟人和陌生人，分别使用可编辑的提示词。
+7. 日报：管理员设定聊天流和每天的总结时间，插件读取当天零点到总结时间的聊天文字，分段总结后填入「Azure 主题」图片，并发送到对应聊天流。
 
 例如，用户说“每天早上八点给我说天气预报”，麦麦可调用 `secretary_create_task`，用 `daily`、`08:00` 和原请求建立任务。任务到点时，可调用小秘书的 `secretary_deepseek_search` 查询实时天气资料；若查询失败或来源不可靠，应如实说明，不能编造预报。
 
@@ -24,6 +25,21 @@
 ## 配置
 
 编辑 `config.toml` 或在 MaiBot 插件配置页面修改设置。`target_chats` 为空时，不会随机主动发言。格式为 `平台:group:群号` 或 `平台:private:用户号`：
+
+### Azure 主题日报
+
+在插件配置页面的「日报 · Azure 主题」中，打开开关、添加一个或多个聊天流，并设置每日总结时间。每个目标独立取数、独立收到一张日报。默认关闭且目标为空，管理员配置后才开始发送。
+
+```toml
+[daily_report]
+enabled = true
+target_chats = ["qq:private:2767263382"]
+summary_time = "21:00"
+```
+
+日报采用插件的 `Asia/Shanghai` 等默认时区，统计当天零点至设定时间的聊天文字；图片和表情只标记其存在，不分析画面。聊天记录按小时分批读取，长记录继续拆段总结，再合并为一张图。图片底图是已确认的 [9:16 Azure 主题](assets/azure_theme.png)，中文排版使用附带的开源 Noto Sans SC 字体。若总结无法放进留白，插件会记录错误，不会裁掉正文。插件会在发送前记录状态，避免服务重启后重复发图；如发送结果不明，需要查看日志确认。生成阶段失败会在补执行期限内最多重试三次，过期后当天日报不会补发。
+
+日报调用 MaiBot 的总结模型，会消耗模型额度；聊天内容只发送到已配置的 MaiBot 模型服务，不会进入 DeepSeek 搜索或知识库。每个目标只有该聊天流的记录进入对应的总结。要让日报临时停用，请关闭本组的开关。
 
 ```toml
 [proactive]
@@ -131,9 +147,9 @@ fetch_qps = 5.0
 
 ### 模块结构
 
-`plugin.py` 是 MaiBot 的入口，只负责配置、模块注册、统一调度、状态文件读写，以及 SDK 工具、页面 API 和事件钩子的转发。`scheduled_tasks.py` 独立管理定时任务，`proactive_chat.py` 独立管理随机发言和上次发言的续接，`role_recognition.py` 独立管理账号识别及三档提示词，`anti_bullying.py` 独立管理辱骂判断和管理员提醒，`knowledge_base.py` 独立管理文档与检索，`deepseek_web.py` 独立管理联网搜索与网页抓取；模块通过 `module_contract.py` 约定的接口接入。`stream_router.py` 为需要发送消息的模块解析聊天流；`secretary_core.py` 保留不依赖 MaiBot 的时间计算，`prompts.py` 集中放工具调用提示词。`webui.json` 与 `assets/knowledge.html` 声明并实现从插件详情页进入的知识库工作区。
+`plugin.py` 是 MaiBot 的入口，只负责配置、模块注册、统一调度、状态文件读写，以及 SDK 工具、页面 API 和事件钩子的转发。`scheduled_tasks.py` 独立管理定时任务，`daily_report.py` 独立管理日报调度和聊天总结，`daily_report_renderer.py` 把总结写进主题图片，`proactive_chat.py` 独立管理随机发言和上次发言的续接，`role_recognition.py` 独立管理账号识别及三档提示词，`anti_bullying.py` 独立管理辱骂判断和管理员提醒，`knowledge_base.py` 独立管理文档与检索，`deepseek_web.py` 独立管理联网搜索与网页抓取；模块通过 `module_contract.py` 约定的接口接入。`stream_router.py` 为需要发送消息的模块解析聊天流；`secretary_core.py` 保留不依赖 MaiBot 的时间计算，`prompts.py` 集中放工具调用提示词。`webui.json` 与 `assets/knowledge.html` 声明并实现从插件详情页进入的知识库工作区。
 
-六个功能可分别用 `[scheduled_tasks].enabled`、`[proactive].enabled`、`[role_recognition].enabled`、`[anti_bullying].enabled`、`[knowledge_base].enabled` 和 `[deepseek_web].enabled` 开关。旧配置没有新增配置节时由默认值补齐；全局 `[plugin].enabled` 仍控制整个插件。
+七个功能可分别用 `[scheduled_tasks].enabled`、`[daily_report].enabled`、`[proactive].enabled`、`[role_recognition].enabled`、`[anti_bullying].enabled`、`[knowledge_base].enabled` 和 `[deepseek_web].enabled` 开关。旧配置没有新增配置节时由默认值补齐；全局 `[plugin].enabled` 仍控制整个插件。
 
 添加功能时，新建一个实现 `name`、`state_keys`、`load_state`、`dump_state`、`on_config_update` 和 `tick` 的模块，并在 `MaiSecretaryPlugin.__init__` 中调用 `_register_module`。若模块需要给麦麦新增工具或接收事件，在入口类添加 SDK 装饰的薄转发方法。模块状态使用独有字段写入现有 `secretary-state.json`；注册时会拒绝重复字段，未注册字段也会在读写时保留。现有配置字段、工具名和状态文件版本保持兼容。
 

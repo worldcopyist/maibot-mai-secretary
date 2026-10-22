@@ -10,6 +10,11 @@ admin_accounts = []
 [scheduled_tasks]
 enabled = true
 
+[daily_report]
+enabled = false
+target_chats = []
+summary_time = "21:00"
+
 [proactive]
 enabled = true
 target_chats = []
