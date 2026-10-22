@@ -2,8 +2,8 @@
   "manifest_version": 2,
   "id": "worldcopyist.mai-secretary",
   "name": "麦麦小秘书",
-  "version": "0.6.2",
-  "description": "主动聊天、自然语言定时任务、AI 反霸凌，以及可上传文档的私有知识库。",
+  "version": "0.7.0",
+  "description": "主动聊天、自然语言定时任务、AI 反霸凌、私有知识库与 DeepSeek 联网搜索。",
   "display": {
     "icon": {
       "type": "local",
@@ -27,7 +27,10 @@
     "min_version": "2.12.0",
     "max_version": "999.999.999"
   },
-  "dependencies": [{"type": "python_package", "name": "pypdf", "version_spec": ">=6.16,<7"}],
+  "dependencies": [
+    {"type": "python_package", "name": "pypdf", "version_spec": ">=6.16,<7"},
+    {"type": "python_package", "name": "httpx", "version_spec": ">=0.27,<1"}
+  ],
   "plugin_type": "management",
   "capabilities": [
     "chat.get_all_streams",

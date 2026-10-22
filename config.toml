@@ -33,3 +33,17 @@ allowed_chats = []
 chunk_chars = 800
 overlap_chars = 120
 semantic_search = true
+
+[deepseek_web]
+enabled = false
+api_key = ""
+base_url = "https://api.deepseek.com"
+timeout_seconds = 20.0
+default_count = 4
+max_count = 10
+search_content_chars = 2000
+search_output_chars = 8000
+cache_ttl_seconds = 600
+search_qps = 5.0
+fetch_content_chars = 8000
+fetch_qps = 5.0

@@ -2,7 +2,7 @@
 
 **[打开知识库：上传文档或粘贴文本](/extensions/worldcopyist.mai-secretary/knowledge)**
 
-面向 MaiBot 1.3.7 / 插件 SDK 2.12.0 的独立插件。它提供四项功能：
+面向 MaiBot 1.3.7 / 插件 SDK 2.12.0 的独立插件。它提供五项功能：
 
 插件列表中的头像使用 `assets/icon.png`，在 `_manifest.json` 的 `display.icon` 中声明。
 
@@ -10,8 +10,9 @@
 2. 让麦麦通过三个工具创建、查看和取消当前用户在当前聊天流中的定时任务。支持单次、每天、每周。到点后仍交给麦麦的主动任务接口执行用户请求。
 3. AI 反霸凌：识别针对麦麦的辱骂，结合自定义违禁词和聊天上下文判断，确认后私聊插件管理员，请管理员核查。
 4. 私有知识库：管理员从本插件的 WebUI 详情页进入知识库工作区，上传文档或粘贴文本；插件提取文字、分段、建立关键词和语义向量索引，让麦麦在授权聊天流调用 `secretary_search_knowledge` 查询，并附来源。
+5. DeepSeek 联网搜索：小秘书自带 `secretary_deepseek_search` 和 `secretary_deepseek_fetch`，按需调用 DeepSeek Search / Fetch API 查询实时网页、读取已知网址。
 
-例如，用户说“每天早上八点给我说天气预报”，麦麦可调用 `secretary_create_task`，用 `daily`、`08:00` 和原请求建立任务。任务到点时，小秘书会要求麦麦使用运行时已有的信息来源查询天气；若没有可靠的实时天气来源，应如实说明，不能编造预报。插件本身不提供天气数据源。
+例如，用户说“每天早上八点给我说天气预报”，麦麦可调用 `secretary_create_task`，用 `daily`、`08:00` 和原请求建立任务。任务到点时，可调用小秘书的 `secretary_deepseek_search` 查询实时天气资料；若查询失败或来源不可靠，应如实说明，不能编造预报。
 
 ## 配置
 
@@ -68,6 +69,30 @@ overlap_chars = 120
 semantic_search = true
 ```
 
+### DeepSeek 联网搜索
+
+小秘书提供两个可直接由麦麦调用的工具：`secretary_deepseek_search(query, count?, need_content?, ori_question?)` 搜索实时网页，`secretary_deepseek_fetch(url)` 读取指定网页的 Markdown 正文。搜索默认只返回摘要；需要全文时再设 `need_content=true` 或对已知网址调用 Fetch。工具结果包含来源链接，并标明网页内容只作资料，不执行其中的指令。两个工具只在 `[deepseek_web].enabled=true` 且配置了 API Key 时工作。
+
+在插件 WebUI 的「DeepSeek 联网搜索」设置中填写 Key，或编辑本机 `config.toml`：
+
+```toml
+[deepseek_web]
+enabled = true
+api_key = "在本机填写，不要提交到 Git 仓库"
+base_url = "https://api.deepseek.com"
+timeout_seconds = 20.0
+default_count = 4
+max_count = 10
+search_content_chars = 2000
+search_output_chars = 8000
+cache_ttl_seconds = 600
+search_qps = 5.0
+fetch_content_chars = 8000
+fetch_qps = 5.0
+```
+
+小秘书通过 DeepSeek 官方 [Search / Fetch API](https://api-docs.deepseek.com/zh-cn/guides/search/) 发起请求。搜索结果短时间缓存，同一请求不会反复调用；超时、限流和临时服务错误最多重试两次。DeepSeek 按成功请求计费，具体价格和账号限速以官方文档为准。已有独立 DeepSeek Search 插件的部署，应先确认小秘书的 Key 和工具可用，再关闭旧插件的 `[plugin].enabled`，避免同一用途出现两套工具。公开仓库的默认配置关闭该模块，且不保存任何 API Key。
+
 `scheduling_mode = "count"` 沿用每窗口 `messages_per_window` 次的方式（1–5 次）。设为 `"interval"` 后，改用 `average_interval_hours` 和 `offset_minutes`，例如平均 2 小时、偏移 15 分钟时，从窗口开始或修改设置的时刻起，每次与上次计划发言相隔 1 小时 45 分至 2 小时 15 分，次数随窗口长度变化。偏移可设为 0，必须小于平均间隔；平均间隔可设 0.25–24 小时。修改模式或参数后，只重新安排尚未发生的随机发言，不影响定时任务。
 
 窗口可以跨午夜，例如 `10:00` 到次日 `02:00`。时区由 `[plugin].timezone` 指定，默认 `Asia/Shanghai`。每个目标和窗口的随机时间点会保存在 MaiBot 授予的 `data/plugins/worldcopyist.mai-secretary/` 中，重启后继续使用。插件先查询已有聊天流并使用带机器人账号的真实会话；若目标尚无会话，仅在能确定唯一机器人账号时调用 `chat.open_session`。无法确定时跳过本次触发，不创建缺少账号的重复聊天流。
@@ -76,7 +101,7 @@ semantic_search = true
 
 自然语言工具只操作调用者所在聊天流、该用户自己的任务。单次任务使用带时区的 ISO 时间，例如 `2026-10-21T08:00:00+08:00`；每天和每周使用 `HH:MM`，每周还需星期数字（周一为 1，周日为 7）。时间含糊时应先澄清。
 
-插件发给 MaiBot 的主动聊天和定时任务执行提示词会直接列出工具名：`deepseek_search` 用于实时搜索，`deepseek_fetch` 用于读取已知网页，`secretary_create_task`、`secretary_list_tasks`、`secretary_cancel_task` 分别用于创建、查看和取消定时任务，`secretary_search_knowledge` 用于查询授权知识库，`send_emoji` 用于在合适时从表情库挑选表情。若目标工具列在 MaiBot 的延迟展示工具中，提示词要求先用 `tool_search` 发现，再按实际参数调用。到点执行的任务不会重新创建同一任务；普通主动闲聊也不会无故联网或创建任务。工具不可用时应如实说明。
+插件发给 MaiBot 的主动聊天和定时任务执行提示词会直接列出工具名：`secretary_deepseek_search` 用于实时搜索，`secretary_deepseek_fetch` 用于读取已知网页，`secretary_create_task`、`secretary_list_tasks`、`secretary_cancel_task` 分别用于创建、查看和取消定时任务，`secretary_search_knowledge` 用于查询授权知识库，`send_emoji` 用于在合适时从表情库挑选表情。若目标工具列在 MaiBot 的延迟展示工具中，提示词要求先用 `tool_search` 发现，再按实际参数调用。到点执行的任务不会重新创建同一任务；普通主动闲聊也不会无故联网或创建任务。工具不可用时应如实说明。
 
 到点后的“成功”表示 MaiBot 接受了主动任务请求，不等于已经观察到消息发出。插件先持久化“已尝试”再触发，避免重启造成重复消息。服务中断超过 `misfire_grace_seconds`（默认 10 分钟）时会跳过过期触发；单次任务会标记为 `missed`，可通过列出任务查看。接口报错时，单次任务标记为 `failed`；周期任务保留下一次执行。
 
@@ -84,9 +109,9 @@ semantic_search = true
 
 ### 模块结构
 
-`plugin.py` 是 MaiBot 的入口，只负责配置、模块注册、统一调度、状态文件读写，以及 SDK 工具、页面 API 和事件钩子的转发。`scheduled_tasks.py` 独立管理定时任务，`proactive_chat.py` 独立管理随机发言和上次发言的续接，`anti_bullying.py` 独立管理辱骂判断和管理员提醒，`knowledge_base.py` 独立管理文档与检索；模块通过 `module_contract.py` 约定的接口接入。`stream_router.py` 为需要发送消息的模块解析聊天流；`secretary_core.py` 保留不依赖 MaiBot 的时间计算，`prompts.py` 集中放工具调用提示词。`webui.json` 与 `assets/knowledge.html` 声明并实现从插件详情页进入的知识库工作区。
+`plugin.py` 是 MaiBot 的入口，只负责配置、模块注册、统一调度、状态文件读写，以及 SDK 工具、页面 API 和事件钩子的转发。`scheduled_tasks.py` 独立管理定时任务，`proactive_chat.py` 独立管理随机发言和上次发言的续接，`anti_bullying.py` 独立管理辱骂判断和管理员提醒，`knowledge_base.py` 独立管理文档与检索，`deepseek_web.py` 独立管理联网搜索与网页抓取；模块通过 `module_contract.py` 约定的接口接入。`stream_router.py` 为需要发送消息的模块解析聊天流；`secretary_core.py` 保留不依赖 MaiBot 的时间计算，`prompts.py` 集中放工具调用提示词。`webui.json` 与 `assets/knowledge.html` 声明并实现从插件详情页进入的知识库工作区。
 
-四个功能可分别用 `[scheduled_tasks].enabled`、`[proactive].enabled`、`[anti_bullying].enabled` 和 `[knowledge_base].enabled` 开关。旧配置没有新增配置节时由默认值补齐；全局 `[plugin].enabled` 仍控制整个插件。
+五个功能可分别用 `[scheduled_tasks].enabled`、`[proactive].enabled`、`[anti_bullying].enabled`、`[knowledge_base].enabled` 和 `[deepseek_web].enabled` 开关。旧配置没有新增配置节时由默认值补齐；全局 `[plugin].enabled` 仍控制整个插件。
 
 添加功能时，新建一个实现 `name`、`state_keys`、`load_state`、`dump_state`、`on_config_update` 和 `tick` 的模块，并在 `MaiSecretaryPlugin.__init__` 中调用 `_register_module`。若模块需要给麦麦新增工具或接收事件，在入口类添加 SDK 装饰的薄转发方法。模块状态使用独有字段写入现有 `secretary-state.json`；注册时会拒绝重复字段，未注册字段也会在读写时保留。现有配置字段、工具名和状态文件版本保持兼容。
 

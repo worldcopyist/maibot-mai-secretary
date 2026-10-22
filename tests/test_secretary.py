@@ -65,6 +65,8 @@ def test_sdk_exposes_secretary_tools_apis_and_hooks(tmp_path):
         ("TOOL", "secretary_list_tasks"),
         ("TOOL", "secretary_cancel_task"),
         ("TOOL", "secretary_search_knowledge"),
+        ("TOOL", "secretary_deepseek_search"),
+        ("TOOL", "secretary_deepseek_fetch"),
         ("API", "secretary_kb_list"),
         ("API", "secretary_kb_search"),
         ("API", "secretary_kb_start"),
@@ -368,8 +370,8 @@ async def test_one_time_task_persists_and_does_not_repeat(tmp_path):
     assert all(
         f"`{name}`" in task_intent
         for name in (
-            "deepseek_search",
-            "deepseek_fetch",
+            "secretary_deepseek_search",
+            "secretary_deepseek_fetch",
             "secretary_create_task",
             "secretary_list_tasks",
             "secretary_cancel_task",
@@ -494,7 +496,7 @@ async def test_next_proactive_chat_uses_only_a_successfully_sent_previous_messag
     await plugin._tick(datetime.fromtimestamp(first + 1, UTC))
     assert len(proactive.calls) == 1
     assert "自己决定你此刻在做" in proactive.calls[0]["intent"]
-    assert "`deepseek_search`" in proactive.calls[0]["intent"]
+    assert "`secretary_deepseek_search`" in proactive.calls[0]["intent"]
     assert "`tool_search`" in proactive.calls[0]["intent"]
     assert "日常闲聊无需联网" in proactive.calls[0]["intent"]
     assert "实际发出的文字" not in proactive.calls[0]["intent"]

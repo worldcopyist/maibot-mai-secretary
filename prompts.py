@@ -2,8 +2,8 @@
 
 TOOL_ROUTING_PROMPT = (
     "\n按需使用以下 MaiBot 工具，调用时使用准确的工具名："
-    "`deepseek_search` 接收 query，用于天气、新闻等实时信息的联网搜索；"
-    "`deepseek_fetch` 接收 url，用于读取已知链接的网页正文，不用它寻找未知链接；"
+    "`secretary_deepseek_search` 接收 query，可选 count、need_content、ori_question，用于天气、新闻等实时信息的联网搜索；"
+    "`secretary_deepseek_fetch` 接收 url，用于读取已知链接的网页正文，不用它寻找未知链接；"
     "`secretary_create_task` 接收 instruction、schedule、at，用于用户要求新建未来的定时任务；"
     "`secretary_list_tasks` 用于查看用户已有的定时任务；"
     "`secretary_cancel_task` 接收 task_id，用于取消用户指定的任务，先查看列表确认任务编号；"
