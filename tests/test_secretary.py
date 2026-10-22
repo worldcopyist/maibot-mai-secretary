@@ -82,6 +82,9 @@ def test_sdk_exposes_secretary_tools_apis_and_hooks(tmp_path):
         ("HOOK_HANDLER", "secretary_cancel_pending_on_inbound"),
         ("HOOK_HANDLER", "secretary_capture_proactive_reply"),
         ("HOOK_HANDLER", "secretary_anti_bullying_inspect"),
+        ("HOOK_HANDLER", "secretary_role_remember_speaker"),
+        ("HOOK_HANDLER", "secretary_role_planner_prompt"),
+        ("HOOK_HANDLER", "secretary_role_replyer_prompt"),
     }
 
 
@@ -369,6 +372,8 @@ async def test_one_time_task_persists_and_does_not_repeat(tmp_path):
     await plugin._tick(now)
     assert len(proactive.calls) == 1
     task_intent = proactive.calls[0]["intent"]
+    assert "以 MaiBot 人设为准" in task_intent
+    assert proactive.calls[0]["reason"] == "定时任务到点"
     assert "可靠的实时数据" in task_intent
     assert "不要调用 `secretary_create_task` 重复设置" in task_intent
     assert all(
@@ -499,7 +504,11 @@ async def test_next_proactive_chat_uses_only_a_successfully_sent_previous_messag
     first, second = plugin.proactive.plans[target]["slots"]
     await plugin._tick(datetime.fromtimestamp(first + 1, UTC))
     assert len(proactive.calls) == 1
-    assert "自己决定你此刻在做" in proactive.calls[0]["intent"]
+    assert "自己决定此刻在做" in proactive.calls[0]["intent"]
+    assert "以 MaiBot 人设为准" in proactive.calls[0]["intent"]
+    assert "不要扮演秘书" in proactive.calls[0]["intent"]
+    assert proactive.calls[0]["reason"] == "预定的日常聊天时段"
+    assert plugin.role_recognition._proactive_sessions["real-stream-1"] == "qq:123"
     assert "`secretary_deepseek_search`" in proactive.calls[0]["intent"]
     assert "`tool_search`" in proactive.calls[0]["intent"]
     assert "日常闲聊无需联网" in proactive.calls[0]["intent"]
@@ -530,6 +539,20 @@ async def test_next_proactive_chat_uses_only_a_successfully_sent_previous_messag
     intent = restored_proactive.calls[0]["intent"]
     assert "我在吃饭 这碗面真香" in intent
     assert "按经过的时间自然接续" in intent
+
+
+@pytest.mark.asyncio
+async def test_rejected_proactive_trigger_clears_temporary_role(tmp_path):
+    plugin, proactive = make_plugin(tmp_path)
+
+    async def reject(**kwargs):
+        proactive.calls.append(kwargs)
+        return {"success": False, "error": "目标不可用"}
+
+    proactive.trigger = reject
+    with pytest.raises(RuntimeError, match="目标不可用"):
+        await plugin._trigger("stream", "聊聊天", "测试", "event", target="qq:private:123")
+    assert "stream" not in plugin.role_recognition._proactive_sessions
 
 
 @pytest.mark.asyncio

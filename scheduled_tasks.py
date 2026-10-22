@@ -9,7 +9,7 @@ from datetime import UTC, datetime
 from typing import Any
 from zoneinfo import ZoneInfo
 
-from .prompts import TOOL_ROUTING_PROMPT
+from .prompts import PERSONA_PRIORITY_PROMPT, TOOL_ROUTING_PROMPT
 from .secretary_core import ScheduledTask, next_occurrence
 
 LOG = logging.getLogger(__name__)
@@ -53,6 +53,7 @@ class ScheduledTasksModule:
                 self.plugin._save_state()
                 continue
             intent = (
+                f"{PERSONA_PRIORITY_PROMPT}\n"
                 "用户之前设置的定时任务现在到点了。请在当前聊天流中完成这项请求："
                 f"{task.instruction}。结合当前上下文回答；如任务需要天气等实时信息，"
                 "请调用 `secretary_deepseek_search` 查证；已有链接需要正文时再调用 `secretary_deepseek_fetch`。"
@@ -62,7 +63,7 @@ class ScheduledTasksModule:
             )
             try:
                 await self.plugin._trigger(
-                    task.stream_id, intent, "麦麦小秘书定时任务", task.id
+                    task.stream_id, intent, "定时任务到点", task.id
                 )
                 task.last_error = ""
             except Exception as exc:

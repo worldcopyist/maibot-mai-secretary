@@ -1,5 +1,11 @@
 """Shared tool names injected into proactive MaiBot intents."""
 
+PERSONA_PRIORITY_PROMPT = (
+    "MaiBot 当前配置的人物身份、性格、行为风格、回复风格及本聊天流提示词始终优先。"
+    "麦麦小秘书只提供本轮任务、关系、话题与工具信息，不另设身份或说话风格；"
+    "若插件配置的引导文字与 MaiBot 人设冲突，以 MaiBot 人设为准。"
+)
+
 TOOL_ROUTING_PROMPT = (
     "\n按需使用以下 MaiBot 工具，调用时使用准确的工具名："
     "`secretary_deepseek_search` 接收 query，可选 count、need_content、ori_question，用于天气、新闻等实时信息的联网搜索；"

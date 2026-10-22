@@ -13,7 +13,13 @@ from pathlib import Path
 from typing import Any, ClassVar, Literal
 
 from maibot_sdk import API, Field, HookHandler, MaiBotPlugin, PluginConfigBase, Tool
-from maibot_sdk.types import HookMode, ToolParameterInfo, ToolParamType
+from maibot_sdk.types import (
+    ErrorPolicy,
+    HookMode,
+    HookOrder,
+    ToolParameterInfo,
+    ToolParamType,
+)
 from pydantic import field_validator, model_validator
 
 from .anti_bullying import AntiBullyingModule, normalize_admin_account
@@ -21,6 +27,7 @@ from .deepseek_web import DeepSeekWebModule
 from .knowledge_base import KnowledgeBaseModule, KnowledgeError
 from .module_contract import SecretaryModule
 from .proactive_chat import ProactiveChatModule
+from .role_recognition import RoleRecognitionModule
 from .scheduled_tasks import ScheduledTasksModule
 
 LOG = logging.getLogger(__name__)
@@ -87,7 +94,7 @@ class PluginSettings(PluginConfigBase):
         description="接收 AI 反霸凌提醒的管理员账号，格式为 平台:用户号",
         json_schema_extra={
             "label": "管理员账号",
-            "hint": "每行一个账号，例如 qq:123456789；也接受中文冒号。留空时不会发送告状。",
+            "hint": "每行一个账号，例如 qq:123456789。也是角色识别的主人名单；留空时角色识别继承 MaiBot 插件管理权限，反霸凌仍不会告状。",
             "placeholder": "qq:123456789",
         },
     )
@@ -207,6 +214,52 @@ class ProactiveSettings(PluginConfigBase):
             "rows": 4,
         },
     )
+
+
+class RoleRecognitionSettings(PluginConfigBase):
+    """按真实发送账号为当前对话者选择独立的角色提示词。"""
+
+    __ui_label__: ClassVar[str] = "角色识别"
+
+    enabled: bool = Field(
+        default=True,
+        json_schema_extra={"label": "启用角色识别", "hint": "在规划和回复时补充账号关系；MaiBot 原本人设优先。"},
+    )
+    familiar_accounts: list[str] = Field(
+        default_factory=list,
+        json_schema_extra={
+            "label": "熟人账号",
+            "hint": "每行一个 平台:账号，例如 qq:123456789。主人优先于熟人；其余账号为陌生人。",
+            "placeholder": "qq:123456789",
+        },
+    )
+    owner_prompt: str = Field(
+        default="当前说话者是已核验的插件管理员，也是主人。可以亲近、撒娇，称呼他‘主人’；回应他正在说的事，不把每句话变成工作汇报。",
+        json_schema_extra={"label": "主人专属提示词", "hint": "仅补充主人关系与称呼，不覆盖 MaiBot 人设。", "x-widget": "textarea", "rows": 4},
+    )
+    familiar_prompt: str = Field(
+        default="当前说话者是熟人。称呼‘老大’，可以自然、亲切地闲聊和打趣；不能称主人。",
+        json_schema_extra={"label": "熟人专属提示词", "hint": "仅补充熟人关系与称呼，不覆盖 MaiBot 人设。", "x-widget": "textarea", "rows": 4},
+    )
+    stranger_prompt: str = Field(
+        default="当前说话者是陌生人。称呼‘老大’，保持友好、有分寸的猫娘语气；不能称主人。",
+        json_schema_extra={"label": "陌生人专属提示词", "hint": "适用于其他账号，仅补充关系与称呼，不覆盖 MaiBot 人设。", "x-widget": "textarea", "rows": 4},
+    )
+
+    @field_validator("familiar_accounts")
+    @classmethod
+    def validate_familiar_accounts(cls, accounts: list[str]) -> list[str]:
+        if len(accounts) > 100:
+            raise ValueError("熟人账号最多 100 个")
+        return list(dict.fromkeys(normalize_admin_account(account) for account in accounts))
+
+    @field_validator("owner_prompt", "familiar_prompt", "stranger_prompt")
+    @classmethod
+    def validate_role_prompt(cls, value: str) -> str:
+        prompt = value.strip()
+        if not prompt or len(prompt) > 2000:
+            raise ValueError("角色提示词须为 1–2000 字")
+        return prompt
 
 
 class AntiBullyingSettings(PluginConfigBase):
@@ -381,6 +434,7 @@ class DeepSeekWebSettings(PluginConfigBase):
 
 class SecretaryConfig(PluginConfigBase):
     plugin: PluginSettings = Field(default_factory=PluginSettings)
+    role_recognition: RoleRecognitionSettings = Field(default_factory=RoleRecognitionSettings)
     scheduled_tasks: ScheduledTasksSettings = Field(
         default_factory=ScheduledTasksSettings
     )
@@ -398,12 +452,14 @@ class MaiSecretaryPlugin(MaiBotPlugin):
     def __init__(self) -> None:
         super().__init__()
         self.scheduled = ScheduledTasksModule(self)
+        self.role_recognition = RoleRecognitionModule(self)
         self.proactive = ProactiveChatModule(self)
         self.anti_bullying = AntiBullyingModule(self)
         self.knowledge_base = KnowledgeBaseModule(self)
         self.deepseek_web = DeepSeekWebModule(self)
         self._modules: dict[str, SecretaryModule] = {}
         self._register_module(self.scheduled)
+        self._register_module(self.role_recognition)
         self._register_module(self.proactive)
         self._register_module(self.anti_bullying)
         self._register_module(self.knowledge_base)
@@ -426,6 +482,7 @@ class MaiSecretaryPlugin(MaiBotPlugin):
         self._state_path = Path(self.ctx.paths.data_dir) / "secretary-state.json"
         self._state_path.parent.mkdir(parents=True, exist_ok=True)
         self._load_state()
+        await self.role_recognition.start()
         await self.knowledge_base.start()
         await self.anti_bullying.start()
         self._runner = asyncio.create_task(self._run(), name="mai-secretary-scheduler")
@@ -513,16 +570,56 @@ class MaiSecretaryPlugin(MaiBotPlugin):
             await feature.tick(now)
 
     async def _trigger(
-        self, stream_id: str, intent: str, reason: str, event_id: str
+        self, stream_id: str, intent: str, reason: str, event_id: str,
+        *, target: str = "",
     ) -> None:
-        result = await self.ctx.maisaka.proactive.trigger(
-            stream_id=stream_id,
-            intent=intent,
-            reason=reason,
-            metadata={"source": "mai-secretary", "event_id": event_id},
-        )
-        if isinstance(result, dict) and result.get("success") is False:
-            raise RuntimeError(str(result.get("error") or "主动任务接口拒绝了请求"))
+        self.role_recognition.mark_proactive(stream_id, target)
+        try:
+            result = await self.ctx.maisaka.proactive.trigger(
+                stream_id=stream_id,
+                intent=intent,
+                reason=reason,
+                metadata={"source": "mai-secretary", "event_id": event_id},
+            )
+            if isinstance(result, dict) and result.get("success") is False:
+                raise RuntimeError(str(result.get("error") or "主动任务接口拒绝了请求"))
+        except Exception:
+            self.role_recognition.clear_proactive(stream_id)
+            raise
+
+    @HookHandler(
+        "chat.receive.before_process",
+        name="secretary_role_remember_speaker",
+        mode=HookMode.BLOCKING,
+        order=HookOrder.EARLY,
+        error_policy=ErrorPolicy.SKIP,
+        description="按真实平台账号记录当前消息发送者",
+    )
+    async def remember_role_speaker(
+        self, message: dict[str, Any] | None = None, **kwargs: Any
+    ) -> None:
+        del kwargs
+        self.role_recognition.remember(message)
+
+    @HookHandler(
+        "maisaka.planner.before_request",
+        name="secretary_role_planner_prompt",
+        mode=HookMode.BLOCKING,
+        error_policy=ErrorPolicy.SKIP,
+        description="规划回复时加入已核验发送者的角色提示词",
+    )
+    async def inject_role_for_planner(self, **kwargs: Any) -> dict[str, Any]:
+        return await self.role_recognition.inject(kwargs)
+
+    @HookHandler(
+        "maisaka.replyer.before_model_request",
+        name="secretary_role_replyer_prompt",
+        mode=HookMode.BLOCKING,
+        error_policy=ErrorPolicy.SKIP,
+        description="生成回复时加入已核验发送者的角色提示词",
+    )
+    async def inject_role_for_replyer(self, **kwargs: Any) -> dict[str, Any]:
+        return await self.role_recognition.inject(kwargs)
 
     @HookHandler(
         "chat.receive.before_process",

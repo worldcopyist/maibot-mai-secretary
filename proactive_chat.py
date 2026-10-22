@@ -9,7 +9,7 @@ from datetime import UTC, datetime
 from typing import Any
 from zoneinfo import ZoneInfo
 
-from .prompts import TOOL_ROUTING_PROMPT
+from .prompts import PERSONA_PRIORITY_PROMPT, TOOL_ROUTING_PROMPT
 from .secretary_core import interval_slots, next_window, parse_clock, random_slots
 from .stream_router import resolve_stream
 
@@ -144,8 +144,9 @@ class ProactiveChatModule:
                     await self.plugin._trigger(
                         stream_id,
                         self._proactive_intent(target, settings.intent),
-                        "麦麦小秘书随机主动聊天",
+                        "预定的日常聊天时段",
                         f"{target}:{window_key}:{int(due_at)}",
+                        target=target,
                     )
                 except Exception:
                     continuity.pop("pending", None)
@@ -164,8 +165,10 @@ class ProactiveChatModule:
 
     def _proactive_intent(self, target: str, base_intent: str) -> str:
         intent = (
-            f"{base_intent}\n这次主动聊天时，请自己决定你此刻在做的一件符合人设的日常小事，"
-            "自然地告诉用户；活动和具体细节由你来设定，不要像汇报行程。"
+            f"{PERSONA_PRIORITY_PROMPT}\n"
+            f"本轮主动聊天目标：{base_intent}\n"
+            "这次主动聊天时，从 MaiBot 已配置的人设出发，自己决定此刻在做的一件合理的日常小事，"
+            "自然地告诉对方；活动和具体细节由你来设定，不要像汇报行程，也不要扮演秘书。"
             "日常闲聊无需联网，也不要无故创建定时任务。"
             f"{TOOL_ROUTING_PROMPT}"
         )

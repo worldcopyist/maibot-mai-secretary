@@ -4,7 +4,7 @@
 
 **[打开定时任务：日历、任务列表与手动创建](/extensions/worldcopyist.mai-secretary/tasks)**
 
-面向 MaiBot 1.3.7 / 插件 SDK 2.12.0 的独立插件。它提供五项功能：
+面向 MaiBot 1.3.7 / 插件 SDK 2.12.0 的独立插件。它提供六项功能：
 
 插件列表中的头像使用 `assets/icon.png`，在 `_manifest.json` 的 `display.icon` 中声明。
 
@@ -13,6 +13,7 @@
 3. AI 反霸凌：识别针对麦麦的辱骂，结合自定义违禁词和聊天上下文判断，确认后私聊插件管理员，请管理员核查。
 4. 私有知识库：管理员从本插件的 WebUI 详情页进入知识库工作区，上传文档或粘贴文本；插件提取文字、分段、建立关键词和语义向量索引，让麦麦在授权聊天流调用 `secretary_search_knowledge` 查询，并附来源。
 5. DeepSeek 联网搜索：小秘书自带 `secretary_deepseek_search` 和 `secretary_deepseek_fetch`，按需调用 DeepSeek Search / Fetch API 查询实时网页、读取已知网址。
+6. 角色识别：按当前消息的真实平台账号分为主人、熟人和陌生人，分别使用可编辑的提示词。
 
 例如，用户说“每天早上八点给我说天气预报”，麦麦可调用 `secretary_create_task`，用 `daily`、`08:00` 和原请求建立任务。任务到点时，可调用小秘书的 `secretary_deepseek_search` 查询实时天气资料；若查询失败或来源不可靠，应如实说明，不能编造预报。
 
@@ -35,7 +36,7 @@ average_interval_hours = 2.0
 offset_minutes = 15
 ```
 
-管理员账号放在插件自身配置中，和反霸凌模块分别设置：
+管理员账号放在插件自身配置中，供角色识别判断主人，也供反霸凌发送提醒：
 
 ```toml
 [plugin]
@@ -48,7 +49,22 @@ confidence_threshold = 0.8
 alert_cooldown_minutes = 10
 ```
 
-`admin_accounts` 每项为 `平台:用户号`，例如 `qq:123456789`；也接受中文冒号并自动规范为半角冒号。账号只由插件使用，不交给麦麦的聊天提示词，普通聊天用户不能修改。管理员列表留空时，模块不会调用 AI 或发送告状。管理员应能接收麦麦私聊；插件使用当前消息所属的机器人账号解析私聊流，无法确认路由时不猜测发送。
+`admin_accounts` 每项为 `平台:用户号`，例如 `qq:123456789`；也接受中文冒号并自动规范为半角冒号。账号只由插件使用，不交给麦麦的聊天提示词，普通聊天用户不能修改。管理员列表留空时，反霸凌不会调用 AI 或发送告状；角色识别则读取 MaiBot 的 `[plugin].permission` 作为主人账号。管理员应能接收麦麦私聊；插件使用当前消息所属的机器人账号解析私聊流，无法确认路由时不猜测发送。
+
+### 角色识别
+
+在插件配置页面的「角色识别」分组设置熟人账号及三种级别的独立提示词。主人优先于熟人，未命中的账号属于陌生人；默认只有主人可称“主人”，熟人和陌生人称“老大”。例如：
+
+```toml
+[role_recognition]
+enabled = true
+familiar_accounts = ["qq:123456789"]
+owner_prompt = "当前说话者是已核验的插件管理员，也是主人。称呼他‘主人’，可以亲近、撒娇。"
+familiar_prompt = "当前说话者是熟人。称呼‘老大’，可以自然闲聊，不能称主人。"
+stranger_prompt = "当前说话者是陌生人。称呼‘老大’，保持友好和分寸，不能称主人。"
+```
+
+插件在消息进入时记录真实发送账号，再通过 MaiBot 的正式 Hook 把级别与对应提示词送给规划器和回复器；不会根据昵称、引用或用户自称提升级别。MaiBot 的原有人设、行为风格、回复风格及聊天流提示词保留在系统消息中，插件把角色信息放在后面的普通上下文中，仅补充关系与称呼；不会把账号号码写进模型提示。最近消息的账号映射保留六小时，保存在插件状态文件以兼容延迟处理和重启。若无法从当前消息 ID 核对发送者，就不注入角色提示词。插件主动发言时，私聊从已配置的目标账号判断级别，群聊不沿用上一位说话者的级别。更改 MaiBot 插件管理权限后，留空管理员名单的主人列表会在一分钟内刷新。安装本模块后应关闭其他同时注入身份提示的插件，以免规则冲突。
 
 `forbidden_words` 每项一个词。私聊消息以及群里提到、回复麦麦或命中违禁词的消息会进入判断；命中词语不会直接告状，AI 仍需确认这是针对麦麦的辱骂。引用、讨论词语、正常批评和对别人的辱骂不应上报。达到 `confidence_threshold` 后，插件把消息摘要、来源、发送者和判断理由私发管理员；同一人在同一聊天流中默认 10 分钟内只提醒一次。提醒属于 AI 判断，请管理员复核；插件不会自动禁言或惩罚。
 
@@ -115,9 +131,9 @@ fetch_qps = 5.0
 
 ### 模块结构
 
-`plugin.py` 是 MaiBot 的入口，只负责配置、模块注册、统一调度、状态文件读写，以及 SDK 工具、页面 API 和事件钩子的转发。`scheduled_tasks.py` 独立管理定时任务，`proactive_chat.py` 独立管理随机发言和上次发言的续接，`anti_bullying.py` 独立管理辱骂判断和管理员提醒，`knowledge_base.py` 独立管理文档与检索，`deepseek_web.py` 独立管理联网搜索与网页抓取；模块通过 `module_contract.py` 约定的接口接入。`stream_router.py` 为需要发送消息的模块解析聊天流；`secretary_core.py` 保留不依赖 MaiBot 的时间计算，`prompts.py` 集中放工具调用提示词。`webui.json` 与 `assets/knowledge.html` 声明并实现从插件详情页进入的知识库工作区。
+`plugin.py` 是 MaiBot 的入口，只负责配置、模块注册、统一调度、状态文件读写，以及 SDK 工具、页面 API 和事件钩子的转发。`scheduled_tasks.py` 独立管理定时任务，`proactive_chat.py` 独立管理随机发言和上次发言的续接，`role_recognition.py` 独立管理账号识别及三档提示词，`anti_bullying.py` 独立管理辱骂判断和管理员提醒，`knowledge_base.py` 独立管理文档与检索，`deepseek_web.py` 独立管理联网搜索与网页抓取；模块通过 `module_contract.py` 约定的接口接入。`stream_router.py` 为需要发送消息的模块解析聊天流；`secretary_core.py` 保留不依赖 MaiBot 的时间计算，`prompts.py` 集中放工具调用提示词。`webui.json` 与 `assets/knowledge.html` 声明并实现从插件详情页进入的知识库工作区。
 
-五个功能可分别用 `[scheduled_tasks].enabled`、`[proactive].enabled`、`[anti_bullying].enabled`、`[knowledge_base].enabled` 和 `[deepseek_web].enabled` 开关。旧配置没有新增配置节时由默认值补齐；全局 `[plugin].enabled` 仍控制整个插件。
+六个功能可分别用 `[scheduled_tasks].enabled`、`[proactive].enabled`、`[role_recognition].enabled`、`[anti_bullying].enabled`、`[knowledge_base].enabled` 和 `[deepseek_web].enabled` 开关。旧配置没有新增配置节时由默认值补齐；全局 `[plugin].enabled` 仍控制整个插件。
 
 添加功能时，新建一个实现 `name`、`state_keys`、`load_state`、`dump_state`、`on_config_update` 和 `tick` 的模块，并在 `MaiSecretaryPlugin.__init__` 中调用 `_register_module`。若模块需要给麦麦新增工具或接收事件，在入口类添加 SDK 装饰的薄转发方法。模块状态使用独有字段写入现有 `secretary-state.json`；注册时会拒绝重复字段，未注册字段也会在读写时保留。现有配置字段、工具名和状态文件版本保持兼容。
 
