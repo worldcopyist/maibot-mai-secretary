@@ -308,6 +308,14 @@ class DailyReportSettings(PluginConfigBase):
             "placeholder": "mimo-v2.6-flash",
         },
     )
+    fallback_text_model: str = Field(
+        default="",
+        json_schema_extra={
+            "label": "日报备用文字模型",
+            "hint": "主模型输出截断或超时时，改用此模型完成本次和后续分段总结；留空则不切换。填写 MaiBot 模型配置中的 name。",
+            "placeholder": "mimo-v2.6-flash",
+        },
+    )
     target_chats: list[str] = Field(
         default_factory=list,
         json_schema_extra={

@@ -88,6 +88,57 @@ async def test_daily_report_reads_whole_day_and_sends_only_once(tmp_path):
     assert len(sent) == 1
 
 
+@pytest.mark.asyncio
+async def test_large_group_report_switches_to_backup_after_output_limit(tmp_path):
+    plugin, _ = make_plugin(tmp_path, {"daily_report": {
+        "text_model": "deepseek-v4-flash",
+        "fallback_text_model": "mimo-v2.6-flash",
+    }})
+    calls: list[str] = []
+
+    async def generate(**kwargs):
+        calls.append(kwargs["model_name"])
+        if kwargs["model_name"] == "deepseek-v4-flash":
+            return {"success": False, "error": "Responses 请求未完整完成: IncompleteDetails(reason='max_output_tokens')"}
+        if "固定使用以下四个小标题" in kwargs["prompt"]:
+            return {"response": "今日概览：聊了今天的事。\n聊了什么：大家在群里交流。\n重要约定：无。\n暖心片段：大家互相问候。"}
+        return {"response": "今天群友交流了很多话题。"}
+
+    plugin.ctx.llm = types.SimpleNamespace(generate=generate)
+    messages = [{
+        "timestamp": datetime(2026, 10, 23, 12, tzinfo=UTC).timestamp(),
+        "processed_plain_text": "今天大家聊了很多话题。" * 800,
+        "message_info": {"user_info": {"user_nickname": "群友"}},
+    }]
+    summary = await plugin.daily_report._summarize(date(2026, 10, 23), messages)
+    assert "今日概览" in summary
+    assert calls[0] == "deepseek-v4-flash"
+    assert len(calls) >= 4
+    assert set(calls[1:]) == {"mimo-v2.6-flash"}
+
+
+@pytest.mark.asyncio
+async def test_scheduled_group_waits_for_chat_stream_after_host_start(tmp_path):
+    plugin, _ = make_plugin(tmp_path)
+    attempts = 0
+
+    async def get_all_streams(**kwargs):
+        nonlocal attempts
+        attempts += 1
+        assert kwargs["platform"] == "qq"
+        if attempts == 1:
+            return []
+        return [{
+            "stream_id": "existing-group", "platform": "qq", "chat_type": "group",
+            "group_id": "765926623", "account_id": "bot-1", "scope": "",
+        }]
+
+    plugin.ctx.chat.get_all_streams = get_all_streams
+    stream_id = await plugin.daily_report._resolve_scheduled_stream("qq:group:765926623")
+    assert stream_id == "existing-group"
+    assert attempts == 2
+
+
 def test_interrupted_preparation_can_retry_but_uncertain_send_cannot(tmp_path):
     plugin, _ = make_plugin(tmp_path)
     module = plugin.daily_report
