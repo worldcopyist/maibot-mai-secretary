@@ -632,7 +632,28 @@ class DeepSeekWebSettings(PluginConfigBase):
         max_length=20,
         json_schema_extra={
             "label": "API 余额的别称",
-            "hint": "例如填“大白饭”，管理员就可以问“大白饭还剩多少”；留空则只按 API / DeepSeek 识别。",
+            "hint": "例如填“蓝莓”，麦麦就能用这个称呼谈论最近保存的余额；只有管理员能要求实时查询。",
+        },
+    )
+    auto_balance_enabled: bool = Field(
+        default=False,
+        json_schema_extra={
+            "label": "自动更新余额",
+            "hint": "开启后首次查询，并按设定间隔更新；成功结果逐次保存在本机。",
+        },
+    )
+    balance_context_all_chats: bool = Field(
+        default=False,
+        json_schema_extra={
+            "label": "所有聊天流可谈论余额",
+            "hint": "开启后麦麦在所有群聊和私聊都能看到最近保存的余额，普通群成员也可能听到具体金额。",
+        },
+    )
+    auto_balance_interval_hours: float = Field(
+        default=6.0, ge=1.0, le=24.0,
+        json_schema_extra={
+            "label": "自动查询间隔（小时）",
+            "hint": "默认 6 小时；失败后至少等待 30 分钟再尝试，不会每隔 30 秒请求接口。",
         },
     )
 
@@ -778,6 +799,7 @@ class MaiSecretaryPlugin(MaiBotPlugin):
         self._state_path.parent.mkdir(parents=True, exist_ok=True)
         self._load_state()
         await self.role_recognition.start()
+        await self.deepseek_web.start()
         await self.knowledge_base.start()
         await self.group_moderation.start()
         await self.anti_bullying.start()
@@ -977,13 +999,14 @@ class MaiSecretaryPlugin(MaiBotPlugin):
     )
     async def inject_role_for_planner(self, **kwargs: Any) -> dict[str, Any]:
         result = await self.role_recognition.inject(kwargs, track_for_tools=True)
-        alias = self.config.deepseek_web.balance_alias
+        return self._inject_balance_context(result)
+
+    def _inject_balance_context(self, result: dict[str, Any]) -> dict[str, Any]:
         items = result.get("modified_kwargs", {}).get("items")
-        marker = "【麦麦小秘书·余额别称】"
+        note = self.deepseek_web.balance_context_note()
+        marker = "【麦麦小秘书·余额背景】"
         if (
-            self.config.plugin.enabled
-            and self.config.deepseek_web.enabled
-            and alias
+            note
             and isinstance(items, list)
             and not any(
                 marker in str(part.get("text") or "")
@@ -1003,11 +1026,7 @@ class MaiSecretaryPlugin(MaiBotPlugin):
                     "logical_turn_id": None,
                     "timestamp": datetime.now().astimezone().isoformat(),
                 },
-                "parts": [{"type": "text", "text": (
-                    f"{marker} 管理员把 DeepSeek API 账号余额称为“{alias}”。"
-                    f"管理员明确询问“{alias}还剩多少”等余额问题时，调用 `secretary_deepseek_balance`。"
-                    "此别称只改变说法，不改变管理员核验或余额来源。按 MaiBot 人设自然回答。"
-                )}],
+                "parts": [{"type": "text", "text": note}],
             })
         return result
 
@@ -1019,7 +1038,8 @@ class MaiSecretaryPlugin(MaiBotPlugin):
         description="生成回复时加入已核验发送者的角色提示词",
     )
     async def inject_role_for_replyer(self, **kwargs: Any) -> dict[str, Any]:
-        return await self.role_recognition.inject(kwargs)
+        result = await self.role_recognition.inject(kwargs)
+        return self._inject_balance_context(result)
 
     @HookHandler(
         "chat.receive.before_process",

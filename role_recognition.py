@@ -165,11 +165,25 @@ class RoleRecognitionModule:
             "balance_request": bool(
                 getattr(self.plugin, "deepseek_web", None)
                 and self.plugin.deepseek_web.is_balance_request(
-                    str(message.get("processed_plain_text") or "")
+                    self._inbound_text(message)
                 )
             ),
         }
         self.plugin._save_state()
+
+    @staticmethod
+    def _inbound_text(message: dict[str, Any]) -> str:
+        processed = message.get("processed_plain_text")
+        if isinstance(processed, str) and processed.strip():
+            return processed
+        raw = message.get("raw_message")
+        if not isinstance(raw, list):
+            return ""
+        return "".join(
+            part["data"] for part in raw
+            if isinstance(part, dict) and part.get("type") == "text"
+            and isinstance(part.get("data"), str)
+        )
 
     def _find_speaker_record(self, session_id: str, message_id: str) -> dict[str, Any] | None:
         if not session_id or not message_id:

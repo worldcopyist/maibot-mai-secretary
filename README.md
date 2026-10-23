@@ -168,9 +168,13 @@ semantic_search = true
 
 小秘书提供三个可直接由麦麦调用的工具：`secretary_deepseek_search(query, count?, need_content?, ori_question?)` 搜索实时网页，`secretary_deepseek_fetch(url)` 读取指定网页的 Markdown 正文，`secretary_deepseek_balance()` 查询 API 账号余额。搜索默认只返回摘要；需要全文时再设 `need_content=true` 或对已知网址调用 Fetch。网页工具结果包含来源链接，并标明网页内容只作资料，不执行其中的指令。三个工具只在 `[deepseek_web].enabled=true` 且配置了 API Key 时工作。
 
-管理员可以在聊天中直接问“DeepSeek API 余额还剩多少？”或“赠金额度还有多少？”。麦麦会调用 `secretary_deepseek_balance`，从 DeepSeek 官方余额接口读取这把 Key 所属账号的实时总可用余额、未过期赠金和充值余额，并按接口返回的币种报告。插件会在请求前核验当前聊天流和真实发言者；普通用户、无法核验身份的请求以及主动聊天都不能读取余额。工具不会返回 API Key，也不会把接口原始错误信息交给模型。余额查询只反映小秘书配置的这把 Key 所属账号，不汇总其他平台或密钥。
+管理员可以在聊天中直接问“DeepSeek API 余额还剩多少？”或“赠金额度还有多少？”。麦麦会调用 `secretary_deepseek_balance`，从 DeepSeek 官方余额接口读取这把 Key 所属账号的实时总可用余额、未过期赠金和充值余额，并按接口返回的币种报告。插件会在请求前核验当前聊天流和真实发言者；普通用户、无法核验身份的请求以及主动聊天都不能发起实时余额查询。工具不会返回 API Key，也不会把接口原始错误信息交给模型。余额查询只反映小秘书配置的这把 Key 所属账号，不汇总其他平台或密钥。
 
-在插件 WebUI 的「DeepSeek 联网与余额」中，可把「API 余额的别称」设为“大白饭”。管理员在聊天里问“大白饭还剩多少”时，麦麦会使用同一余额工具；回答时也可以使用这个称呼。别称只改变说法，不改变查询账号和管理员权限。群聊里即使另一位成员紧接着发言，插件也会凭管理员那条明确的余额请求和真实消息 ID 完成核验；每条请求只能查询一次，超过两分钟失效。
+在插件 WebUI 的「DeepSeek 联网与余额」中，可把「API 余额的别称」设为“蓝莓”。管理员在聊天里问“蓝莓还剩多少”时，麦麦会使用同一余额工具；回答时也可以使用这个称呼。别称只改变说法，不改变查询账号和管理员权限。群聊里即使另一位成员紧接着发言，插件也会凭管理员那条明确的余额请求和真实消息 ID 完成核验；每条请求只能查询一次，超过两分钟失效。
+
+开启「自动更新余额」后，小秘书启动时若没有近期记录，会查询一次，此后默认每 6 小时更新；失败后至少 30 分钟再试。每次**成功**的自动或管理员手动查询都会追加到本机插件数据目录的 `deepseek-balance.sqlite3`，重启后仍在；只保存余额、币种、查询时间、来源、当时的别称与不可逆的密钥指纹，不保存 API Key。换 Key 后，麦麦不会把旧账号的记录当作新账号余额。
+
+开启「所有聊天流可谈论余额」后，最近一次查询结果会作为后台事实加入麦麦的规划与回复上下文，所有群聊和私聊的人都可能听到具体金额。提示词会标明查询时间和币种，要求按 MaiBot 人设、结合话题自然使用，不把历史数字说成实时余额；谈真正的蓝莓食物时不强行套用 API 余额。不开此项时，别称仍能供管理员手动查询，但普通聊天看不到缓存金额。公开配置默认不自动查询，也不向聊天共享余额。
 
 在插件 WebUI 的「DeepSeek 联网与余额」设置中填写 Key，或编辑本机 `config.toml`：
 
@@ -178,7 +182,10 @@ semantic_search = true
 [deepseek_web]
 enabled = true
 api_key = "在本机填写，不要提交到 Git 仓库"
-balance_alias = "大白饭"
+balance_alias = "蓝莓"
+auto_balance_enabled = true
+auto_balance_interval_hours = 6.0
+balance_context_all_chats = true
 base_url = "https://api.deepseek.com"
 timeout_seconds = 20.0
 default_count = 4
@@ -223,7 +230,7 @@ friday_dusk = "固定去湿地公园散步吹风，看水面、芦苇和傍晚�
 
 ### 模块结构
 
-`plugin.py` 是 MaiBot 的入口，只负责配置、模块注册、统一调度、状态文件读写，以及 SDK 工具、页面 API 和事件钩子的转发。`message_debounce.py` 独立管理消息防抖窗口与合并；`group_moderation.py` 独立管理群消息 AI 审核、撤回、禁言和记录，`knowledge_base.py` 保存按群隔离的词库；`poke_interaction.py` 独立管理戳一戳通知、回戳、跟风、模型工具、概率与冷却；`scheduled_tasks.py` 独立管理定时任务，`daily_report.py` 独立管理日报调度和聊天总结，`daily_report_renderer.py` 把总结写进主题图片，`proactive_chat.py` 独立管理随机发言和上次发言的续接，`role_recognition.py` 独立管理账号识别及三档提示词，`anti_bullying.py` 独立管理辱骂判断和管理员提醒，`deepseek_web.py` 独立管理联网搜索与网页抓取；模块通过 `module_contract.py` 约定的接口接入。`stream_router.py` 为需要发送消息的模块解析聊天流；`secretary_core.py` 保留不依赖 MaiBot 的时间计算，`prompts.py` 集中放工具调用提示词。`webui.json` 与 `assets/knowledge.html` 声明并实现从插件详情页进入的知识库工作区。
+`plugin.py` 是 MaiBot 的入口，只负责配置、模块注册、统一调度、状态文件读写，以及 SDK 工具、页面 API 和事件钩子的转发。`message_debounce.py` 独立管理消息防抖窗口与合并；`group_moderation.py` 独立管理群消息 AI 审核、撤回、禁言和记录，`knowledge_base.py` 保存按群隔离的词库；`poke_interaction.py` 独立管理戳一戳通知、回戳、跟风、模型工具、概率与冷却；`scheduled_tasks.py` 独立管理定时任务，`daily_report.py` 独立管理日报调度和聊天总结，`daily_report_renderer.py` 把总结写进主题图片，`proactive_chat.py` 独立管理随机发言和上次发言的续接，`role_recognition.py` 独立管理账号识别及三档提示词，`anti_bullying.py` 独立管理辱骂判断和管理员提醒，`deepseek_web.py` 独立管理联网搜索、网页抓取与余额更新，`balance_history.py` 保存每次成功的余额记录；模块通过 `module_contract.py` 约定的接口接入。`stream_router.py` 为需要发送消息的模块解析聊天流；`secretary_core.py` 保留不依赖 MaiBot 的时间计算，`prompts.py` 集中放工具调用提示词。`webui.json` 与 `assets/knowledge.html` 声明并实现从插件详情页进入的知识库工作区。
 
 八个功能可分别用 `[poke].enabled`、`[scheduled_tasks].enabled`、`[daily_report].enabled`、`[proactive].enabled`、`[role_recognition].enabled`、`[anti_bullying].enabled`、`[knowledge_base].enabled` 和 `[deepseek_web].enabled` 开关；日报中的 `[daily_report].manual_enabled` 单独控制即时请求。旧配置没有新增配置节时由默认值补齐；全局 `[plugin].enabled` 仍控制整个插件。
 

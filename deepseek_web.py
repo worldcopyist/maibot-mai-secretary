@@ -3,16 +3,21 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import re
 import unicodedata
 from collections import OrderedDict
-from datetime import datetime
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal, InvalidOperation
+from pathlib import Path
 from time import monotonic
 from typing import TYPE_CHECKING, Any, ClassVar
 from urllib.parse import urlsplit
+from zoneinfo import ZoneInfo
 
 import httpx
+
+from .balance_history import BalanceHistoryStore
 
 if TYPE_CHECKING:
     from .plugin import MaiSecretaryPlugin
@@ -34,6 +39,12 @@ class DeepSeekWebModule:
         self._rate_locks = {"search": asyncio.Lock(), "fetch": asyncio.Lock()}
         self._next_at = {"search": 0.0, "fetch": 0.0}
         self._cache: OrderedDict[tuple[Any, ...], tuple[float, list[dict[str, str]]]] = OrderedDict()
+        self._balance_store: BalanceHistoryStore | None = None
+        self._latest_balance: dict[str, Any] | None = None
+        self._balance_lock = asyncio.Lock()
+        self._balance_refresh_task: asyncio.Task[None] | None = None
+        self._last_auto_attempt_at: datetime | None = None
+        self._stopping = False
 
     @property
     def settings(self) -> Any:
@@ -48,6 +59,33 @@ class DeepSeekWebModule:
     def on_config_update(self) -> None:
         self._cache.clear()
         self._next_at = {"search": 0.0, "fetch": 0.0}
+        self._last_auto_attempt_at = None
+        self._load_latest_balance()
+
+    async def start(self) -> None:
+        self._balance_store = BalanceHistoryStore(
+            Path(self.plugin.ctx.paths.data_dir) / "deepseek-balance.sqlite3"
+        )
+        self._balance_store.initialize()
+        self._load_latest_balance()
+
+    def _account_fingerprint(self) -> str:
+        return self._fingerprint(self._base_url(), self._api_key())
+
+    @staticmethod
+    def _fingerprint(base_url: str, key: str) -> str:
+        identity = f"{base_url}\n{key}"
+        return hashlib.sha256(identity.encode("utf-8")).hexdigest()
+
+    def _load_latest_balance(self) -> None:
+        self._latest_balance = None
+        if self._balance_store is None:
+            return
+        try:
+            fingerprint = self._account_fingerprint()
+        except WebSearchError:
+            return
+        self._latest_balance = self._balance_store.latest(fingerprint)
 
     def is_balance_request(self, text: str) -> bool:
         """Recognize an explicit balance question in a real inbound message."""
@@ -59,9 +97,48 @@ class DeepSeekWebModule:
         )
 
     async def tick(self, now: datetime) -> None:
-        del now
+        if (
+            self._stopping or not self.plugin.config.plugin.enabled
+            or not self.settings.enabled or not self.settings.auto_balance_enabled
+            or not self.settings.api_key.strip()
+            or (self._balance_refresh_task is not None and not self._balance_refresh_task.done())
+        ):
+            return
+        interval = timedelta(hours=self.settings.auto_balance_interval_hours)
+        latest_at = (
+            datetime.fromisoformat(self._latest_balance["queried_at"])
+            if self._latest_balance is not None else None
+        )
+        if latest_at is not None and now - latest_at < interval:
+            return
+        if self._last_auto_attempt_at is not None and now - self._last_auto_attempt_at < timedelta(minutes=30):
+            return
+        self._last_auto_attempt_at = now
+        self._balance_refresh_task = asyncio.create_task(
+            self._auto_refresh_balance(), name="mai-secretary-balance-refresh"
+        )
+
+    async def _auto_refresh_balance(self) -> None:
+        try:
+            async with self._balance_lock:
+                await self._fetch_and_store_balance("automatic")
+            self.plugin.ctx.logger.info("小秘书 DeepSeek 余额已自动更新并保存")
+        except asyncio.CancelledError:
+            raise
+        except WebSearchError as exc:
+            self.plugin.ctx.logger.warning("小秘书 DeepSeek 余额自动更新失败：%s", exc)
+        except Exception:
+            self.plugin.ctx.logger.exception("小秘书 DeepSeek 余额自动更新出现未预期错误")
 
     async def stop(self) -> None:
+        self._stopping = True
+        if self._balance_refresh_task is not None:
+            self._balance_refresh_task.cancel()
+            try:
+                await self._balance_refresh_task
+            except asyncio.CancelledError:
+                pass
+            self._balance_refresh_task = None
         async with self._client_lock:
             client, self._client = self._client, None
         if client is not None:
@@ -145,20 +222,66 @@ class DeepSeekWebModule:
             account = role.consume_balance_request(stream_id, admins)
             if not account:
                 raise WebSearchError("只有已核验的小秘书管理员可以查询 DeepSeek API 余额。")
-            data = await self._request_balance()
-            content = self._render_balance(data)
-            if self.settings.balance_alias:
-                content += f"\n管理员设定的 API 别称：{self.settings.balance_alias}。回答时可以使用这个称呼。"
-            return {"success": True, "content": content}
+            async with self._balance_lock:
+                snapshot = await self._fetch_and_store_balance("manual")
+            if snapshot["account_fingerprint"] != self._account_fingerprint():
+                raise WebSearchError("查询期间 API Key 发生变化，请重新查询。")
+            return {"success": True, "content": self._render_balance(snapshot, realtime=True)}
         except WebSearchError as exc:
             return self._failure("API 余额查询", str(exc))
         except Exception:
             self.plugin.ctx.logger.exception("小秘书 DeepSeek 余额查询出现未预期错误")
             return self._failure("API 余额查询", "内部错误，请检查插件日志。")
 
-    async def _request_balance(self) -> dict[str, Any]:
-        key = self._api_key()
-        address = f"{self._base_url()}/user/balance"
+    async def _fetch_and_store_balance(self, source: str) -> dict[str, Any]:
+        self._check_enabled()
+        base_url, key, alias = self._base_url(), self._api_key(), self.settings.balance_alias
+        fingerprint = self._fingerprint(base_url, key)
+        data = await self._request_balance(base_url=base_url, key=key)
+        clean = self._normalize_balance(data)
+        snapshot = {
+            **clean,
+            "queried_at": datetime.now(UTC).isoformat(),
+            "source": source,
+            "alias": alias,
+            "account_fingerprint": fingerprint,
+        }
+        if self._balance_store is not None:
+            self._balance_store.insert(snapshot)
+        try:
+            if fingerprint == self._account_fingerprint():
+                self._latest_balance = snapshot
+        except WebSearchError:
+            self._latest_balance = None
+        return snapshot
+
+    def balance_context_note(self) -> str:
+        if not self.plugin.config.plugin.enabled or not self.settings.enabled:
+            return ""
+        alias = self.settings.balance_alias
+        if not alias and not self.settings.balance_context_all_chats:
+            return ""
+        if not self.settings.balance_context_all_chats:
+            return (
+                f"【麦麦小秘书·余额背景】{alias}是 DeepSeek API 账号余额的别称。"
+                f"只有已核验管理员明确询问“{alias}还剩多少”等余额问题时，"
+                "才调用 `secretary_deepseek_balance`；不要猜测金额。MaiBot 当前人设优先。"
+            )
+        alias = alias or "API 余额"
+        snapshot = self._latest_balance
+        if snapshot is None:
+            balance_line = "目前还没有保存成功的余额查询结果，不要猜测数量。"
+        else:
+            balance_line = self._render_balance(snapshot, realtime=False)
+        return (
+            f"【麦麦小秘书·余额背景】{alias}是 DeepSeek API 账号余额的别称。"
+            f"{balance_line} 这是后台资料，不是聊天消息；MaiBot 当前人设优先。"
+            "当聊天里的别称指余额时，可以按当前话题自然引用；若指真正的食物或别的事，不要混淆。"
+            "无关话题不要反复提余额。管理员明确要求实时查询时才调用 `secretary_deepseek_balance`。"
+        )
+
+    async def _request_balance(self, *, base_url: str, key: str) -> dict[str, Any]:
+        address = f"{base_url}/user/balance"
         client = await self._client_instance()
         for attempt in range(3):
             try:
@@ -192,12 +315,12 @@ class DeepSeekWebModule:
         raise WebSearchError("DeepSeek 余额请求未完成。")
 
     @staticmethod
-    def _render_balance(data: dict[str, Any]) -> str:
+    def _normalize_balance(data: dict[str, Any]) -> dict[str, Any]:
         available = data.get("is_available")
         infos = data.get("balance_infos")
         if not isinstance(available, bool) or not isinstance(infos, list) or not infos:
             raise WebSearchError("DeepSeek 余额接口没有返回完整的余额信息。")
-        lines = ["DeepSeek API 账号余额（实时查询）：", f"当前可用于 API 调用：{'是' if available else '否'}"]
+        clean_infos: list[dict[str, str]] = []
         for item in infos:
             if not isinstance(item, dict):
                 raise WebSearchError("DeepSeek 余额信息格式不正确。")
@@ -216,9 +339,30 @@ class DeepSeekWebModule:
                 if not amount.is_finite():
                     raise WebSearchError("DeepSeek 余额金额格式不正确。")
                 amounts.append(str(amount))
+            clean_infos.append({
+                "currency": currency.upper(),
+                "total_balance": amounts[0],
+                "granted_balance": amounts[1],
+                "topped_up_balance": amounts[2],
+            })
+        return {"is_available": available, "balance_infos": clean_infos}
+
+    def _render_balance(self, data: dict[str, Any], *, realtime: bool) -> str:
+        alias = self.settings.balance_alias or "DeepSeek API"
+        lines = [
+            f"{alias}余额（{'本次实时查询' if realtime else '最近一次本地记录'}）：",
+            f"查询时可用于 API 调用：{'是' if data['is_available'] else '否'}",
+        ]
+        checked = datetime.fromisoformat(data["queried_at"])
+        local = checked.astimezone(ZoneInfo(self.plugin.config.plugin.timezone))
+        lines.append(f"查询时间：{local:%Y-%m-%d %H:%M:%S}（{self.plugin.config.plugin.timezone}）")
+        for item in data["balance_infos"]:
             lines.append(
-                f"{currency.upper()}：总可用 {amounts[0]}；未过期赠金 {amounts[1]}；充值余额 {amounts[2]}。"
+                f"{item['currency']}：总可用 {item['total_balance']}；"
+                f"未过期赠金 {item['granted_balance']}；充值余额 {item['topped_up_balance']}。"
             )
+        if not realtime:
+            lines.append("这是上次查询时的余额，之后可能变化；回答时说明查询时间，不要称为实时余额。")
         return "\n".join(lines)
 
     def _check_enabled(self) -> None:
