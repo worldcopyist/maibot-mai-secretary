@@ -31,6 +31,7 @@ from .poke_interaction import PokeInteractionModule
 from .proactive_chat import ProactiveChatModule
 from .role_recognition import RoleRecognitionModule
 from .scheduled_tasks import ScheduledTasksModule
+from .voice_synthesis import AZURE_VOICE_PROMPT, VoiceSynthesisModule
 
 LOG = logging.getLogger(__name__)
 
@@ -121,6 +122,42 @@ class ScheduledTasksSettings(PluginConfigBase):
             "label": "启用定时任务",
             "hint": "关闭后不再创建或执行任务；已有任务仍可查看和取消。",
         },
+    )
+
+
+class VoiceSynthesisSettings(PluginConfigBase):
+    """MiMo speech and the editable Azure voice description."""
+
+    __ui_label__: ClassVar[str] = "蓝天语音 · MiMo"
+    enabled: bool = Field(
+        default=True,
+        json_schema_extra={"label": "启用语音回复", "hint": "使用麦麦模型配置中已有的 MiMo API Key；只响应当前 QQ 聊天中的明确语音请求。"},
+    )
+    voice_prompt: str = Field(
+        default=AZURE_VOICE_PROMPT,
+        min_length=10,
+        max_length=1000,
+        json_schema_extra={"label": "蓝天音色提示词", "hint": "发给 MiMo VoiceDesign 的音色与语气描述；可以直接修改音高、音色、语速。不会改动麦麦本身的人设。", "x-widget": "textarea", "rows": 6},
+    )
+    max_text_chars: int = Field(
+        default=600, ge=20, le=2500,
+        json_schema_extra={"label": "单条语音最多字数", "hint": "限制单次语音长度和模型消耗。"},
+    )
+    cooldown_seconds: int = Field(
+        default=30, ge=0, le=3600,
+        json_schema_extra={"label": "同一聊天流语音间隔（秒）", "hint": "防止一条请求重复合成语音；0 表示不限制。"},
+    )
+    timeout_seconds: float = Field(
+        default=90.0, ge=10.0, le=180.0,
+        json_schema_extra={"label": "MiMo 请求超时（秒）"},
+    )
+    singing_enabled: bool = Field(
+        default=True,
+        json_schema_extra={"label": "允许唱歌", "hint": "MiMo VoiceDesign 不支持唱歌；唱歌改用同系列预置音色模型，音色可能不同。"},
+    )
+    singing_voice: Literal["冰糖", "茉莉", "苏打", "白桦", "Mia", "Chloe", "Milo", "Dean"] = Field(
+        default="冰糖",
+        json_schema_extra={"label": "唱歌预置音色", "hint": "仅唱歌时使用；语音聊天仍使用上面的蓝天 VoiceDesign 音色。"},
     )
 
 
@@ -579,6 +616,7 @@ class SecretaryConfig(PluginConfigBase):
     plugin: PluginSettings = Field(default_factory=PluginSettings)
     role_recognition: RoleRecognitionSettings = Field(default_factory=RoleRecognitionSettings)
     poke: PokeSettings = Field(default_factory=PokeSettings)
+    voice_synthesis: VoiceSynthesisSettings = Field(default_factory=VoiceSynthesisSettings)
     scheduled_tasks: ScheduledTasksSettings = Field(
         default_factory=ScheduledTasksSettings
     )
@@ -600,6 +638,7 @@ class MaiSecretaryPlugin(MaiBotPlugin):
         self.daily_report = DailyReportModule(self)
         self.role_recognition = RoleRecognitionModule(self)
         self.poke = PokeInteractionModule(self)
+        self.voice_synthesis = VoiceSynthesisModule(self)
         self.proactive = ProactiveChatModule(self)
         self.anti_bullying = AntiBullyingModule(self)
         self.knowledge_base = KnowledgeBaseModule(self)
@@ -609,6 +648,7 @@ class MaiSecretaryPlugin(MaiBotPlugin):
         self._register_module(self.daily_report)
         self._register_module(self.role_recognition)
         self._register_module(self.poke)
+        self._register_module(self.voice_synthesis)
         self._register_module(self.proactive)
         self._register_module(self.anti_bullying)
         self._register_module(self.knowledge_base)
@@ -920,6 +960,23 @@ class MaiSecretaryPlugin(MaiBotPlugin):
     )
     async def secretary_poke(self, target: str = "", **kwargs: Any) -> dict[str, Any]:
         return await self.poke.send_from_tool(target, **kwargs)
+
+    @Tool(
+        "secretary_speak",
+        description=(
+            "用户明确要求语音回复、朗读或唱歌时调用。text 写蓝天按当前人设准备说出的完整短句或完整歌词；"
+            "普通语音 mode=speech 使用 MiMo VoiceDesign 的蓝天声线；唱歌 mode=sing 使用同系列预置音色，"
+            "音色可能与平常说话不同。只向当前 QQ 聊天发送一条语音。工具成功后不要重复发语音或把同一段话再朗读一遍；"
+            "失败时按蓝天人设用文字说明。普通文字聊天不必调用。"
+        ),
+        parameters=[
+            ToolParameterInfo(name="text", param_type=ToolParamType.STRING, description="要朗读的完整短句，或要唱的完整歌词", required=True),
+            ToolParameterInfo(name="mode", param_type=ToolParamType.STRING, description="speech 普通语音；sing 唱歌，默认 speech", required=False),
+        ],
+        visibility="visible",
+    )
+    async def secretary_speak(self, text: str, mode: str = "speech", **kwargs: Any) -> dict[str, Any]:
+        return await self.voice_synthesis.speak(text, mode, **kwargs)
 
     @Tool(
         "secretary_search_knowledge",

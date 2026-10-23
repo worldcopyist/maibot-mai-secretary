@@ -66,6 +66,7 @@ def test_sdk_exposes_secretary_tools_apis_and_hooks(tmp_path):
         ("TOOL", "secretary_cancel_task"),
         ("TOOL", "secretary_generate_daily_report"),
         ("TOOL", "secretary_poke"),
+        ("TOOL", "secretary_speak"),
         ("TOOL", "secretary_search_knowledge"),
         ("TOOL", "secretary_deepseek_search"),
         ("TOOL", "secretary_deepseek_fetch"),
