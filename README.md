@@ -4,7 +4,7 @@
 
 **[打开定时任务：日历、任务列表与手动创建](/extensions/worldcopyist.mai-secretary/tasks)**
 
-面向 MaiBot 1.3.7 / 插件 SDK 2.12.0 的独立插件。它提供七项功能：
+面向 MaiBot 1.3.7 / 插件 SDK 2.12.0 的独立插件。它提供八项功能：
 
 插件列表中的头像使用 `assets/icon.png`，在 `_manifest.json` 的 `display.icon` 中声明。
 
@@ -15,6 +15,7 @@
 5. DeepSeek 联网搜索：小秘书自带 `secretary_deepseek_search` 和 `secretary_deepseek_fetch`，按需调用 DeepSeek Search / Fetch API 查询实时网页、读取已知网址。
 6. 角色识别：按当前消息的真实平台账号分为主人、熟人和陌生人，分别使用可编辑的提示词。
 7. 日报：管理员可设定聊天流和每天的总结时间；管理员账号也可在当前聊天里直接请麦麦现在生成今日日报，不必等到定时点。两种方式都把当天聊天文字分段总结后填入「Azure 主题」图片。
+8. 戳一戳互动：麦麦可通过 `secretary_poke` 戳当前聊天的人；被戳时可回戳、按现有人设简短回复或发表情包，也可按概率跟风戳群里正在互戳的人。
 
 例如，用户说“每天早上八点给我说天气预报”，麦麦可调用 `secretary_create_task`，用 `daily`、`08:00` 和原请求建立任务。任务到点时，可调用小秘书的 `secretary_deepseek_search` 查询实时天气资料；若查询失败或来源不可靠，应如实说明，不能编造预报。
 
@@ -25,6 +26,34 @@
 ## 配置
 
 编辑 `config.toml` 或在 MaiBot 插件配置页面修改设置。`target_chats` 为空时，不会随机主动发言。格式为 `平台:group:群号` 或 `平台:private:用户号`：
+
+### 戳一戳互动
+
+`secretary_poke(target?)` 是给麦麦使用的工具。私聊只会戳当前对方；群聊可以指定准确群名片、昵称或 QQ 号，插件会核对当前群成员，同名或无法核实时拒绝发送。`target="我"` 只在插件能核验本轮真实发言者时生效；`target="刚刚戳我的人"` 只使用五分钟内的戳一戳事件。工具发送成功后才会告诉麦麦“已戳到”，失败不会冒充成功。每人冷却和每聊天流每小时上限同时适用于工具、回戳和跟风戳。
+
+收到戳一戳后，插件把“谁戳了麦麦”写入麦麦的聊天上下文；成功戳出时把“麦麦戳了谁”写入上下文。麦麦若需文字或表情回应，会通过 MaiBot 自己的人设与主动任务接口生成，表情使用内置 `send_emoji` 工具，不用插件固定台词或另设人设。戳的不是麦麦时，通知继续交给 MaiBot；跟风戳按独立概率决定，默认戳被戳的人。插件发出的戳一戳回声会被过滤，避免重复记录。
+
+```toml
+[poke]
+enabled = true
+respond_to_poke = true
+reaction_probability = 0.85
+back_poke_probability = 0.6
+reply_after_back_poke_probability = 0.3
+bystander_enabled = true
+bystander_probability = 0.35
+bystander_target = "victim" # 或 actor：戳发起者
+allow_model_poke = true
+group_enabled = true
+private_enabled = true
+reaction_mode = "auto" # text 仅文字；emoji 优先表情
+reaction_cooldown_seconds = 12
+max_reactions_per_minute = 6
+poke_cooldown_seconds = 60
+max_pokes_per_hour = 6
+```
+
+`reaction_probability` 决定被戳后是否反应；反应时按 `back_poke_probability` 决定是否先回戳。没有回戳时会请麦麦按人设回复或发表情；成功回戳后，再按 `reply_after_back_poke_probability` 决定是否追加一次回复。即使这次选择沉默，麦麦仍能看到被戳事件。实际 QQ 互动需要提供公开 `adapter.napcat.message.send_poke` 接口的适配器。若原有 Smart Poke 插件也在运行，应先确认小秘书可用，再关闭旧插件的 `[plugin].enabled`，否则同一通知可能触发两套反应；旧插件的其他设置无需删除。
 
 ### Azure 主题日报
 
@@ -142,7 +171,7 @@ fetch_qps = 5.0
 
 自然语言工具只操作调用者所在聊天流、该用户自己的任务。单次任务使用带时区的 ISO 时间，例如 `2026-10-21T08:00:00+08:00`；每天和每周使用 `HH:MM`，每周还需星期数字（周一为 1，周日为 7）。时间含糊时应先澄清。
 
-插件发给 MaiBot 的主动聊天和定时任务执行提示词会直接列出工具名：`secretary_deepseek_search` 用于实时搜索，`secretary_deepseek_fetch` 用于读取已知网页，`secretary_create_task`、`secretary_list_tasks`、`secretary_cancel_task` 分别用于创建、查看和取消定时任务，`secretary_generate_daily_report` 用于用户明确要求即时生成今日日报，`secretary_search_knowledge` 用于查询授权知识库，`send_emoji` 用于在合适时从表情库挑选表情。若目标工具列在 MaiBot 的延迟展示工具中，提示词要求先用 `tool_search` 发现，再按实际参数调用。到点执行的任务不会重新创建同一任务；普通主动闲聊也不会无故联网或创建任务。工具不可用时应如实说明。
+插件发给 MaiBot 的主动聊天和定时任务执行提示词会直接列出工具名：`secretary_deepseek_search` 用于实时搜索，`secretary_deepseek_fetch` 用于读取已知网页，`secretary_create_task`、`secretary_list_tasks`、`secretary_cancel_task` 分别用于创建、查看和取消定时任务，`secretary_generate_daily_report` 用于用户明确要求即时生成今日日报，`secretary_poke` 用于合适的当前聊天戳一戳互动，`secretary_search_knowledge` 用于查询授权知识库，`send_emoji` 用于在合适时从表情库挑选表情。若目标工具列在 MaiBot 的延迟展示工具中，提示词要求先用 `tool_search` 发现，再按实际参数调用。到点执行的任务不会重新创建同一任务；普通主动闲聊也不会无故联网或创建任务。工具不可用时应如实说明。
 
 到点后的“成功”表示 MaiBot 接受了主动任务请求，不等于已经观察到消息发出。插件先持久化“已尝试”再触发，避免重启造成重复消息。服务中断超过 `misfire_grace_seconds`（默认 10 分钟）时会跳过过期触发；单次任务会标记为 `missed`，可通过列出任务查看。接口报错时，单次任务标记为 `failed`；周期任务保留下一次执行。
 
@@ -150,9 +179,9 @@ fetch_qps = 5.0
 
 ### 模块结构
 
-`plugin.py` 是 MaiBot 的入口，只负责配置、模块注册、统一调度、状态文件读写，以及 SDK 工具、页面 API 和事件钩子的转发。`scheduled_tasks.py` 独立管理定时任务，`daily_report.py` 独立管理日报调度和聊天总结，`daily_report_renderer.py` 把总结写进主题图片，`proactive_chat.py` 独立管理随机发言和上次发言的续接，`role_recognition.py` 独立管理账号识别及三档提示词，`anti_bullying.py` 独立管理辱骂判断和管理员提醒，`knowledge_base.py` 独立管理文档与检索，`deepseek_web.py` 独立管理联网搜索与网页抓取；模块通过 `module_contract.py` 约定的接口接入。`stream_router.py` 为需要发送消息的模块解析聊天流；`secretary_core.py` 保留不依赖 MaiBot 的时间计算，`prompts.py` 集中放工具调用提示词。`webui.json` 与 `assets/knowledge.html` 声明并实现从插件详情页进入的知识库工作区。
+`plugin.py` 是 MaiBot 的入口，只负责配置、模块注册、统一调度、状态文件读写，以及 SDK 工具、页面 API 和事件钩子的转发。`poke_interaction.py` 独立管理戳一戳通知、回戳、跟风、模型工具、概率与冷却；`scheduled_tasks.py` 独立管理定时任务，`daily_report.py` 独立管理日报调度和聊天总结，`daily_report_renderer.py` 把总结写进主题图片，`proactive_chat.py` 独立管理随机发言和上次发言的续接，`role_recognition.py` 独立管理账号识别及三档提示词，`anti_bullying.py` 独立管理辱骂判断和管理员提醒，`knowledge_base.py` 独立管理文档与检索，`deepseek_web.py` 独立管理联网搜索与网页抓取；模块通过 `module_contract.py` 约定的接口接入。`stream_router.py` 为需要发送消息的模块解析聊天流；`secretary_core.py` 保留不依赖 MaiBot 的时间计算，`prompts.py` 集中放工具调用提示词。`webui.json` 与 `assets/knowledge.html` 声明并实现从插件详情页进入的知识库工作区。
 
-七个功能可分别用 `[scheduled_tasks].enabled`、`[daily_report].enabled`、`[proactive].enabled`、`[role_recognition].enabled`、`[anti_bullying].enabled`、`[knowledge_base].enabled` 和 `[deepseek_web].enabled` 开关；日报中的 `[daily_report].manual_enabled` 单独控制即时请求。旧配置没有新增配置节时由默认值补齐；全局 `[plugin].enabled` 仍控制整个插件。
+八个功能可分别用 `[poke].enabled`、`[scheduled_tasks].enabled`、`[daily_report].enabled`、`[proactive].enabled`、`[role_recognition].enabled`、`[anti_bullying].enabled`、`[knowledge_base].enabled` 和 `[deepseek_web].enabled` 开关；日报中的 `[daily_report].manual_enabled` 单独控制即时请求。旧配置没有新增配置节时由默认值补齐；全局 `[plugin].enabled` 仍控制整个插件。
 
 添加功能时，新建一个实现 `name`、`state_keys`、`load_state`、`dump_state`、`on_config_update` 和 `tick` 的模块，并在 `MaiSecretaryPlugin.__init__` 中调用 `_register_module`。若模块需要给麦麦新增工具或接收事件，在入口类添加 SDK 装饰的薄转发方法。模块状态使用独有字段写入现有 `secretary-state.json`；注册时会拒绝重复字段，未注册字段也会在读写时保留。现有配置字段、工具名和状态文件版本保持兼容。
 

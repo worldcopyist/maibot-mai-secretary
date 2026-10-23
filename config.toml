@@ -10,6 +10,25 @@ admin_accounts = []
 [scheduled_tasks]
 enabled = true
 
+[poke]
+enabled = true
+respond_to_poke = true
+reaction_probability = 0.85
+back_poke_probability = 0.6
+reply_after_back_poke_probability = 0.3
+bystander_enabled = true
+bystander_probability = 0.35
+bystander_target = "victim"
+allow_model_poke = true
+group_enabled = true
+private_enabled = true
+reaction_mode = "auto"
+reaction_cooldown_seconds = 12
+max_reactions_per_minute = 6
+poke_cooldown_seconds = 60
+max_pokes_per_hour = 6
+adapter_plugin_id = ""
+
 [daily_report]
 enabled = false
 manual_enabled = true

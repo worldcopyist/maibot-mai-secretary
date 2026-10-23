@@ -27,6 +27,7 @@ from .daily_report import DailyReportModule
 from .deepseek_web import DeepSeekWebModule
 from .knowledge_base import KnowledgeBaseModule, KnowledgeError
 from .module_contract import SecretaryModule
+from .poke_interaction import PokeInteractionModule
 from .proactive_chat import ProactiveChatModule
 from .role_recognition import RoleRecognitionModule
 from .scheduled_tasks import ScheduledTasksModule
@@ -49,7 +50,7 @@ class PluginSettings(PluginConfigBase):
         description="启用麦麦小秘书",
         json_schema_extra={
             "label": "启用麦麦小秘书",
-            "hint": "关闭后不会主动发言、执行定时任务或检查辱骂；已有任务仍可查看和取消。",
+            "hint": "关闭后不会主动发言、戳一戳、执行定时任务或检查辱骂；已有任务仍可查看和取消。",
         },
     )
     timezone: str = Field(
@@ -120,6 +121,69 @@ class ScheduledTasksSettings(PluginConfigBase):
             "label": "启用定时任务",
             "hint": "关闭后不再创建或执行任务；已有任务仍可查看和取消。",
         },
+    )
+
+
+class PokeSettings(PluginConfigBase):
+    """戳一戳模块的独立设置。"""
+
+    __ui_label__: ClassVar[str] = "戳一戳互动"
+
+    enabled: bool = Field(default=True, json_schema_extra={"label": "启用戳一戳模块"})
+    respond_to_poke: bool = Field(
+        default=True,
+        json_schema_extra={"label": "被戳后回应", "hint": "让麦麦按现有人设回复，或调用 send_emoji 发表情包。"},
+    )
+    reaction_probability: float = Field(
+        default=0.85, ge=0.0, le=1.0,
+        json_schema_extra={"label": "被戳后作出反应的概率", "hint": "0 表示只记录被戳事件；1 表示每次通过限频检查后都会反应。"},
+    )
+    back_poke_probability: float = Field(
+        default=0.6, ge=0.0, le=1.0,
+        json_schema_extra={"label": "反应时回戳的概率", "hint": "未回戳时会按人设回复或发表情；回戳失败也会改为回复。"},
+    )
+    reply_after_back_poke_probability: float = Field(
+        default=0.3, ge=0.0, le=1.0,
+        json_schema_extra={"label": "回戳后追加回复的概率", "hint": "追加回复由麦麦按现有人设在短文字和 send_emoji 表情包之间选择。"},
+    )
+    bystander_enabled: bool = Field(default=True, json_schema_extra={"label": "允许跟风戳人"})
+    bystander_probability: float = Field(
+        default=0.35, ge=0.0, le=1.0,
+        json_schema_extra={"label": "看到别人互戳时跟风的概率"},
+    )
+    bystander_target: Literal["victim", "actor"] = Field(
+        default="victim",
+        json_schema_extra={"label": "跟风戳谁", "hint": "victim 戳被戳的人；actor 戳发起戳一戳的人。"},
+    )
+    allow_model_poke: bool = Field(
+        default=True,
+        json_schema_extra={"label": "允许麦麦主动戳人", "hint": "开放 secretary_poke 工具；只允许戳当前 QQ 聊天里的对方或本群成员。"},
+    )
+    group_enabled: bool = Field(default=True, json_schema_extra={"label": "在群聊启用"})
+    private_enabled: bool = Field(default=True, json_schema_extra={"label": "在私聊启用"})
+    reaction_mode: Literal["auto", "text", "emoji"] = Field(
+        default="auto",
+        json_schema_extra={"label": "被戳时回应方式", "hint": "auto 由麦麦选择短回复或表情包；text 只回文字；emoji 优先发一张表情包。"},
+    )
+    reaction_cooldown_seconds: int = Field(
+        default=12, ge=1, le=3600,
+        json_schema_extra={"label": "同一人被戳回应间隔（秒）"},
+    )
+    max_reactions_per_minute: int = Field(
+        default=6, ge=1, le=60,
+        json_schema_extra={"label": "每个聊天流每分钟最多回应次数"},
+    )
+    poke_cooldown_seconds: int = Field(
+        default=60, ge=1, le=3600,
+        json_schema_extra={"label": "连续戳同一人的间隔（秒）"},
+    )
+    max_pokes_per_hour: int = Field(
+        default=6, ge=1, le=60,
+        json_schema_extra={"label": "每个聊天流每小时最多主动戳次数"},
+    )
+    adapter_plugin_id: str = Field(
+        default="",
+        json_schema_extra={"label": "QQ 适配器插件 ID", "hint": "留空自动查找公开接口；有多个兼容适配器时填写确切插件 ID。"},
     )
 
 
@@ -514,6 +578,7 @@ class DeepSeekWebSettings(PluginConfigBase):
 class SecretaryConfig(PluginConfigBase):
     plugin: PluginSettings = Field(default_factory=PluginSettings)
     role_recognition: RoleRecognitionSettings = Field(default_factory=RoleRecognitionSettings)
+    poke: PokeSettings = Field(default_factory=PokeSettings)
     scheduled_tasks: ScheduledTasksSettings = Field(
         default_factory=ScheduledTasksSettings
     )
@@ -534,6 +599,7 @@ class MaiSecretaryPlugin(MaiBotPlugin):
         self.scheduled = ScheduledTasksModule(self)
         self.daily_report = DailyReportModule(self)
         self.role_recognition = RoleRecognitionModule(self)
+        self.poke = PokeInteractionModule(self)
         self.proactive = ProactiveChatModule(self)
         self.anti_bullying = AntiBullyingModule(self)
         self.knowledge_base = KnowledgeBaseModule(self)
@@ -542,6 +608,7 @@ class MaiSecretaryPlugin(MaiBotPlugin):
         self._register_module(self.scheduled)
         self._register_module(self.daily_report)
         self._register_module(self.role_recognition)
+        self._register_module(self.poke)
         self._register_module(self.proactive)
         self._register_module(self.anti_bullying)
         self._register_module(self.knowledge_base)
@@ -573,6 +640,7 @@ class MaiSecretaryPlugin(MaiBotPlugin):
         )
 
     async def on_unload(self) -> None:
+        await self.poke.stop()
         await self.daily_report.stop()
         await self.anti_bullying.stop()
         await self.knowledge_base.stop()
@@ -683,6 +751,20 @@ class MaiSecretaryPlugin(MaiBotPlugin):
     ) -> None:
         del kwargs
         self.role_recognition.remember(message)
+
+    @HookHandler(
+        "chat.receive.before_process",
+        name="secretary_poke_notice",
+        mode=HookMode.BLOCKING,
+        order=HookOrder.EARLY,
+        error_policy=ErrorPolicy.SKIP,
+        description="收到 QQ 戳一戳时按麦麦人设回应",
+    )
+    async def handle_poke_notice(
+        self, message: dict[str, Any] | None = None, **kwargs: Any,
+    ) -> dict[str, str] | None:
+        del kwargs
+        return await self.poke.on_notice(message)
 
     @HookHandler(
         "maisaka.planner.before_request",
@@ -819,6 +901,25 @@ class MaiSecretaryPlugin(MaiBotPlugin):
     )
     async def secretary_generate_daily_report(self, **kwargs: Any) -> dict[str, Any]:
         return await self.daily_report.request_manual(**kwargs)
+
+    @Tool(
+        "secretary_poke",
+        description=(
+            "在轻松、合适的 QQ 聊天场景中戳一戳当前私聊对方或当前群成员。"
+            "收到明确的戳人请求、友好打趣或自然互动时按需使用；严肃或对方不愿意时不要调用。"
+            "target 可以是当前群成员的准确群名片、昵称或 QQ 号；‘我’表示本轮发言者，"
+            "‘刚刚戳我的人’表示最近戳过麦麦的人。私聊可省略 target。"
+            "只能戳当前聊天流的成员，不能指定别的聊天流；调用成功才表示已经戳到。"
+        ),
+        parameters=[ToolParameterInfo(
+            name="target", param_type=ToolParamType.STRING,
+            description="要戳的当前聊天成员；私聊可留空，群聊可用准确昵称、群名片、QQ 号或‘我’。",
+            required=False,
+        )],
+        visibility="visible",
+    )
+    async def secretary_poke(self, target: str = "", **kwargs: Any) -> dict[str, Any]:
+        return await self.poke.send_from_tool(target, **kwargs)
 
     @Tool(
         "secretary_search_knowledge",

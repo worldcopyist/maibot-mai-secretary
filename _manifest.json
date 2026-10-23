@@ -2,8 +2,8 @@
   "manifest_version": 2,
   "id": "worldcopyist.mai-secretary",
   "name": "麦麦小秘书",
-  "version": "0.11.4",
-  "description": "角色识别、主动聊天、自然语言定时任务、可即时生成的 Azure 主题日报、AI 反霸凌、私有知识库与 DeepSeek 联网搜索。",
+  "version": "0.12.0",
+  "description": "戳一戳互动、角色识别、主动聊天、自然语言定时任务、Azure 主题日报、AI 反霸凌、私有知识库与 DeepSeek 联网搜索。",
   "display": {
     "icon": {
       "type": "local",
@@ -37,13 +37,15 @@
     "chat.get_all_streams",
     "chat.open_session",
     "maisaka.proactive.trigger",
+    "maisaka.context.append",
     "config.get",
     "message.get_recent",
     "message.get_by_time_in_chat",
     "llm.generate",
     "llm.embed",
     "send.text",
-    "send.image"
+    "send.image",
+    "api.call"
   ],
   "i18n": {
     "default_locale": "zh-CN",
