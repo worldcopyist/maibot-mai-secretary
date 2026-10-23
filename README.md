@@ -30,6 +30,8 @@
 
 在插件配置页「QQ群管」里开启模块并填写 `managed_group_ids`。群号为空时不会管理任何群。`secretary_group_member` 支持禁言、解禁、踢出、群名片、群头衔、设置管理员、全员禁言和改群名；`secretary_group_notice` 支持查询、发布、删除公告；`secretary_group_join` 支持查询待审申请、通过和拒绝；`secretary_group_welcome` 支持查看、修改、开关及重置本群入群欢迎语。麦麦在群内不是管理员时，工具会明确返回权限不足；设置管理员和群头衔要求麦麦是群主。只有已核验的插件管理员可以发起更改，普通群友无法借麦麦操作群管。所有工具只接受当前聊天群，不接受模型指定其他群号。
 
+群消息自动审核也在「QQ群管」设置中配置。先在本插件知识库页面的「QQ群管 · 禁言敏感词」区域按群上传文档或粘贴词语，每行或每个表格单元格一个词。词库按群隔离，单群最多 100 份文档、3000 个词；不会进入普通知识检索。随后开启 `moderation_enabled`，分别设置 `moderation_recall`（自动撤回）、`moderation_mute`（自动禁言）、`moderation_mute_minutes`（禁言分钟数）和 `moderation_sensitivity`（0–100，越高越严格）。默认自动审核关闭。插件会在消息防抖合并前保留原消息编号；命中词语后将当前消息和最近聊天交给 MaiBot 配置的模型判断，再按设置处理。像词语“你妈”出现在“你妈身体怎么样了”这种正常询问中，应被判为无害，不触发处罚。0、50、100 敏感程度对应的处罚把握门槛分别是 95%、75%、55%；模型仍须明确判定违规且非无害。模型无有效结果、队列已满、麦麦没有群管权限或发送者是群管理人员时，不自动处罚。只审核文本消息，审核与 QQ 接口结果可在知识库页面查看；AI 误判风险仍需管理员通过小范围词库和审核记录观察。
+
 加群审核默认由管理员手动确认。也可在配置页切换到 `keyword` 模式，用通过词和拒绝词自动审核；拒绝词优先，未命中则保持待审。入群欢迎默认关闭；开启后只在已列出的群发送。工具调用只报告 NapCat 明确确认的成功，接口报错或权限不足会把原因返回麦麦。插件不会替换或复制已有 QQAdmin 插件的代码。
 
 ### 蓝天语音
@@ -200,7 +202,7 @@ fetch_qps = 5.0
 
 ### 模块结构
 
-`plugin.py` 是 MaiBot 的入口，只负责配置、模块注册、统一调度、状态文件读写，以及 SDK 工具、页面 API 和事件钩子的转发。`message_debounce.py` 独立管理消息防抖窗口与合并；`poke_interaction.py` 独立管理戳一戳通知、回戳、跟风、模型工具、概率与冷却；`scheduled_tasks.py` 独立管理定时任务，`daily_report.py` 独立管理日报调度和聊天总结，`daily_report_renderer.py` 把总结写进主题图片，`proactive_chat.py` 独立管理随机发言和上次发言的续接，`role_recognition.py` 独立管理账号识别及三档提示词，`anti_bullying.py` 独立管理辱骂判断和管理员提醒，`knowledge_base.py` 独立管理文档与检索，`deepseek_web.py` 独立管理联网搜索与网页抓取；模块通过 `module_contract.py` 约定的接口接入。`stream_router.py` 为需要发送消息的模块解析聊天流；`secretary_core.py` 保留不依赖 MaiBot 的时间计算，`prompts.py` 集中放工具调用提示词。`webui.json` 与 `assets/knowledge.html` 声明并实现从插件详情页进入的知识库工作区。
+`plugin.py` 是 MaiBot 的入口，只负责配置、模块注册、统一调度、状态文件读写，以及 SDK 工具、页面 API 和事件钩子的转发。`message_debounce.py` 独立管理消息防抖窗口与合并；`group_moderation.py` 独立管理群消息 AI 审核、撤回、禁言和记录，`knowledge_base.py` 保存按群隔离的词库；`poke_interaction.py` 独立管理戳一戳通知、回戳、跟风、模型工具、概率与冷却；`scheduled_tasks.py` 独立管理定时任务，`daily_report.py` 独立管理日报调度和聊天总结，`daily_report_renderer.py` 把总结写进主题图片，`proactive_chat.py` 独立管理随机发言和上次发言的续接，`role_recognition.py` 独立管理账号识别及三档提示词，`anti_bullying.py` 独立管理辱骂判断和管理员提醒，`deepseek_web.py` 独立管理联网搜索与网页抓取；模块通过 `module_contract.py` 约定的接口接入。`stream_router.py` 为需要发送消息的模块解析聊天流；`secretary_core.py` 保留不依赖 MaiBot 的时间计算，`prompts.py` 集中放工具调用提示词。`webui.json` 与 `assets/knowledge.html` 声明并实现从插件详情页进入的知识库工作区。
 
 八个功能可分别用 `[poke].enabled`、`[scheduled_tasks].enabled`、`[daily_report].enabled`、`[proactive].enabled`、`[role_recognition].enabled`、`[anti_bullying].enabled`、`[knowledge_base].enabled` 和 `[deepseek_web].enabled` 开关；日报中的 `[daily_report].manual_enabled` 单独控制即时请求。旧配置没有新增配置节时由默认值补齐；全局 `[plugin].enabled` 仍控制整个插件。
 

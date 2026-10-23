@@ -26,6 +26,7 @@ from .anti_bullying import AntiBullyingModule, normalize_admin_account
 from .daily_report import DailyReportModule
 from .deepseek_web import DeepSeekWebModule
 from .group_admin import GroupAdminModule
+from .group_moderation import GroupModerationModule
 from .knowledge_base import KnowledgeBaseModule, KnowledgeError
 from .message_debounce import MessageDebounceModule
 from .module_contract import SecretaryModule
@@ -238,6 +239,11 @@ class GroupAdminSettings(PluginConfigBase):
     review_accept_words: list[str] = Field(default_factory=list, json_schema_extra={"label": "自动通过关键词", "hint": "仅 keyword 模式使用；申请答案包含任一词时通过。"})
     review_reject_words: list[str] = Field(default_factory=list, json_schema_extra={"label": "自动拒绝关键词", "hint": "仅 keyword 模式使用；拒绝词优先于通过词。"})
     review_reject_reason: str = Field(default="申请信息不符合本群要求", max_length=200, json_schema_extra={"label": "自动拒绝理由"})
+    moderation_enabled: bool = Field(default=False, json_schema_extra={"label": "启用群消息 AI 禁言审核", "hint": "只检查已启用群中上传的敏感词。默认关闭；请先在小秘书知识库页面上传词库并确认撤回、禁言设置。"})
+    moderation_recall: bool = Field(default=True, json_schema_extra={"label": "确认违规后自动撤回", "hint": "仅撤回命中并经麦麦 AI 判断为违规的那一条 QQ 群消息。"})
+    moderation_mute: bool = Field(default=True, json_schema_extra={"label": "确认违规后自动禁言", "hint": "麦麦需要有群管理员权限；不会自动禁言群主或群管理员。"})
+    moderation_mute_minutes: int = Field(default=10, ge=1, le=43200, json_schema_extra={"label": "自动禁言时长（分钟）", "hint": "仅开启自动禁言时使用，范围 1–43200 分钟。"})
+    moderation_sensitivity: int = Field(default=50, ge=0, le=100, json_schema_extra={"label": "审核敏感程度（0–100）", "hint": "越高越容易判定含糊的违规用法；正常询问亲属等明确无害语境始终不应处罚。建议先从 50 测试。"})
     adapter_plugin_id: str = Field(default="", json_schema_extra={"label": "QQ 适配器插件 ID", "hint": "留空自动调用已注册的 NapCat 公开接口。"})
 
     @field_validator("managed_group_ids")
@@ -688,6 +694,7 @@ class MaiSecretaryPlugin(MaiBotPlugin):
         self.role_recognition = RoleRecognitionModule(self)
         self.poke = PokeInteractionModule(self)
         self.group_admin = GroupAdminModule(self)
+        self.group_moderation = GroupModerationModule(self)
         self.voice_synthesis = VoiceSynthesisModule(self)
         self.proactive = ProactiveChatModule(self)
         self.anti_bullying = AntiBullyingModule(self)
@@ -700,6 +707,7 @@ class MaiSecretaryPlugin(MaiBotPlugin):
         self._register_module(self.role_recognition)
         self._register_module(self.poke)
         self._register_module(self.group_admin)
+        self._register_module(self.group_moderation)
         self._register_module(self.voice_synthesis)
         self._register_module(self.proactive)
         self._register_module(self.anti_bullying)
@@ -726,6 +734,7 @@ class MaiSecretaryPlugin(MaiBotPlugin):
         self._load_state()
         await self.role_recognition.start()
         await self.knowledge_base.start()
+        await self.group_moderation.start()
         await self.anti_bullying.start()
         self._runner = asyncio.create_task(self._run(), name="mai-secretary-scheduler")
         self.ctx.logger.info(
@@ -737,6 +746,7 @@ class MaiSecretaryPlugin(MaiBotPlugin):
         await self.poke.stop()
         await self.daily_report.stop()
         await self.anti_bullying.stop()
+        await self.group_moderation.stop()
         await self.knowledge_base.stop()
         await self.deepseek_web.stop()
         if self._runner is not None:
@@ -831,6 +841,20 @@ class MaiSecretaryPlugin(MaiBotPlugin):
         except Exception:
             self.role_recognition.clear_proactive(stream_id)
             raise
+
+    @HookHandler(
+        "chat.receive.before_process",
+        name="secretary_group_moderation_inbound",
+        mode=HookMode.BLOCKING,
+        order=HookOrder.EARLY,
+        error_policy=ErrorPolicy.SKIP,
+        description="在消息防抖合并前记录需要 AI 审核的原始 QQ 群消息",
+    )
+    async def inspect_group_moderation_inbound(
+        self, message: dict[str, Any] | None = None, **kwargs: Any,
+    ) -> None:
+        del kwargs
+        await self.group_moderation.on_inbound(message)
 
     @HookHandler(
         "chat.receive.before_process",
@@ -1251,6 +1275,29 @@ class MaiSecretaryPlugin(MaiBotPlugin):
     async def secretary_kb_search(self, query: str, **kwargs: Any) -> dict[str, Any]:
         del kwargs
         return await self._kb_api(self.knowledge_base.search(query))
+
+    @API("secretary_mod_list", description="WebUI QQ群管敏感词词库与审核记录")
+    async def secretary_mod_list(self, **kwargs: Any) -> dict[str, Any]:
+        del kwargs
+        result = await self._kb_api(self.knowledge_base.list_moderation_documents())
+        if "error" not in result:
+            result["audit"] = self.group_moderation.audit[-30:]
+        return result
+
+    @API("secretary_mod_start", description="WebUI 上传QQ群管敏感词文档")
+    async def secretary_mod_start(self, group_id: str, filename: str, size: int, **kwargs: Any) -> dict[str, Any]:
+        del kwargs
+        return await self._kb_api(self.knowledge_base.start_upload(filename, size, purpose="moderation", group_id=group_id))
+
+    @API("secretary_mod_add_text", description="WebUI 粘贴QQ群管敏感词")
+    async def secretary_mod_add_text(self, group_id: str, title: str, content: str, **kwargs: Any) -> dict[str, Any]:
+        del kwargs
+        return await self._kb_api(self.knowledge_base.add_moderation_text(group_id, title, content))
+
+    @API("secretary_mod_delete", description="WebUI 删除QQ群管敏感词文档")
+    async def secretary_mod_delete(self, document_id: str, **kwargs: Any) -> dict[str, Any]:
+        del kwargs
+        return await self._kb_api(self.knowledge_base.delete_moderation_document(document_id))
 
 
 def create_plugin() -> MaiSecretaryPlugin:

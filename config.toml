@@ -48,6 +48,11 @@ review_mode = "manual"
 review_accept_words = []
 review_reject_words = []
 review_reject_reason = "申请信息不符合本群要求"
+moderation_enabled = false
+moderation_recall = true
+moderation_mute = true
+moderation_mute_minutes = 10
+moderation_sensitivity = 50
 adapter_plugin_id = ""
 
 [voice_synthesis]

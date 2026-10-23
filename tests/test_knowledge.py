@@ -126,6 +126,29 @@ async def test_invalid_format_finishes_with_visible_failure(tmp_path):
     await module.stop()
 
 
+@pytest.mark.asyncio
+async def test_group_moderation_documents_are_scoped_and_not_rag_content(tmp_path):
+    module = make_module(tmp_path)
+    module.plugin.config.group_admin.managed_group_ids = ["765926623", "745564579"]
+    await module.start()
+    result = await module.add_moderation_text("765926623", "禁言词", "敏感词\n你妈\n坏词")
+    assert result["term_count"] == 2
+    assert module.moderation_matches("765926623", "你妈身体怎么样了") == ["你妈"]
+    assert module.moderation_matches("745564579", "你妈身体怎么样了") == []
+    assert (await module.search("你妈"))["results"] == []
+    listed = await module.list_moderation_documents()
+    assert listed["documents"][0]["group_id"] == "765926623"
+    assert (await module.add_moderation_text("765926623", "重复", "敏感词\n你妈\n坏词"))["duplicate"]
+    raw = "另一个禁言词".encode()
+    upload = await module.start_upload("词库.txt", len(raw), purpose="moderation", group_id="745564579")
+    await module.append_upload(upload["upload_id"], 0, base64.b64encode(raw).decode())
+    await module.finish_upload(upload["upload_id"])
+    assert module.moderation_matches("745564579", "另一个禁言词") == ["另一个禁言词"]
+    await module.delete_moderation_document(result["document_id"])
+    assert module.moderation_matches("765926623", "你妈") == []
+    await module.stop()
+
+
 def test_webui_bindings_match_plugin_api_components():
     declaration = json.loads((ROOT / "webui.json").read_text(encoding="utf-8"))
     page = declaration["pages"][0]

@@ -86,12 +86,31 @@
     <div class="search-form"><div class="search-field"><label for="query">想查什么？</label><input class="maibot-input" id="query" maxlength="500" placeholder="输入关键词或自然语言问题"></div><button class="maibot-button" id="search" type="button">检索</button></div>
     <div id="results" class="results" aria-live="polite"></div>
   </section>
+  <section class="maibot-card kb-card" aria-labelledby="moderation-heading">
+    <div class="maibot-card-header kb-card-header"><h2 id="moderation-heading">QQ群管 · 禁言敏感词</h2><button class="maibot-button" id="mod-refresh" type="button">刷新词库</button></div>
+    <p class="muted">这个区域与普通知识库分开，麦麦不会用这些词回答知识问题。先在插件「QQ群管」设置中加入群号，再在下方选择群。每行或每个表格单元格写一个词；消息命中后由麦麦判断语境，明确无害的说法不会处罚。</p>
+    <p class="muted" id="mod-settings"></p>
+    <label for="mod-group">应用到哪个群</label><select class="maibot-input" id="mod-group"></select>
+    <div class="grid" style="margin-top:16px">
+      <div>
+        <label for="mod-file">上传词库文档</label><input class="maibot-input" id="mod-file" type="file" accept=".txt,.md,.markdown,.csv,.tsv,.xlsx,.docx,.pdf,.html,.htm,.json,.jsonl,.xml,.yaml,.yml,.rtf,.epub,.odt,.ods,.odp">
+        <div class="actions"><button class="maibot-button maibot-button-primary" id="mod-upload" type="button">上传词库</button></div>
+      </div>
+      <div>
+        <label for="mod-title">词库名称</label><input class="maibot-input" id="mod-title" maxlength="100" placeholder="例如：群聊辱骂词">
+        <label for="mod-content">粘贴敏感词</label><textarea class="maibot-input" id="mod-content" maxlength="45000" placeholder="每行一个词，例如：\n你妈"></textarea>
+        <div class="actions"><button class="maibot-button maibot-button-primary" id="mod-paste" type="button">保存词库</button></div>
+      </div>
+    </div>
+    <h3>已上传词库</h3><ul class="doc-list" id="mod-documents"><li class="muted empty">正在读取词库…</li></ul>
+    <h3>最近审核记录</h3><ul class="doc-list" id="mod-audit"><li class="muted empty">暂无记录</li></ul>
+  </section>
 </main>
 <script>
 (() => {
   const $ = id => document.getElementById(id);
   const status = (message, error = false) => { $('status').hidden = !message; $('status').textContent = message; $('status').dataset.tone = error ? 'error' : 'info'; };
-  const busy = value => { for (const id of ['upload','paste','refresh','search']) $(id).disabled = value; };
+  const busy = value => { for (const id of ['upload','paste','refresh','search','mod-refresh','mod-upload','mod-paste']) $(id).disabled = value; };
   const add = (parent, tag, text, className) => { const node = document.createElement(tag); node.textContent = text; if (className) node.className = className; parent.append(node); return node; };
   const query = async (name, args={}) => { const result = await maibot.query(name,args); if (result?.error) throw Error(result.error); return result; };
   const action = async (name, args={}) => { const result = await maibot.action(name,args); if (result?.error) throw Error(result.error); return result; };
@@ -112,11 +131,33 @@
       list.append(row);
     }
   }
-  async function run(work) { try {busy(true); await work();} catch (error) {status(String(error),true);} finally {busy(false); $('progress').hidden = true;} }
-  $('upload').addEventListener('click', () => run(async () => {
-    const file = $('file').files[0]; if (!file) throw Error('请先选文件');
-    if (!file.size || file.size > 8*1024*1024) throw Error('文件须小于 8 MiB');
-    const {upload_id} = await action('start',{filename:file.name,size:file.size});
+  async function refreshModeration() {
+    const data = await query('mod_list');
+    const selector = $('mod-group'), selected = selector.value;
+    selector.replaceChildren();
+    for (const group of data.groups) { const option = document.createElement('option'); option.value = group; option.textContent = `QQ群 ${group}`; selector.append(option); }
+    if (data.groups.includes(selected)) selector.value = selected;
+    $('mod-settings').textContent = `审核：${data.settings.enabled ? '已开启' : '未开启'} · 自动撤回：${data.settings.recall ? '开' : '关'} · 自动禁言：${data.settings.mute ? `开（${data.settings.mute_minutes} 分钟）` : '关'} · 敏感程度：${data.settings.sensitivity}/100。可在插件「QQ群管」设置中调整。`;
+    const docs = $('mod-documents'); docs.replaceChildren();
+    const rows = data.documents.filter(doc => doc.group_id === selector.value);
+    if (!rows.length) add(docs,'li',selector.value ? '这个群还没有词库' : '请先在「QQ群管」设置中添加群号','muted empty');
+    for (const doc of rows) {
+      const row = document.createElement('li'); row.className = 'doc-row';
+      const info = document.createElement('div'); info.className = 'doc-info';
+      add(info,'div',doc.name,'doc-name');
+      add(info,'div',`${doc.term_count} 个词 · ${doc.preview.join('、')}${doc.term_count > doc.preview.length ? '…' : ''}`,'muted doc-meta');
+      const button = add(row,'button','删除','maibot-button maibot-button-danger'); button.type = 'button';
+      button.addEventListener('click', () => run(async () => { await action('mod_delete',{document_id:doc.id}); status('已删除词库 '+doc.name); await refreshModeration(); }));
+      row.prepend(info); docs.append(row);
+    }
+    const audit = $('mod-audit'); audit.replaceChildren();
+    const events = data.audit.filter(item => item.group_id === selector.value).slice().reverse().slice(0,10);
+    if (!events.length) add(audit,'li','暂无记录','muted empty');
+    for (const item of events) add(audit,'li',`${new Date(item.at*1000).toLocaleString()} · ${item.user_id} · ${item.result}`,'doc-row muted');
+  }
+  async function sendFile(file, startAction, extra={}) {
+    if (!file || !file.size || file.size > 8*1024*1024) throw Error('请选择小于 8 MiB 的文件');
+    const {upload_id} = await action(startAction,{...extra,filename:file.name,size:file.size});
     $('progress').hidden = false; $('progress').value = 0;
     const step = 36*1024; let sequence = 0;
     for (let offset=0; offset<file.size; offset+=step) {
@@ -126,7 +167,12 @@
       $('progress').value = Math.round(Math.min(1,(offset+bytes.length)/file.size)*100);
       status(`正在上传：${Math.min(offset+bytes.length,file.size)} / ${file.size} 字节`);
     }
-    const result = await action('finish',{upload_id});
+    return action('finish',{upload_id});
+  }
+  async function run(work) { try {busy(true); await work();} catch (error) {status(String(error),true);} finally {busy(false); $('progress').hidden = true;} }
+  $('upload').addEventListener('click', () => run(async () => {
+    const file = $('file').files[0]; if (!file) throw Error('请先选文件');
+    const result = await sendFile(file,'start');
     status(result.duplicate ? '相同内容已存在' : '已接收文档，正在后台建立索引；请刷新状态');
     $('file').value = ''; $('progress').hidden = true; await refresh();
   }));
@@ -146,6 +192,22 @@
     for (const hit of data.results) { const card = document.createElement('article'); add(card,'small',`${hit.source} · 第 ${hit.chunk} 段`); add(card,'p',hit.text); results.append(card); }
     status(`找到 ${data.results.length} 个相关片段`);
   }));
-  maibot.ready.then(() => refresh().catch(e => status(String(e),true)));
+  $('mod-group').addEventListener('change', () => refreshModeration().catch(e => status(String(e),true)));
+  $('mod-refresh').addEventListener('click', () => run(async () => { await refreshModeration(); status('词库状态已刷新'); }));
+  $('mod-upload').addEventListener('click', () => run(async () => {
+    const group_id = $('mod-group').value, file = $('mod-file').files[0];
+    if (!group_id || !file) throw Error('请选择群号和文件');
+    const result = await sendFile(file,'mod_start',{group_id});
+    status(result.duplicate ? '相同词库已存在' : `已保存 ${result.term_count} 个敏感词`);
+    $('mod-file').value = ''; await refreshModeration();
+  }));
+  $('mod-paste').addEventListener('click', () => run(async () => {
+    const group_id = $('mod-group').value, title = $('mod-title').value.trim(), content = $('mod-content').value.trim();
+    if (!group_id || !title || !content) throw Error('请选择群号并填写名称和敏感词');
+    const result = await action('mod_add_text',{group_id,title,content});
+    status(result.duplicate ? '相同词库已存在' : `已保存 ${result.term_count} 个敏感词`);
+    $('mod-content').value = ''; await refreshModeration();
+  }));
+  maibot.ready.then(() => Promise.all([refresh(),refreshModeration()]).catch(e => status(String(e),true)));
 })();
 </script>

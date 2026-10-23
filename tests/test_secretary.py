@@ -86,6 +86,10 @@ def test_sdk_exposes_secretary_tools_apis_and_hooks(tmp_path):
         ("API", "secretary_kb_add_text"),
         ("API", "secretary_kb_delete"),
         ("API", "secretary_kb_rebuild"),
+        ("API", "secretary_mod_list"),
+        ("API", "secretary_mod_start"),
+        ("API", "secretary_mod_add_text"),
+        ("API", "secretary_mod_delete"),
         ("API", "secretary_tasks_list"),
         ("API", "secretary_tasks_streams"),
         ("API", "secretary_tasks_create"),
@@ -98,10 +102,14 @@ def test_sdk_exposes_secretary_tools_apis_and_hooks(tmp_path):
         ("HOOK_HANDLER", "secretary_role_replyer_prompt"),
         ("HOOK_HANDLER", "secretary_poke_notice"),
         ("HOOK_HANDLER", "secretary_group_join_welcome"),
+        ("HOOK_HANDLER", "secretary_group_moderation_inbound"),
         ("HOOK_HANDLER", "secretary_message_debounce"),
     }
     hook_order = {item["name"]: item["metadata"].get("order") for item in components if item["type"] == "HOOK_HANDLER"}
     assert hook_order["secretary_message_debounce"] == "early"
+    assert hook_order["secretary_group_moderation_inbound"] == "early"
+    early_names = sorted(name for name, order in hook_order.items() if order == "early")
+    assert early_names.index("secretary_group_moderation_inbound") < early_names.index("secretary_message_debounce")
     assert hook_order["secretary_role_remember_speaker"] == "normal"
 
 

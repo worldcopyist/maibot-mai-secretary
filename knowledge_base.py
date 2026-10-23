@@ -28,7 +28,7 @@ MAX_EXTRACTED_CHARS = 1_000_000
 MAX_CHUNKS = 1600
 TEXT_SUFFIXES = {".txt", ".md", ".markdown", ".csv", ".tsv", ".json", ".jsonl", ".xml", ".yaml", ".yml", ".log", ".rst", ".tex"}
 SUPPORTED_SUFFIXES = TEXT_SUFFIXES | {".pdf", ".docx", ".xlsx", ".pptx", ".html", ".htm", ".rtf", ".epub", ".odt", ".ods", ".odp"}
-WORD_RE = re.compile(r"[a-z0-9_]{2,}|[\u3400-\u9fff]+", re.I)
+WORD_RE = re.compile(r"[a-z0-9_]{2,}|[\u3400-\u9fff]+", re.IGNORECASE)
 
 
 class KnowledgeError(ValueError):
@@ -134,7 +134,7 @@ def _zip_text(raw: bytes, suffix: str) -> str:
         raise KnowledgeError("文档压缩包或正文已损坏") from exc
 
 
-def extract_text(raw: bytes, filename: str) -> str:
+def extract_text(raw: bytes, filename: str, *, minimum_chars: int = 10) -> str:
     suffix = Path(filename).suffix.lower()
     if suffix not in SUPPORTED_SUFFIXES:
         raise KnowledgeError("不支持该格式；可上传 PDF、Word、Excel、PPT、EPUB、ODF、RTF、HTML、文本等")
@@ -155,8 +155,9 @@ def extract_text(raw: bytes, filename: str) -> str:
         text = re.sub(r"\\[a-zA-Z]+-?\d* ?|[{}]", " ", source)
     else:
         try:
-            from pypdf import PdfReader
             from io import BytesIO
+
+            from pypdf import PdfReader
             reader = PdfReader(BytesIO(raw), strict=False)
             if len(reader.pages) > 500:
                 raise KnowledgeError("PDF 超过 500 页")
@@ -172,9 +173,27 @@ def extract_text(raw: bytes, filename: str) -> str:
     text = re.sub(r"\n{3,}", "\n\n", text).strip()
     if len(text) > MAX_EXTRACTED_CHARS:
         raise KnowledgeError("提取的文字超过 100 万字")
-    if len(text) < 10:
+    if len(text) < minimum_chars:
         raise KnowledgeError("没有提取到足够文字；扫描版 PDF 需先做 OCR")
     return text
+
+
+def parse_moderation_terms(text: str) -> list[str]:
+    """Read one sensitive word/phrase per line, cell or delimited item."""
+    ignored = {"敏感词", "违禁词", "禁言词", "关键词", "词语", "内容", "词库"}
+    words: dict[str, str] = {}
+    for part in re.split(r"[\s,，;；]+", text):
+        word = part.strip("\"'“”‘’[]()（）:：-—、.。")
+        if not word or word.startswith("#") or "/" in word or word.isdecimal() or word in ignored:
+            continue
+        if not 1 <= len(word) <= 50:
+            raise KnowledgeError("敏感词须为 1–50 字；请每行或每个单元格只写一个词")
+        words.setdefault(word.casefold(), word)
+        if len(words) > 1000:
+            raise KnowledgeError("每份群管词库最多 1000 个敏感词")
+    if not words:
+        raise KnowledgeError("没有找到敏感词；请每行或每个单元格写一个词")
+    return list(words.values())
 
 
 def split_text(text: str, size: int, overlap: int) -> list[str]:
@@ -235,6 +254,7 @@ class KnowledgeBaseModule:
         self.jobs: set[asyncio.Task[Any]] = set()
         self.sessions: dict[str, dict[str, Any]] = {}
         self.lock = asyncio.Lock()
+        self._moderation_terms: dict[str, tuple[tuple[str, str], ...]] = {}
 
     def load_state(self, data: dict[str, Any]) -> None:
         del data
@@ -268,6 +288,7 @@ class KnowledgeBaseModule:
         self.root = Path(self.plugin.ctx.paths.data_dir) / "knowledge_base"
         (self.root / "sources").mkdir(parents=True, exist_ok=True)
         (self.root / "staging").mkdir(exist_ok=True)
+        (self.root / "moderation_sources").mkdir(exist_ok=True)
         self.db_path = self.root / "knowledge.sqlite3"
         with self._db() as db:
             db.executescript("""
@@ -284,11 +305,18 @@ class KnowledgeBaseModule:
                     PRIMARY KEY(term,chunk_id));
                 CREATE INDEX IF NOT EXISTS terms_chunk ON terms(chunk_id);
                 CREATE INDEX IF NOT EXISTS chunks_doc ON chunks(document_id);
+                CREATE TABLE IF NOT EXISTS moderation_documents(
+                    id TEXT PRIMARY KEY, group_id TEXT NOT NULL, name TEXT NOT NULL,
+                    sha256 TEXT NOT NULL, size INTEGER NOT NULL, terms_json TEXT NOT NULL,
+                    created REAL NOT NULL);
+                CREATE UNIQUE INDEX IF NOT EXISTS moderation_group_sha
+                    ON moderation_documents(group_id,sha256);
             """)
             db.commit()
             pending = [row["id"] for row in db.execute("SELECT id FROM documents WHERE status IN ('queued','indexing')")]
         for document_id in pending:
             self._launch(document_id)
+        self._reload_moderation_terms()
 
     async def stop(self) -> None:
         for job in self.jobs:
@@ -306,8 +334,25 @@ class KnowledgeBaseModule:
         if not self.plugin.config.plugin.enabled or not self.plugin.config.knowledge_base.enabled:
             raise KnowledgeError("知识库模块未启用")
 
-    async def start_upload(self, filename: str, size: int) -> dict[str, Any]:
-        self._enabled()
+    def _moderation_group(self, group_id: str) -> str:
+        group_id = str(group_id).strip()
+        if group_id not in self.plugin.config.group_admin.managed_group_ids:
+            raise KnowledgeError("请先在小秘书的 QQ群管设置中添加这个群号")
+        return group_id
+
+    def _upload_allowed(self, session: dict[str, Any]) -> None:
+        if session.get("purpose") == "moderation":
+            self._moderation_group(str(session.get("group_id") or ""))
+        else:
+            self._enabled()
+
+    async def start_upload(self, filename: str, size: int, *, purpose: str = "general", group_id: str = "") -> dict[str, Any]:
+        if purpose == "moderation":
+            group_id = self._moderation_group(group_id)
+        elif purpose == "general":
+            self._enabled()
+        else:
+            raise KnowledgeError("未知的知识库区域")
         name = Path(str(filename).replace("\\", "/")).name.strip()[:120]
         if not name or Path(name).suffix.lower() not in SUPPORTED_SUFFIXES:
             raise KnowledgeError("文件名或文件格式不受支持")
@@ -317,15 +362,15 @@ class KnowledgeBaseModule:
             raise KnowledgeError("已有 4 个上传进行中")
         token = uuid.uuid4().hex
         (self.root / "staging" / token).write_bytes(b"")
-        self.sessions[token] = {"name": name, "size": size, "received": 0, "sequence": 0, "created": time.time()}
+        self.sessions[token] = {"name": name, "size": size, "received": 0, "sequence": 0, "created": time.time(), "purpose": purpose, "group_id": group_id}
         return {"upload_id": token}
 
     async def append_upload(self, upload_id: str, sequence: int, data: str) -> dict[str, Any]:
-        self._enabled()
         async with self.lock:
             session = self.sessions.get(upload_id)
             if not session or time.time() - session["created"] > 3600:
                 raise KnowledgeError("上传会话不存在或已过期")
+            self._upload_allowed(session)
             if type(sequence) is not int or sequence != session["sequence"]:
                 raise KnowledgeError("上传分块顺序错误")
             try:
@@ -341,15 +386,20 @@ class KnowledgeBaseModule:
             return {"received": session["received"], "total": session["size"]}
 
     async def finish_upload(self, upload_id: str) -> dict[str, Any]:
-        self._enabled()
         async with self.lock:
-            session = self.sessions.pop(upload_id, None)
+            session = self.sessions.get(upload_id)
             if not session or session["received"] != session["size"]:
                 raise KnowledgeError("上传未完成或已过期")
+            self._upload_allowed(session)
+            self.sessions.pop(upload_id)
             path = self.root / "staging" / upload_id
             raw = path.read_bytes()
             path.unlink(missing_ok=True)
-            return self._save_document(session["name"], raw)
+        if session["purpose"] == "moderation":
+            result = await asyncio.to_thread(self._save_moderation_document, session["group_id"], session["name"], raw)
+            self._reload_moderation_terms()
+            return result
+        return self._save_document(session["name"], raw)
 
     async def add_text(self, title: str, content: str) -> dict[str, Any]:
         self._enabled()
@@ -358,6 +408,98 @@ class KnowledgeBaseModule:
         if len(raw) > 50_000:
             raise KnowledgeError("单次粘贴最多 50 KB；更长文本请保存为文件上传")
         return self._save_document(name + ".txt", raw)
+
+    async def add_moderation_text(self, group_id: str, title: str, content: str) -> dict[str, Any]:
+        group_id = self._moderation_group(group_id)
+        name = re.sub(r"[^\w\u3400-\u9fff .()-]", "_", str(title).strip())[:100] or "群管敏感词"
+        raw = str(content).encode("utf-8")
+        if not raw or len(raw) > 50_000:
+            raise KnowledgeError("敏感词文本最多 50 KB")
+        result = await asyncio.to_thread(self._save_moderation_document, group_id, name + ".txt", raw)
+        self._reload_moderation_terms()
+        return result
+
+    def _save_moderation_document(self, group_id: str, name: str, raw: bytes) -> dict[str, Any]:
+        text = extract_text(raw, name, minimum_chars=1)
+        terms = parse_moderation_terms(text)
+        digest = hashlib.sha256(raw).hexdigest()
+        with self._db() as db:
+            existing = db.execute(
+                "SELECT id FROM moderation_documents WHERE group_id=? AND sha256=?", (group_id, digest),
+            ).fetchone()
+            if existing:
+                return {"document_id": existing["id"], "duplicate": True, "term_count": len(terms)}
+            rows = db.execute("SELECT terms_json FROM moderation_documents WHERE group_id=?", (group_id,)).fetchall()
+            all_terms = {unicodedata.normalize("NFKC", term).casefold() for row in rows for term in json.loads(row["terms_json"])}
+            all_terms.update(unicodedata.normalize("NFKC", term).casefold() for term in terms)
+            if len(all_terms) > 3000 or len(rows) >= 100:
+                raise KnowledgeError("这个群的词库已达到 3000 词或 100 份文档上限")
+            document_id = uuid.uuid4().hex
+            source = self.root / "moderation_sources" / document_id
+            source.write_bytes(raw)
+            try:
+                db.execute(
+                    "INSERT INTO moderation_documents(id,group_id,name,sha256,size,terms_json,created) VALUES(?,?,?,?,?,?,?)",
+                    (document_id, group_id, name, digest, len(raw), json.dumps(terms, ensure_ascii=False), time.time()),
+                )
+                db.commit()
+            except Exception:
+                source.unlink(missing_ok=True)
+                raise
+        return {"document_id": document_id, "duplicate": False, "term_count": len(terms)}
+
+    def _reload_moderation_terms(self) -> None:
+        by_group: dict[str, dict[str, str]] = {}
+        with self._db() as db:
+            rows = db.execute("SELECT group_id,terms_json FROM moderation_documents").fetchall()
+        for row in rows:
+            group = by_group.setdefault(str(row["group_id"]), {})
+            for term in json.loads(row["terms_json"]):
+                group.setdefault(unicodedata.normalize("NFKC", term).casefold(), term)
+        self._moderation_terms = {
+            group: tuple((term, folded) for folded, term in sorted(words.items(), key=lambda pair: -len(pair[0])))
+            for group, words in by_group.items()
+        }
+
+    def moderation_matches(self, group_id: str, text: str) -> list[str]:
+        folded = unicodedata.normalize("NFKC", text).casefold()
+        return [term for term, key in self._moderation_terms.get(group_id, ()) if key in folded][:12]
+
+    async def list_moderation_documents(self) -> dict[str, Any]:
+        with self._db() as db:
+            rows = db.execute(
+                "SELECT id,group_id,name,size,terms_json,created FROM moderation_documents ORDER BY created DESC LIMIT 200",
+            ).fetchall()
+        settings = self.plugin.config.group_admin
+        return {
+            "groups": settings.managed_group_ids,
+            "settings": {
+                "enabled": settings.enabled and settings.moderation_enabled,
+                "recall": settings.moderation_recall,
+                "mute": settings.moderation_mute,
+                "mute_minutes": settings.moderation_mute_minutes,
+                "sensitivity": settings.moderation_sensitivity,
+            },
+            "documents": [
+                {"id": row["id"], "group_id": row["group_id"], "name": row["name"],
+                 "size": row["size"], "term_count": len(terms := json.loads(row["terms_json"])),
+                 "preview": terms[:20], "created": row["created"]}
+                for row in rows
+            ],
+        }
+
+    async def delete_moderation_document(self, document_id: str) -> dict[str, Any]:
+        if not re.fullmatch(r"[0-9a-f]{32}", str(document_id)):
+            raise KnowledgeError("词库文档编号无效")
+        with self._db() as db:
+            row = db.execute("SELECT id FROM moderation_documents WHERE id=?", (document_id,)).fetchone()
+            if row is None:
+                raise KnowledgeError("词库文档不存在")
+            db.execute("DELETE FROM moderation_documents WHERE id=?", (document_id,))
+            db.commit()
+        (self.root / "moderation_sources" / document_id).unlink(missing_ok=True)
+        self._reload_moderation_terms()
+        return {"deleted": True}
 
     def _save_document(self, name: str, raw: bytes) -> dict[str, Any]:
         if not raw or len(raw) > MAX_FILE_BYTES:
@@ -409,7 +551,7 @@ class KnowledgeBaseModule:
                 try:
                     for offset in range(0, len(chunks), 8):
                         vectors.extend(await self._embed_batch(chunks[offset : offset + 8]))
-                except Exception as exc:
+                except Exception as exc:  # noqa: BLE001 - keep keyword retrieval when embeddings fail
                     embedding_error = f"向量生成失败，已保留关键词检索：{str(exc)[:160]}"
                     vectors = []
             with self._db() as db:
@@ -513,7 +655,7 @@ class KnowledgeBaseModule:
                     target_id = str(item.get("group_id" if kind == "group" else "user_id") or "")
                     alias = f"{item.get('platform')}:{kind}:{target_id}"
                     authorized = bool(target_id and alias in allowed)
-            except Exception:
+            except Exception:  # noqa: BLE001 - deny access if stream validation fails
                 authorized = False
         if not authorized:
             return {"success": False, "error": "当前聊天流没有知识库访问权限"}

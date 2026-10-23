@@ -41,14 +41,18 @@
       "layout": "document",
       "queries": {
         "list": {"api": "secretary_kb_list"},
+        "mod_list": {"api": "secretary_mod_list"},
         "search": {"api": "secretary_kb_search", "parameters": {"query": {"type": "string", "required": true, "max_length": 500}}}
       },
       "actions": {
         "start": {"api": "secretary_kb_start", "parameters": {"filename": {"type": "string", "required": true, "max_length": 120}, "size": {"type": "integer", "required": true, "minimum": 1, "maximum": 8388608}}},
+        "mod_start": {"api": "secretary_mod_start", "parameters": {"group_id": {"type": "string", "required": true, "max_length": 20}, "filename": {"type": "string", "required": true, "max_length": 120}, "size": {"type": "integer", "required": true, "minimum": 1, "maximum": 8388608}}},
         "append": {"api": "secretary_kb_append", "parameters": {"upload_id": {"type": "string", "required": true, "max_length": 32}, "sequence": {"type": "integer", "required": true, "minimum": 0}, "data": {"type": "string", "required": true, "max_length": 50000}}},
         "finish": {"api": "secretary_kb_finish", "parameters": {"upload_id": {"type": "string", "required": true, "max_length": 32}}},
         "add_text": {"api": "secretary_kb_add_text", "parameters": {"title": {"type": "string", "required": true, "max_length": 100}, "content": {"type": "string", "required": true, "max_length": 45000}}},
+        "mod_add_text": {"api": "secretary_mod_add_text", "parameters": {"group_id": {"type": "string", "required": true, "max_length": 20}, "title": {"type": "string", "required": true, "max_length": 100}, "content": {"type": "string", "required": true, "max_length": 45000}}},
         "delete": {"api": "secretary_kb_delete", "parameters": {"document_id": {"type": "string", "required": true, "max_length": 32}}, "confirmation": "确定永久删除这份文档和它的检索索引吗？"},
+        "mod_delete": {"api": "secretary_mod_delete", "parameters": {"document_id": {"type": "string", "required": true, "max_length": 32}}, "confirmation": "确定删除这份群管敏感词文档吗？"},
         "rebuild": {"api": "secretary_kb_rebuild", "parameters": {"document_id": {"type": "string", "required": true, "max_length": 32}}}
       }
     }
