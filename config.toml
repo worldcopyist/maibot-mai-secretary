@@ -10,6 +10,23 @@ admin_accounts = []
 [scheduled_tasks]
 enabled = true
 
+[task_receipts]
+enabled = true
+wait_minutes = 15
+
+[relationships]
+enabled = true
+
+[followups]
+enabled = false
+auto_capture = false
+max_active_per_user = 10
+
+[blueberry_budget]
+enabled = false
+low_balance_threshold = 10.0
+alert_cooldown_hours = 24
+
 [message_debounce]
 enabled = true
 debounce_seconds = 2.0
@@ -101,6 +118,8 @@ semantic_search = true
 
 [deepseek_web]
 enabled = false
+search_enabled = true
+balance_enabled = true
 api_key = ""
 balance_alias = ""
 auto_balance_enabled = false

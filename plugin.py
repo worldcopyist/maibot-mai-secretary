@@ -25,8 +25,11 @@ from maibot_sdk.types import (
 from pydantic import field_validator, model_validator
 
 from .anti_bullying import AntiBullyingModule, normalize_admin_account
+from .blueberry_budget import BlueberryBudgetModule
 from .daily_report import DailyReportModule
 from .deepseek_web import DeepSeekWebModule
+from .feature_control import FeatureControlModule
+from .followups import FollowupModule
 from .group_admin import GroupAdminModule
 from .group_moderation import GroupModerationModule
 from .knowledge_base import KnowledgeBaseModule, KnowledgeError
@@ -34,8 +37,11 @@ from .message_debounce import MessageDebounceModule
 from .module_contract import SecretaryModule
 from .poke_interaction import PokeInteractionModule
 from .proactive_chat import ProactiveChatModule
+from .prompts import CONTROL_ROUTING_PROMPT
+from .relationship_management import RelationshipManagementModule
 from .role_recognition import RoleRecognitionModule
 from .scheduled_tasks import ScheduledTasksModule
+from .task_receipts import TaskReceiptModule
 from .virtual_life import VirtualLifeSettings
 from .voice_synthesis import AZURE_VOICE_PROMPT, VoiceSynthesisModule
 
@@ -129,6 +135,31 @@ class ScheduledTasksSettings(PluginConfigBase):
             "hint": "关闭后不再创建或执行任务；已有任务仍可查看和取消。",
         },
     )
+
+
+class TaskReceiptSettings(PluginConfigBase):
+    __ui_label__: ClassVar[str] = "任务回执"
+    enabled: bool = Field(default=True, json_schema_extra={"label": "启用任务发送回执", "hint": "将定时任务的入队和实际发送分开记录；发送结果不明时不会自动重发。"})
+    wait_minutes: int = Field(default=15, ge=1, le=120, json_schema_extra={"label": "等待发送回执（分钟）", "hint": "超过时间仍未匹配到发送结果时标记为未知，不冒称已经送达。"})
+
+
+class RelationshipManagementSettings(PluginConfigBase):
+    __ui_label__: ClassVar[str] = "关系管理"
+    enabled: bool = Field(default=True, json_schema_extra={"label": "允许自然语言管理关系", "hint": "管理员可用准确平台账号设置熟人、陌生人或清除关系记录；普通用户只能看自己的关系。"})
+
+
+class FollowupSettings(PluginConfigBase):
+    __ui_label__: ClassVar[str] = "约定回访"
+    enabled: bool = Field(default=False, json_schema_extra={"label": "启用约定回访", "hint": "用户可请麦麦在未来回访一个话题；默认关闭以免突然打扰。"})
+    auto_capture: bool = Field(default=False, json_schema_extra={"label": "自动发现次日回访", "hint": "仅在私聊中识别明确的‘我明天/后天有比赛、考试、面试’等事件，事件次日晚上回访；默认关闭。"})
+    max_active_per_user: int = Field(default=10, ge=1, le=50, json_schema_extra={"label": "每人最多待回访数量"})
+
+
+class BlueberryBudgetSettings(PluginConfigBase):
+    __ui_label__: ClassVar[str] = "蓝莓预算提醒"
+    enabled: bool = Field(default=False, json_schema_extra={"label": "启用余额预警", "hint": "使用已有的 DeepSeek 余额记录；只向管理员私聊提醒，不额外产生查询请求。"})
+    low_balance_threshold: float = Field(default=10.0, ge=0.0, le=1000000.0, json_schema_extra={"label": "低余额提醒线", "hint": "按余额接口返回的各币种分别比较；0 表示只在余额为零时提醒。"})
+    alert_cooldown_hours: int = Field(default=24, ge=1, le=168, json_schema_extra={"label": "重复提醒间隔（小时）"})
 
 
 class VoiceSynthesisSettings(PluginConfigBase):
@@ -631,6 +662,8 @@ class DeepSeekWebSettings(PluginConfigBase):
         description="启用小秘书自带的 DeepSeek Search / Fetch 与余额查询工具",
         json_schema_extra={"label": "启用 DeepSeek 模块", "hint": "填写 API Key 并开启后，麦麦可搜索、读取网页；已核验的管理员还可查询该 Key 所属账号的余额。"},
     )
+    search_enabled: bool = Field(default=True, json_schema_extra={"label": "允许联网搜索与抓取", "hint": "自然语言开关可单独控制，不影响余额查询。"})
+    balance_enabled: bool = Field(default=True, json_schema_extra={"label": "允许查询 API 余额", "hint": "自然语言开关可单独控制，不影响联网搜索。"})
     api_key: str = Field(
         default="",
         description="DeepSeek Search / Fetch API Key",
@@ -748,6 +781,10 @@ class SecretaryConfig(PluginConfigBase):
     scheduled_tasks: ScheduledTasksSettings = Field(
         default_factory=ScheduledTasksSettings
     )
+    task_receipts: TaskReceiptSettings = Field(default_factory=TaskReceiptSettings)
+    relationships: RelationshipManagementSettings = Field(default_factory=RelationshipManagementSettings)
+    followups: FollowupSettings = Field(default_factory=FollowupSettings)
+    blueberry_budget: BlueberryBudgetSettings = Field(default_factory=BlueberryBudgetSettings)
     daily_report: DailyReportSettings = Field(default_factory=DailyReportSettings)
     proactive: ProactiveSettings = Field(default_factory=ProactiveSettings)
     virtual_life: VirtualLifeSettings = Field(default_factory=VirtualLifeSettings)
@@ -765,6 +802,11 @@ class MaiSecretaryPlugin(MaiBotPlugin):
     def __init__(self) -> None:
         super().__init__()
         self.scheduled = ScheduledTasksModule(self)
+        self.feature_control = FeatureControlModule(self)
+        self.task_receipts = TaskReceiptModule(self)
+        self.relationships = RelationshipManagementModule(self)
+        self.followups = FollowupModule(self)
+        self.blueberry_budget = BlueberryBudgetModule(self)
         self.daily_report = DailyReportModule(self)
         self.role_recognition = RoleRecognitionModule(self)
         self.poke = PokeInteractionModule(self)
@@ -778,6 +820,11 @@ class MaiSecretaryPlugin(MaiBotPlugin):
         self.message_debounce = MessageDebounceModule(self)
         self._modules: dict[str, SecretaryModule] = {}
         self._register_module(self.scheduled)
+        self._register_module(self.feature_control)
+        self._register_module(self.task_receipts)
+        self._register_module(self.relationships)
+        self._register_module(self.followups)
+        self._register_module(self.blueberry_budget)
         self._register_module(self.daily_report)
         self._register_module(self.role_recognition)
         self._register_module(self.poke)
@@ -807,6 +854,7 @@ class MaiSecretaryPlugin(MaiBotPlugin):
         self._state_path = Path(self.ctx.paths.data_dir) / "secretary-state.json"
         self._state_path.parent.mkdir(parents=True, exist_ok=True)
         self._load_state()
+        self.feature_control.apply()
         await self.role_recognition.start()
         await self.deepseek_web.start()
         await self.knowledge_base.start()
@@ -835,8 +883,9 @@ class MaiSecretaryPlugin(MaiBotPlugin):
     async def on_config_update(
         self, scope: str, config_data: dict[str, Any], version: str
     ) -> None:
-        del config_data, version
+        del version
         if scope == "self":
+            self.feature_control.apply(config_data)
             for feature in self._modules.values():
                 feature.on_config_update()
             self._wake.set()
@@ -903,7 +952,7 @@ class MaiSecretaryPlugin(MaiBotPlugin):
     async def _trigger(
         self, stream_id: str, intent: str, reason: str, event_id: str,
         *, target: str = "", requester_account: str = "",
-    ) -> None:
+    ) -> Any:
         self.role_recognition.mark_proactive(stream_id, target, account=requester_account)
         try:
             result = await self.ctx.maisaka.proactive.trigger(
@@ -914,6 +963,7 @@ class MaiSecretaryPlugin(MaiBotPlugin):
             )
             if isinstance(result, dict) and result.get("success") is False:
                 raise RuntimeError(str(result.get("error") or "主动任务接口拒绝了请求"))
+            return result
         except Exception:
             self.role_recognition.clear_proactive(stream_id)
             raise
@@ -1012,7 +1062,27 @@ class MaiSecretaryPlugin(MaiBotPlugin):
         query_result = None
         if record and record["account"] in await self.role_recognition.admin_accounts(force_refresh=True):
             query_result = await self.deepseek_web.refresh_for_admin_question(record)
-        return self._inject_balance_context(result, query_result=query_result)
+        return self._inject_control_context(self._inject_balance_context(result, query_result=query_result))
+
+    def _inject_control_context(self, result: dict[str, Any]) -> dict[str, Any]:
+        if not self.config.plugin.enabled:
+            return result
+        items = result.get("modified_kwargs", {}).get("items")
+        if not isinstance(items, list):
+            return result
+        marker = "【麦麦小秘书·功能操作】"
+        if any(marker in str(part.get("text") or "") for item in items if isinstance(item, dict)
+               for part in item.get("parts") or [] if isinstance(part, dict)):
+            return result
+        system_index = next((index for index, item in enumerate(items)
+                             if isinstance(item, dict) and item.get("item_type") == "SystemMessageItem"), -1)
+        items.insert(system_index + 1, {
+            "item_type": "UserMessageItem",
+            "meta": {"item_id": f"mai-secretary-control-{uuid.uuid4().hex}",
+                     "logical_turn_id": None, "timestamp": datetime.now().astimezone().isoformat()},
+            "parts": [{"type": "text", "text": CONTROL_ROUTING_PROMPT}],
+        })
+        return result
 
     def _inject_balance_context(
         self, result: dict[str, Any], *, query_result: dict[str, Any] | None = None,
@@ -1082,6 +1152,18 @@ class MaiSecretaryPlugin(MaiBotPlugin):
         await self.anti_bullying.on_inbound(message)
 
     @HookHandler(
+        "chat.receive.after_process",
+        name="secretary_followup_inbound",
+        mode=HookMode.OBSERVE,
+        description="仅在私聊中识别明确提到的未来事件，按回访设置安排问候",
+    )
+    async def capture_followup_event(
+        self, message: dict[str, Any] | None = None, **kwargs: Any,
+    ) -> None:
+        del kwargs
+        await self.followups.on_inbound(message)
+
+    @HookHandler(
         "send_service.after_send",
         name="secretary_capture_proactive_reply",
         mode=HookMode.OBSERVE,
@@ -1107,6 +1189,102 @@ class MaiSecretaryPlugin(MaiBotPlugin):
     ) -> None:
         del kwargs
         await self.role_recognition.record_interaction(message, sent, reply_message_id)
+
+    @HookHandler(
+        "send_service.after_send",
+        name="secretary_task_receipt_after_send",
+        mode=HookMode.OBSERVE,
+        description="匹配定时任务实际发送结果并写入回执",
+    )
+    async def capture_task_receipt(
+        self, message: dict[str, Any] | None = None,
+        sent: bool = False, reply_message_id: str | None = None,
+        **kwargs: Any,
+    ) -> None:
+        del kwargs
+        await self.task_receipts.observe_send(message, sent, reply_message_id)
+
+    @Tool(
+        "secretary_feature_switch",
+        description=(
+            "小秘书功能总开关。仅已核验管理员说‘开启/关闭某模块’时调用；"
+            "action=list 查看准确名称，enable 开启，disable 关闭，reset 恢复 WebUI 原配置。"
+            "feature 填列表中的准确中文名称或键名，多个用逗号分隔。"
+            "此工具不能重新启用被 MaiBot 管理页整体卸载或关闭的插件。"
+        ),
+        parameters=[
+            ToolParameterInfo(name="action", param_type=ToolParamType.STRING, description="list、enable、disable 或 reset", required=True),
+            ToolParameterInfo(name="feature", param_type=ToolParamType.STRING, description="功能列表中的名称；list 时可省略", required=False),
+        ],
+        visibility="visible",
+    )
+    async def secretary_feature_switch(self, action: str, feature: str = "", **kwargs: Any) -> dict[str, Any]:
+        return await self.feature_control.tool(action, feature, **kwargs)
+
+    @Tool(
+        "secretary_relationship",
+        description=(
+            "自然语言关系管理。任何人可用 action=show,target=我 查看自己的级别；"
+            "已核验管理员可 list 查看全部，或对准确账号 qq:QQ号 使用 familiar 设为熟人、"
+            "stranger 设为陌生人、reset 清除手动级别及互动计数。主人由管理员权限决定，不能降级。"
+        ),
+        parameters=[
+            ToolParameterInfo(name="action", param_type=ToolParamType.STRING, description="show、list、familiar、stranger 或 reset", required=True),
+            ToolParameterInfo(name="target", param_type=ToolParamType.STRING, description="我或准确账号，如 qq:123456789", required=False),
+        ],
+        visibility="visible",
+    )
+    async def secretary_relationship(self, action: str = "show", target: str = "", **kwargs: Any) -> dict[str, Any]:
+        return await self.relationships.tool(action, target, **kwargs)
+
+    @Tool(
+        "secretary_task_receipts",
+        description=(
+            "查看当前聊天流的定时任务送达回执。action=list 时 sent 表示已确认发送，accepted 仅表示入队，"
+            "unknown 需人工核对；仅管理员可对明确 send_failed 的回执用 retry 重试一次。"
+        ),
+        parameters=[
+            ToolParameterInfo(name="action", param_type=ToolParamType.STRING, description="list 或 retry", required=True),
+            ToolParameterInfo(name="receipt_id", param_type=ToolParamType.STRING, description="重试时填写回执编号", required=False),
+        ],
+        visibility="visible",
+    )
+    async def secretary_task_receipts(self, action: str = "list", receipt_id: str = "", **kwargs: Any) -> dict[str, Any]:
+        return await self.task_receipts.tool(action, receipt_id, **kwargs)
+
+    @Tool(
+        "secretary_followup",
+        description=(
+            "用户说以后想被问候某件事时，用 create 建立当前聊天流的回访，topic 是事件，at 是带时区 ISO 时间；"
+            "list 查看、cancel 取消自己的回访，opt_out/opt_in 关闭或恢复自己的个人回访。"
+            "时间含糊时先问清楚，不能凭空安排。模块总开关由管理员用 secretary_feature_switch 控制。"
+        ),
+        parameters=[
+            ToolParameterInfo(name="action", param_type=ToolParamType.STRING, description="create、list、cancel、opt_out 或 opt_in", required=True),
+            ToolParameterInfo(name="topic", param_type=ToolParamType.STRING, description="回访的事情", required=False),
+            ToolParameterInfo(name="at", param_type=ToolParamType.STRING, description="带时区的 ISO 回访时间", required=False),
+            ToolParameterInfo(name="followup_id", param_type=ToolParamType.STRING, description="取消时填写编号", required=False),
+        ],
+        visibility="visible",
+    )
+    async def secretary_followup(self, action: str, topic: str = "", at: str = "", followup_id: str = "", **kwargs: Any) -> dict[str, Any]:
+        return await self.followups.tool(action, topic, at, followup_id, **kwargs)
+
+    @Tool(
+        "secretary_blueberry_budget",
+        description=(
+            "已核验管理员查看蓝莓（DeepSeek API 余额）的历史趋势和低余额提醒线时使用。"
+            "status 只读本地已保存的查询记录，不发起实时查询；set_threshold 设置低余额数值提醒线。"
+            "管理员明确询问现在还剩多少蓝莓时应使用 secretary_deepseek_balance 实时查询。"
+        ),
+        parameters=[
+            ToolParameterInfo(name="action", param_type=ToolParamType.STRING, description="status 或 set_threshold", required=True),
+            ToolParameterInfo(name="amount", param_type=ToolParamType.NUMBER, description="提醒线金额，set_threshold 时填写", required=False),
+        ],
+        visibility="visible",
+    )
+    async def secretary_blueberry_budget(self, action: str = "status", amount: float = 0, **kwargs: Any) -> dict[str, Any]:
+        return await self.blueberry_budget.tool(action, amount, **kwargs)
 
     @Tool(
         "secretary_create_task",
@@ -1351,6 +1529,48 @@ class MaiSecretaryPlugin(MaiBotPlugin):
     )
     async def secretary_deepseek_balance(self, **kwargs: Any) -> dict[str, Any]:
         return await self.deepseek_web.balance(**kwargs)
+
+    @API("secretary_workbench_status", description="WebUI 查看模块开关、关系、回访、任务回执与蓝莓预算")
+    async def secretary_workbench_status(self, **kwargs: Any) -> dict[str, Any]:
+        del kwargs
+        return {
+            "switches": self.feature_control.rows(),
+            "relationships": await self.relationships.list_rows(),
+            "followups": (await self.followups.webui_list())["followups"],
+            "receipts": (await self.task_receipts.webui_list())["receipts"],
+            "budget": self.blueberry_budget.status(),
+        }
+
+    @API("secretary_feature_set", description="WebUI 调整小秘书功能开关")
+    async def secretary_feature_set(self, action: str, feature: str, **kwargs: Any) -> dict[str, Any]:
+        del kwargs
+        return await self.feature_control.set_switches(action, feature)
+
+    @API("secretary_relationship_set", description="WebUI 指定账号关系级别")
+    async def secretary_relationship_set(self, action: str, account: str, **kwargs: Any) -> dict[str, Any]:
+        del kwargs
+        return await self.relationships.change(action, account)
+
+    @API("secretary_receipt_retry", description="WebUI 手动重试明确发送失败的任务")
+    async def secretary_receipt_retry(self, receipt_id: str, **kwargs: Any) -> dict[str, Any]:
+        del kwargs
+        return await self.task_receipts.retry(receipt_id)
+
+    @API("secretary_followup_cancel", description="WebUI 取消待执行回访")
+    async def secretary_followup_cancel(self, followup_id: str, **kwargs: Any) -> dict[str, Any]:
+        del kwargs
+        async with self._lock:
+            item = self.followups.items.get(followup_id)
+            if item is None or item.get("status") != "active":
+                return {"success": False, "error": "没有找到待执行的回访"}
+            item["status"] = "cancelled"
+            self._save_state()
+        return {"success": True, "content": "已取消回访"}
+
+    @API("secretary_budget_threshold", description="WebUI 设置蓝莓低余额提醒线")
+    async def secretary_budget_threshold(self, amount: float, **kwargs: Any) -> dict[str, Any]:
+        del kwargs
+        return await self.blueberry_budget.set_threshold(amount)
 
     @staticmethod
     async def _kb_api(operation: Awaitable[dict[str, Any]]) -> dict[str, Any]:

@@ -59,3 +59,20 @@ class BalanceHistoryStore:
             "account_fingerprint": account_fingerprint,
             "is_available": bool(row[3]), "balance_infos": json.loads(row[4]),
         }
+
+    def recent(self, account_fingerprint: str, limit: int = 20) -> list[dict[str, Any]]:
+        with sqlite3.connect(self.path) as db:
+            rows = db.execute(
+                """SELECT queried_at, source, alias, is_available, balance_infos
+                   FROM balance_snapshots WHERE account_fingerprint = ?
+                   ORDER BY id DESC LIMIT ?""",
+                (account_fingerprint, max(1, min(int(limit), 100))),
+            ).fetchall()
+        return [
+            {
+                "queried_at": row[0], "source": row[1], "alias": row[2],
+                "account_fingerprint": account_fingerprint,
+                "is_available": bool(row[3]), "balance_infos": json.loads(row[4]),
+            }
+            for row in rows
+        ]

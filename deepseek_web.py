@@ -102,7 +102,7 @@ class DeepSeekWebModule:
     async def tick(self, now: datetime) -> None:
         if (
             self._stopping or not self.plugin.config.plugin.enabled
-            or not self.settings.enabled or not self.settings.auto_balance_enabled
+            or not self.settings.enabled or not self.settings.balance_enabled or not self.settings.auto_balance_enabled
             or not self.settings.api_key.strip()
             or (self._balance_refresh_task is not None and not self._balance_refresh_task.done())
         ):
@@ -160,6 +160,8 @@ class DeepSeekWebModule:
     ) -> dict[str, Any]:
         try:
             self._check_enabled()
+            if not self.settings.search_enabled:
+                raise WebSearchError("联网搜索已关闭。")
             if not isinstance(query, str) or not 1 <= len(query.strip()) <= 128:
                 raise WebSearchError("query 必须为 1–128 个字符的搜索词。")
             if count is None:
@@ -196,6 +198,8 @@ class DeepSeekWebModule:
     async def fetch(self, url: str) -> dict[str, Any]:
         try:
             self._check_enabled()
+            if not self.settings.search_enabled:
+                raise WebSearchError("网页抓取已关闭。")
             address = self._http_url(url, 8192, "url")
             response = await self._request("fetch", {"url": address})
             body = response.get("content")
@@ -220,6 +224,8 @@ class DeepSeekWebModule:
         """Return the configured DeepSeek account balance to a verified admin."""
         try:
             self._check_enabled()
+            if not self.settings.balance_enabled:
+                raise WebSearchError("API 余额查询已关闭。")
             stream_id = str(kwargs.get("stream_id") or "").strip()
             chat_id = str(kwargs.get("chat_id") or "").strip()
             if not stream_id or stream_id != chat_id:
@@ -241,6 +247,8 @@ class DeepSeekWebModule:
 
     async def refresh_for_admin_question(self, record: dict[str, Any]) -> dict[str, Any]:
         """Fetch a fresh balance before the planner sees an admin's question."""
+        if not self.settings.balance_enabled:
+            return self._failure("API 余额查询", "API 余额查询已关闭。")
         return await self._query_balance_for_record(record, already_claimed=False)
 
     async def _query_balance_for_record(
@@ -270,6 +278,8 @@ class DeepSeekWebModule:
 
     async def _fetch_and_store_balance(self, source: str) -> dict[str, Any]:
         self._check_enabled()
+        if not self.settings.balance_enabled:
+            raise WebSearchError("API 余额查询已关闭。")
         base_url, key, alias = self._base_url(), self._api_key(), self.settings.balance_alias
         fingerprint = self._fingerprint(base_url, key)
         data = await self._request_balance(base_url=base_url, key=key)
@@ -288,10 +298,11 @@ class DeepSeekWebModule:
                 self._latest_balance = snapshot
         except WebSearchError:
             self._latest_balance = None
+        self.plugin.blueberry_budget.on_snapshot(snapshot)
         return snapshot
 
     def balance_context_note(self, *, query_result: dict[str, Any] | None = None) -> str:
-        if not self.plugin.config.plugin.enabled or not self.settings.enabled:
+        if not self.plugin.config.plugin.enabled or not self.settings.enabled or not self.settings.balance_enabled:
             return ""
         alias = self.settings.balance_alias
         owner_alias_rule = (

@@ -52,26 +52,31 @@ class ScheduledTasksModule:
                 task.last_error = "服务停止或延迟过久，已跳过本次执行"
                 self.plugin._save_state()
                 continue
-            intent = (
-                f"{PERSONA_PRIORITY_PROMPT}\n"
-                "用户之前设置的定时任务现在到点了。请在当前聊天流中完成这项请求："
-                f"{task.instruction}。结合当前上下文回答；如任务需要天气等实时信息，"
-                "请调用 `secretary_deepseek_search` 查证；已有链接需要正文时再调用 `secretary_deepseek_fetch`。"
-                "若无法取得可靠的实时数据，明确说明，勿编造。"
-                "本轮是在执行已创建的任务，不要调用 `secretary_create_task` 重复设置。"
-                f"{TOOL_ROUTING_PROMPT}"
-            )
             try:
-                await self.plugin._trigger(
-                    task.stream_id, intent, "定时任务到点", task.id
+                result = await self.plugin._trigger(
+                    task.stream_id, self.build_intent(task), "定时任务到点", task.id
                 )
+                self.plugin.task_receipts.accepted(task, result)
                 task.last_error = ""
             except Exception as exc:
+                self.plugin.task_receipts.trigger_error(task, str(exc))
                 task.last_error = str(exc)[:300]
                 if task.schedule == "once":
                     task.status = "failed"
                 LOG.exception("定时任务触发失败：%s", task.id)
             self.plugin._save_state()
+
+    @staticmethod
+    def build_intent(task: ScheduledTask) -> str:
+        return (
+            f"{PERSONA_PRIORITY_PROMPT}\n"
+            "用户之前设置的定时任务现在到点了。请在当前聊天流中完成这项请求："
+            f"{task.instruction}。结合当前上下文回答；如任务需要天气等实时信息，"
+            "请调用 `secretary_deepseek_search` 查证；已有链接需要正文时再调用 `secretary_deepseek_fetch`。"
+            "若无法取得可靠的实时数据，明确说明，勿编造。"
+            "本轮是在执行已创建的任务，不要调用 `secretary_create_task` 重复设置。"
+            f"{TOOL_ROUTING_PROMPT}"
+        )
 
     @staticmethod
     def _tool_identity(kwargs: dict[str, Any]) -> tuple[str, str]:

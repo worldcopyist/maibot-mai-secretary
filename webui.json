@@ -4,6 +4,36 @@
   "workspace_title": "麦麦小秘书",
   "pages": [
     {
+      "id": "workbench",
+      "title": "麦麦小秘书 · 模块管理",
+      "description": "管理功能开关、关系、回访、任务回执和蓝莓预算。",
+      "placement": "workspace",
+      "icon": "settings",
+      "mode": "custom",
+      "entry": "assets/workbench.html",
+      "layout": "document",
+      "queries": {"status": {"api": "secretary_workbench_status"}},
+      "actions": {
+        "feature_set": {"api": "secretary_feature_set", "parameters": {
+          "action": {"type": "string", "required": true, "choices": ["enable", "disable", "reset"]},
+          "feature": {"type": "string", "required": true, "max_length": 100}
+        }},
+        "relationship_set": {"api": "secretary_relationship_set", "parameters": {
+          "action": {"type": "string", "required": true, "choices": ["familiar", "stranger", "reset"]},
+          "account": {"type": "string", "required": true, "max_length": 50}
+        }},
+        "receipt_retry": {"api": "secretary_receipt_retry", "parameters": {
+          "receipt_id": {"type": "string", "required": true, "max_length": 32}
+        }, "confirmation": "确定重试这项已经确认发送失败的任务吗？"},
+        "followup_cancel": {"api": "secretary_followup_cancel", "parameters": {
+          "followup_id": {"type": "string", "required": true, "max_length": 32}
+        }, "confirmation": "确定取消这项回访吗？"},
+        "budget_threshold": {"api": "secretary_budget_threshold", "parameters": {
+          "amount": {"type": "number", "required": true, "minimum": 0, "maximum": 1000000}
+        }}
+      }
+    },
+    {
       "id": "tasks",
       "title": "麦麦小秘书 · 定时任务",
       "description": "查看已创建的任务，并为现有聊天流手动安排单次或周期任务。",

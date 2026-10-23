@@ -158,7 +158,6 @@ class RoleRecognitionModule:
     def remember(self, message: dict[str, Any] | None) -> None:
         if (
             not self.plugin.config.plugin.enabled
-            or not self.plugin.config.role_recognition.enabled
             or not isinstance(message, dict)
         ):
             return
@@ -231,10 +230,12 @@ class RoleRecognitionModule:
             ):
                 return
             account = str(record["account"])
+            relationships = getattr(self.plugin, "relationships", None)
             if (
                 account in owners
                 or account in self.plugin.config.role_recognition.familiar_accounts
                 or account in self.auto_familiar_accounts
+                or (relationships is not None and relationships.level_for(account) is not None)
             ):
                 return
             record["interaction_counted"] = True
@@ -348,7 +349,7 @@ class RoleRecognitionModule:
         session_id = str(kwargs.get("session_id") or "").strip()
         items = kwargs.get("items")
         if (
-            not self.plugin.config.plugin.enabled or not self.plugin.config.role_recognition.enabled
+            not self.plugin.config.plugin.enabled
             or not session_id or session_id in self._proactive_sessions or not isinstance(items, list)
         ):
             return None
@@ -365,7 +366,7 @@ class RoleRecognitionModule:
 
     async def inject(self, kwargs: dict[str, Any], *, track_for_tools: bool = False) -> dict[str, Any]:
         result = {"action": "continue", "modified_kwargs": kwargs}
-        if not self.plugin.config.plugin.enabled or not self.plugin.config.role_recognition.enabled:
+        if not self.plugin.config.plugin.enabled:
             return result
         items = kwargs.get("items")
         session_id = str(kwargs.get("session_id") or "").strip()
@@ -399,10 +400,18 @@ class RoleRecognitionModule:
             source = "当前消息的真实发送者已核验"
         if account is None:
             return result
+        if not self.plugin.config.role_recognition.enabled:
+            return result
         owners = await self.admin_accounts()
         config = self.plugin.config.role_recognition
+        relationships = getattr(self.plugin, "relationships", None)
+        override = relationships.level_for(account) if relationships is not None else None
         if account in owners:
             level, prompt = "主人", config.owner_prompt
+        elif override == "familiar":
+            level, prompt = "熟人", config.familiar_prompt
+        elif override == "stranger":
+            level, prompt = "陌生人", config.stranger_prompt
         elif account in config.familiar_accounts or account in self.auto_familiar_accounts:
             level, prompt = "熟人", config.familiar_prompt
         else:

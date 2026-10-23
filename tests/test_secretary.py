@@ -7,7 +7,7 @@ import logging
 import random
 import sys
 import types
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from itertools import pairwise
 from pathlib import Path
 from zoneinfo import ZoneInfo
@@ -78,6 +78,17 @@ def test_sdk_exposes_secretary_tools_apis_and_hooks(tmp_path):
         ("TOOL", "secretary_deepseek_search"),
         ("TOOL", "secretary_deepseek_fetch"),
         ("TOOL", "secretary_deepseek_balance"),
+        ("TOOL", "secretary_feature_switch"),
+        ("TOOL", "secretary_relationship"),
+        ("TOOL", "secretary_task_receipts"),
+        ("TOOL", "secretary_followup"),
+        ("TOOL", "secretary_blueberry_budget"),
+        ("API", "secretary_workbench_status"),
+        ("API", "secretary_feature_set"),
+        ("API", "secretary_relationship_set"),
+        ("API", "secretary_receipt_retry"),
+        ("API", "secretary_followup_cancel"),
+        ("API", "secretary_budget_threshold"),
         ("API", "secretary_kb_list"),
         ("API", "secretary_kb_search"),
         ("API", "secretary_kb_start"),
@@ -106,6 +117,8 @@ def test_sdk_exposes_secretary_tools_apis_and_hooks(tmp_path):
         ("HOOK_HANDLER", "secretary_group_moderation_inbound"),
         ("HOOK_HANDLER", "secretary_message_debounce"),
         ("HOOK_HANDLER", "secretary_suppress_stale_private_reply"),
+        ("HOOK_HANDLER", "secretary_followup_inbound"),
+        ("HOOK_HANDLER", "secretary_task_receipt_after_send"),
     }
     hook_order = {item["name"]: item["metadata"].get("order") for item in components if item["type"] == "HOOK_HANDLER"}
     assert hook_order["secretary_message_debounce"] == "early"
@@ -124,6 +137,96 @@ def test_admin_account_format_and_new_config_defaults():
     with pytest.raises(ValueError, match="管理员账号"):
         module.PluginSettings.model_validate({"admin_accounts": ["qq:someone"]})
     assert module.SecretaryConfig().anti_bullying.forbidden_words == []
+
+
+def test_feature_switch_persists_and_reverts_to_config(tmp_path):
+    plugin, _ = make_plugin(tmp_path)
+    async def exercise():
+        assert plugin.config.followups.enabled is False
+        assert (await plugin.feature_control.set_switches("enable", "约定回访"))["success"]
+        assert plugin.config.followups.enabled is True
+        saved = json.loads(plugin._state_path.read_text(encoding="utf-8"))
+        assert saved["feature_overrides"]["followups"] is True
+        restarted, _ = make_plugin(tmp_path)
+        restarted._load_state()
+        restarted.feature_control.apply()
+        assert restarted.config.followups.enabled is True
+        assert (await restarted.feature_control.set_switches("reset", "约定回访"))["success"]
+        assert restarted.config.followups.enabled is False
+    asyncio.run(exercise())
+
+
+def test_every_module_boolean_has_a_natural_language_switch():
+    config = module.SecretaryConfig()
+    expected = {
+        (section, name)
+        for section in type(config).model_fields
+        if section != "plugin"
+        for name, field in type(getattr(config, section)).model_fields.items()
+        if field.annotation is bool
+    }
+    actual = {(section, field) for section, field, _label, _aliases in module.FeatureControlModule.SWITCHES.values()}
+    assert expected == actual
+
+
+def test_feature_switch_and_relationship_require_verified_admin(tmp_path):
+    plugin, _ = make_plugin(tmp_path)
+    plugin.role_recognition.peek_planner_speaker = lambda _: "qq:222"
+    async def admins(*, force_refresh=False):
+        return {"qq:111"}
+    plugin.role_recognition.admin_accounts = admins
+    async def exercise():
+        context = {"stream_id": "stream", "chat_id": "stream"}
+        assert not (await plugin.feature_control.tool("enable", "约定回访", **context))["success"]
+        assert not (await plugin.relationships.tool("familiar", "qq:333", **context))["success"]
+        plugin.role_recognition.peek_planner_speaker = lambda _: "qq:111"
+        assert (await plugin.feature_control.tool("enable", "约定回访", **context))["success"]
+        assert (await plugin.relationships.tool("familiar", "qq:333", **context))["success"]
+        assert plugin.relationships.level_for("qq:333") == "familiar"
+        assert not (await plugin.relationships.tool("stranger", "qq:111", **context))["success"]
+    asyncio.run(exercise())
+
+
+def test_task_receipt_requires_matching_actual_send(tmp_path):
+    plugin, _ = make_plugin(tmp_path)
+    task = core.ScheduledTask("t1", "stream", "222", "报天气", "once", "2026-11-01T08:00:00+08:00", "Asia/Shanghai", "", 0)
+    async def exercise():
+        row = plugin.task_receipts.accepted(task, {"success": True, "task_id": "proactive:test:1"})
+        assert row["status"] == "accepted"
+        await plugin.task_receipts.observe_send({"session_id": "other", "reply_to": "proactive:test:1"}, True)
+        assert row["status"] == "accepted"
+        await plugin.task_receipts.observe_send({"session_id": "stream", "reply_to": "proactive:test:1", "message_id": "m1"}, True)
+        assert row["status"] == "sent"
+        assert row["sent_message_id"] == "m1"
+    asyncio.run(exercise())
+
+
+def test_followup_opt_out_and_manual_schedule(tmp_path):
+    plugin, _ = make_plugin(tmp_path, {"followups": {"enabled": True}})
+    async def exercise():
+        due = (datetime.now(UTC).replace(microsecond=0) + timedelta(days=2)).isoformat()
+        created = await plugin.followups.create(stream_id="stream", owner_account="qq:222", topic="比赛后怎么样", due_at=due)
+        assert created["success"]
+        plugin.role_recognition.peek_planner_speaker = lambda _: "qq:222"
+        context = {"stream_id": "stream", "chat_id": "stream"}
+        assert (await plugin.followups.tool("opt_out", **context))["success"]
+        assert plugin.followups.items[created["followup_id"]]["status"] == "cancelled"
+        assert not (await plugin.followups.create(stream_id="stream", owner_account="qq:222", topic="第二件事", due_at=due))["success"]
+    asyncio.run(exercise())
+
+
+def test_blueberry_budget_uses_existing_snapshot_only(tmp_path):
+    plugin, _ = make_plugin(tmp_path, {"blueberry_budget": {"enabled": True}})
+    snapshot = {
+        "account_fingerprint": "acct", "source": "automatic", "alias": "蓝莓",
+        "queried_at": datetime.now(UTC).isoformat(),
+        "balance_infos": [{"currency": "CNY", "total_balance": "3.50"}],
+    }
+    plugin.blueberry_budget.on_snapshot(snapshot)
+    assert plugin.blueberry_budget.pending["acct:CNY"]["amount"] == "3.50"
+    snapshot["balance_infos"][0]["total_balance"] = "20.00"
+    plugin.blueberry_budget.on_snapshot(snapshot)
+    assert "acct:CNY" not in plugin.blueberry_budget.pending
 
 
 def _debounce_message(message_id: str, text: str, *, user_id: str = "123", group_id: str = "") -> dict:
