@@ -71,7 +71,7 @@ async def test_mimo_request_uses_voice_design_and_preset_singing(tmp_path, monke
     assert await plugin.voice_synthesis._synthesize("你好", "speech") == encoded
     assert await plugin.voice_synthesis._synthesize("(唱歌)蓝莓真甜", "sing") == encoded
     assert requests[0]["model"] == voice_synthesis.VOICE_DESIGN_MODEL
-    assert "软糯" in requests[0]["messages"][0]["content"]
+    assert requests[0]["messages"][0]["content"] == plugin.config.voice_synthesis.voice_prompt
     assert "voice" not in requests[0]["audio"]
     assert requests[1]["model"] == voice_synthesis.SINGING_MODEL
     assert requests[1]["audio"]["voice"] == "冰糖"
