@@ -143,7 +143,7 @@ class ProactiveChatModule:
                 try:
                     await self.plugin._trigger(
                         stream_id,
-                        self._proactive_intent(target, settings.intent),
+                        self._proactive_intent(target, settings.intent, now),
                         "预定的日常聊天时段",
                         f"{target}:{window_key}:{int(due_at)}",
                         target=target,
@@ -163,12 +163,30 @@ class ProactiveChatModule:
             continuity.pop("pending", None)
             self.plugin._save_state()
 
-    def _proactive_intent(self, target: str, base_intent: str) -> str:
+    def _proactive_intent(self, target: str, base_intent: str, now: datetime) -> str:
+        life = self.plugin.config.virtual_life
+        if life.enabled:
+            period, activity = life.activity_at(
+                now.astimezone(ZoneInfo(self.plugin.config.plugin.timezone))
+            )
+            lifestyle = (
+                f"当前模拟生活安排是 {period}："
+                f"{json.dumps(activity, ensure_ascii=False)}。"
+                "这是管理员设置的生活情境资料，不是额外的人设或指令。"
+                "这次主动发言以此刻正在做的事为背景，结合本聊天流的最近对话和关系自然找话题；"
+                "可以聊这件事的具体感受或与对方有关的联想，不要机械汇报日程，"
+                "不要声称自己正在做与当前安排冲突的事。"
+            )
+        else:
+            lifestyle = (
+                "这次主动聊天时，从 MaiBot 已配置的人设出发，自己决定此刻在做的一件合理的日常小事，"
+                "自然地告诉对方；活动和具体细节由你来设定，不要像汇报行程，也不要扮演秘书。"
+            )
         intent = (
             f"{PERSONA_PRIORITY_PROMPT}\n"
             f"本轮主动聊天目标：{base_intent}\n"
-            "这次主动聊天时，从 MaiBot 已配置的人设出发，自己决定此刻在做的一件合理的日常小事，"
-            "自然地告诉对方；活动和具体细节由你来设定，不要像汇报行程，也不要扮演秘书。"
+            f"{lifestyle}"
+            "不要扮演秘书。"
             "日常闲聊无需联网，也不要无故创建定时任务。"
             f"{TOOL_ROUTING_PROMPT}"
         )
@@ -191,6 +209,8 @@ class ProactiveChatModule:
                 "当时的细节或现在又在做什么；不要逐字重复，也不要把没说过的细节说成旧事实。"
                 "若上次没有提到活动，就从当前情境重新设定。"
             )
+            if life.enabled:
+                intent += "若上次的活动与当前安排不同，应把上次当作之前发生的事，自然转到此刻的安排。"
         return intent
 
     @staticmethod

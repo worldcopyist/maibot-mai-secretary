@@ -34,6 +34,7 @@ from .poke_interaction import PokeInteractionModule
 from .proactive_chat import ProactiveChatModule
 from .role_recognition import RoleRecognitionModule
 from .scheduled_tasks import ScheduledTasksModule
+from .virtual_life import VirtualLifeSettings
 from .voice_synthesis import AZURE_VOICE_PROMPT, VoiceSynthesisModule
 
 LOG = logging.getLogger(__name__)
@@ -692,6 +693,7 @@ class SecretaryConfig(PluginConfigBase):
     )
     daily_report: DailyReportSettings = Field(default_factory=DailyReportSettings)
     proactive: ProactiveSettings = Field(default_factory=ProactiveSettings)
+    virtual_life: VirtualLifeSettings = Field(default_factory=VirtualLifeSettings)
     anti_bullying: AntiBullyingSettings = Field(default_factory=AntiBullyingSettings)
     knowledge_base: KnowledgeBaseSettings = Field(default_factory=KnowledgeBaseSettings)
     deepseek_web: DeepSeekWebSettings = Field(default_factory=DeepSeekWebSettings)
