@@ -10,6 +10,16 @@ admin_accounts = []
 [scheduled_tasks]
 enabled = true
 
+[message_debounce]
+enabled = true
+debounce_seconds = 2.0
+max_wait_seconds = 8.0
+merge_separator = "\n"
+enable_private = true
+enable_group = true
+ignore_commands = true
+command_prefixes = ["/", "!", "！"]
+
 [poke]
 enabled = true
 respond_to_poke = true

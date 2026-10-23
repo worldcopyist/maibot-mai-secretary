@@ -4,7 +4,7 @@
 
 **[打开定时任务：日历、任务列表与手动创建](/extensions/worldcopyist.mai-secretary/tasks)**
 
-面向 MaiBot 1.3.7 / 插件 SDK 2.12.0 的独立插件。它提供十项功能：
+面向 MaiBot 1.3.7 / 插件 SDK 2.12.0 的独立插件。它提供十一项功能：
 
 插件列表中的头像使用 `assets/icon.png`，在 `_manifest.json` 的 `display.icon` 中声明。
 
@@ -18,6 +18,13 @@
 8. 戳一戳互动：麦麦可通过 `secretary_poke` 戳当前聊天的人；被戳时可回戳、按现有人设简短回复或发表情包，也可按概率跟风戳群里正在互戳的人。
 9. 蓝天语音：用户明确要求语音、朗读或唱歌时，麦麦可调用 `secretary_speak` 向当前 QQ 聊天发送语音。日常语音使用 MiMo V2.5 VoiceDesign 和可编辑的蓝天音色提示词，直接读取 MaiBot 已配置的 MiMo API Key；唱歌使用同系列预置音色，声线可能不同。
 10. QQ 群管：仅在明确列出的 QQ 群启用。麦麦可用 `secretary_group_permission` 查询自己是否有群管权限；插件管理员可在当前群聊中使用群成员管理、公告、加群审核和欢迎语工具。所有群管理写操作都会核对管理员真实账号、当前群、麦麦群身份和 NapCat 操作回执，失败会作为工具结果交给麦麦。
+11. 消息防抖：在私聊或群聊中，短时间内同一用户连续发送的内容会合并为一条交给麦麦处理，减少把一句话拆成多轮回复的情况。命令、通知、不同用户的消息不会混在一起。
+
+### 消息防抖
+
+插件配置页的「消息防抖」可独立开关，并设置等待后续消息的秒数、最长等待、私聊与群聊开关、命令前缀。默认收到消息后等待 2 秒；期间同一用户又发消息就重新计时，但最多等 8 秒。合并文本用换行分开，图片、表情、语音等消息段会保留。为防止把不同群友的话算成同一人，本模块始终按真实发送者分开处理；合并结果使用最后一条真实消息的 ID，供角色识别核验。插件会增加最多 2 秒的单条消息等待时间；MaiBot 规划器自身重复调用造成的多次回复不属于本模块能直接消除的情形。
+
+实现参考 [Message_Debouncing_Refactored](https://github.com/Blackwindy2333/Message_Debouncing_Refactored)，原作者版权及 MIT 许可证见 `THIRD_PARTY_NOTICES.md`。
 
 ### QQ 群管
 
@@ -191,7 +198,7 @@ fetch_qps = 5.0
 
 ### 模块结构
 
-`plugin.py` 是 MaiBot 的入口，只负责配置、模块注册、统一调度、状态文件读写，以及 SDK 工具、页面 API 和事件钩子的转发。`poke_interaction.py` 独立管理戳一戳通知、回戳、跟风、模型工具、概率与冷却；`scheduled_tasks.py` 独立管理定时任务，`daily_report.py` 独立管理日报调度和聊天总结，`daily_report_renderer.py` 把总结写进主题图片，`proactive_chat.py` 独立管理随机发言和上次发言的续接，`role_recognition.py` 独立管理账号识别及三档提示词，`anti_bullying.py` 独立管理辱骂判断和管理员提醒，`knowledge_base.py` 独立管理文档与检索，`deepseek_web.py` 独立管理联网搜索与网页抓取；模块通过 `module_contract.py` 约定的接口接入。`stream_router.py` 为需要发送消息的模块解析聊天流；`secretary_core.py` 保留不依赖 MaiBot 的时间计算，`prompts.py` 集中放工具调用提示词。`webui.json` 与 `assets/knowledge.html` 声明并实现从插件详情页进入的知识库工作区。
+`plugin.py` 是 MaiBot 的入口，只负责配置、模块注册、统一调度、状态文件读写，以及 SDK 工具、页面 API 和事件钩子的转发。`message_debounce.py` 独立管理消息防抖窗口与合并；`poke_interaction.py` 独立管理戳一戳通知、回戳、跟风、模型工具、概率与冷却；`scheduled_tasks.py` 独立管理定时任务，`daily_report.py` 独立管理日报调度和聊天总结，`daily_report_renderer.py` 把总结写进主题图片，`proactive_chat.py` 独立管理随机发言和上次发言的续接，`role_recognition.py` 独立管理账号识别及三档提示词，`anti_bullying.py` 独立管理辱骂判断和管理员提醒，`knowledge_base.py` 独立管理文档与检索，`deepseek_web.py` 独立管理联网搜索与网页抓取；模块通过 `module_contract.py` 约定的接口接入。`stream_router.py` 为需要发送消息的模块解析聊天流；`secretary_core.py` 保留不依赖 MaiBot 的时间计算，`prompts.py` 集中放工具调用提示词。`webui.json` 与 `assets/knowledge.html` 声明并实现从插件详情页进入的知识库工作区。
 
 八个功能可分别用 `[poke].enabled`、`[scheduled_tasks].enabled`、`[daily_report].enabled`、`[proactive].enabled`、`[role_recognition].enabled`、`[anti_bullying].enabled`、`[knowledge_base].enabled` 和 `[deepseek_web].enabled` 开关；日报中的 `[daily_report].manual_enabled` 单独控制即时请求。旧配置没有新增配置节时由默认值补齐；全局 `[plugin].enabled` 仍控制整个插件。
 

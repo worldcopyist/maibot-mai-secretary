@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import importlib
 import json
 import logging
@@ -60,7 +61,8 @@ def make_plugin(tmp_path: Path, config: dict | None = None):
 
 def test_sdk_exposes_secretary_tools_apis_and_hooks(tmp_path):
     plugin, _ = make_plugin(tmp_path)
-    assert {(item["type"], item["name"]) for item in plugin.get_components()} == {
+    components = plugin.get_components()
+    assert {(item["type"], item["name"]) for item in components} == {
         ("TOOL", "secretary_create_task"),
         ("TOOL", "secretary_list_tasks"),
         ("TOOL", "secretary_cancel_task"),
@@ -95,7 +97,11 @@ def test_sdk_exposes_secretary_tools_apis_and_hooks(tmp_path):
         ("HOOK_HANDLER", "secretary_role_replyer_prompt"),
         ("HOOK_HANDLER", "secretary_poke_notice"),
         ("HOOK_HANDLER", "secretary_group_join_welcome"),
+        ("HOOK_HANDLER", "secretary_message_debounce"),
     }
+    hook_order = {item["name"]: item["metadata"].get("order") for item in components if item["type"] == "HOOK_HANDLER"}
+    assert hook_order["secretary_message_debounce"] == "early"
+    assert hook_order["secretary_role_remember_speaker"] == "normal"
 
 
 def test_admin_account_format_and_new_config_defaults():
@@ -106,6 +112,70 @@ def test_admin_account_format_and_new_config_defaults():
     with pytest.raises(ValueError, match="管理员账号"):
         module.PluginSettings.model_validate({"admin_accounts": ["qq:someone"]})
     assert module.SecretaryConfig().anti_bullying.forbidden_words == []
+
+
+def _debounce_message(message_id: str, text: str, *, user_id: str = "123", group_id: str = "") -> dict:
+    return {
+        "message_id": message_id,
+        "platform": "qq",
+        "account_id": "bot-1",
+        "session_id": "test-stream",
+        "message_info": {
+            "user_info": {"user_id": user_id},
+            "group_info": {"group_id": group_id} if group_id else None,
+        },
+        "raw_message": [{"type": "text", "data": text}],
+        "processed_plain_text": text,
+        "is_notify": False,
+        "is_command": False,
+    }
+
+
+@pytest.mark.asyncio
+async def test_message_debounce_merges_with_latest_real_sender_identity(tmp_path):
+    plugin, _ = make_plugin(tmp_path, {"message_debounce": {"debounce_seconds": 0.1}})
+    first = _debounce_message("id-1", "第一句")
+    second = _debounce_message("id-2", "第二句")
+    waiting = asyncio.create_task(plugin.debounce_inbound_message(first))
+    await asyncio.sleep(0.02)
+    assert await plugin.debounce_inbound_message(second) == {"action": "abort"}
+    assert not plugin.role_recognition.records
+    result = await asyncio.wait_for(waiting, 1)
+    merged = result["modified_kwargs"]["message"]
+    await plugin.remember_role_speaker(merged)
+    assert merged["message_id"] == "id-2"
+    assert merged["processed_plain_text"] == "第一句\n第二句"
+    assert merged["raw_message"] == [
+        {"type": "text", "data": "第一句"},
+        {"type": "text", "data": "\n"},
+        {"type": "text", "data": "第二句"},
+    ]
+    assert plugin.role_recognition._find_speaker_record("test-stream", merged["message_id"])["account"] == "qq:123"
+    assert not plugin.message_debounce._windows
+
+
+@pytest.mark.asyncio
+async def test_message_debounce_keeps_group_members_separate_and_skips_commands(tmp_path):
+    plugin, _ = make_plugin(tmp_path, {"message_debounce": {"debounce_seconds": 0.1}})
+    first = _debounce_message("a", "甲", user_id="123", group_id="456")
+    other = _debounce_message("b", "乙", user_id="789", group_id="456")
+    tasks = [asyncio.create_task(plugin.debounce_inbound_message(item)) for item in (first, other)]
+    await asyncio.sleep(0.02)
+    assert len(plugin.message_debounce._windows) == 2
+    assert await plugin.debounce_inbound_message(_debounce_message("cmd", "/help", group_id="456")) is None
+    assert await plugin.debounce_inbound_message({**first, "message_id": "notice", "is_notify": True}) is None
+    assert await asyncio.gather(*tasks) == [None, None]
+
+
+@pytest.mark.asyncio
+async def test_message_debounce_max_wait_and_unload_releases_pending(tmp_path):
+    plugin, _ = make_plugin(tmp_path, {"message_debounce": {"debounce_seconds": 0.2, "max_wait_seconds": 1}})
+    first = _debounce_message("a", "甲")
+    waiting = asyncio.create_task(plugin.debounce_inbound_message(first))
+    await asyncio.sleep(0.02)
+    await plugin.message_debounce.stop()
+    assert await asyncio.wait_for(waiting, 0.5) is None
+    assert not plugin.message_debounce._windows
 
 
 @pytest.mark.asyncio

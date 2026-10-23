@@ -2,8 +2,8 @@
   "manifest_version": 2,
   "id": "worldcopyist.mai-secretary",
   "name": "麦麦小秘书",
-  "version": "0.14.0",
-  "description": "QQ 群管与进群审核、蓝天 MiMo 语音、戳一戳互动、角色识别、主动聊天、自然语言定时任务、Azure 主题日报、AI 反霸凌、私有知识库与 DeepSeek 联网搜索。",
+  "version": "0.15.0",
+  "description": "消息防抖、QQ 群管与进群审核、蓝天 MiMo 语音、戳一戳互动、角色识别、主动聊天、自然语言定时任务、Azure 主题日报、AI 反霸凌、私有知识库与 DeepSeek 联网搜索。",
   "display": {
     "icon": {
       "type": "local",

@@ -27,6 +27,7 @@ from .daily_report import DailyReportModule
 from .deepseek_web import DeepSeekWebModule
 from .group_admin import GroupAdminModule
 from .knowledge_base import KnowledgeBaseModule, KnowledgeError
+from .message_debounce import MessageDebounceModule
 from .module_contract import SecretaryModule
 from .poke_interaction import PokeInteractionModule
 from .proactive_chat import ProactiveChatModule
@@ -636,6 +637,28 @@ class DeepSeekWebSettings(PluginConfigBase):
     )
 
 
+class MessageDebounceSettings(PluginConfigBase):
+    """把同一用户短时间内连续发送的内容交给麦麦一次处理。"""
+
+    __ui_label__: ClassVar[str] = "消息防抖"
+
+    enabled: bool = Field(default=True, json_schema_extra={"label": "启用消息防抖", "hint": "同一聊天流中同一用户的连续消息会合并，麦麦只处理一次。"})
+    debounce_seconds: float = Field(default=2.0, ge=0.1, le=10.0, json_schema_extra={"label": "等候后续消息（秒）", "hint": "每收到一条新消息重新等待，推荐 2 秒。"})
+    max_wait_seconds: float = Field(default=8.0, ge=1.0, le=30.0, json_schema_extra={"label": "最长等待（秒）", "hint": "连续发消息也不会无限延后，推荐 8 秒。"})
+    merge_separator: str = Field(default="\n", max_length=10, json_schema_extra={"label": "消息分隔符"})
+    enable_private: bool = Field(default=True, json_schema_extra={"label": "私聊启用"})
+    enable_group: bool = Field(default=True, json_schema_extra={"label": "群聊启用"})
+    ignore_commands: bool = Field(default=True, json_schema_extra={"label": "命令直接放行"})
+    command_prefixes: list[str] = Field(default_factory=lambda: ["/", "!", "！"], json_schema_extra={"label": "命令前缀", "hint": "以这些文字开头的消息不参与合并。"})
+
+    @field_validator("command_prefixes")
+    @classmethod
+    def validate_prefixes(cls, prefixes: list[str]) -> list[str]:
+        if len(prefixes) > 20 or any(not item or len(item) > 10 for item in prefixes):
+            raise ValueError("命令前缀最多 20 个，每个 1–10 字")
+        return list(dict.fromkeys(prefixes))
+
+
 class SecretaryConfig(PluginConfigBase):
     plugin: PluginSettings = Field(default_factory=PluginSettings)
     role_recognition: RoleRecognitionSettings = Field(default_factory=RoleRecognitionSettings)
@@ -650,6 +673,7 @@ class SecretaryConfig(PluginConfigBase):
     anti_bullying: AntiBullyingSettings = Field(default_factory=AntiBullyingSettings)
     knowledge_base: KnowledgeBaseSettings = Field(default_factory=KnowledgeBaseSettings)
     deepseek_web: DeepSeekWebSettings = Field(default_factory=DeepSeekWebSettings)
+    message_debounce: MessageDebounceSettings = Field(default_factory=MessageDebounceSettings)
 
 
 class MaiSecretaryPlugin(MaiBotPlugin):
@@ -669,6 +693,7 @@ class MaiSecretaryPlugin(MaiBotPlugin):
         self.anti_bullying = AntiBullyingModule(self)
         self.knowledge_base = KnowledgeBaseModule(self)
         self.deepseek_web = DeepSeekWebModule(self)
+        self.message_debounce = MessageDebounceModule(self)
         self._modules: dict[str, SecretaryModule] = {}
         self._register_module(self.scheduled)
         self._register_module(self.daily_report)
@@ -680,6 +705,7 @@ class MaiSecretaryPlugin(MaiBotPlugin):
         self._register_module(self.anti_bullying)
         self._register_module(self.knowledge_base)
         self._register_module(self.deepseek_web)
+        self._register_module(self.message_debounce)
         self._state_path: Path | None = None
         self._extra_state: dict[str, Any] = {}
         self._lock = asyncio.Lock()
@@ -707,6 +733,7 @@ class MaiSecretaryPlugin(MaiBotPlugin):
         )
 
     async def on_unload(self) -> None:
+        await self.message_debounce.stop()
         await self.poke.stop()
         await self.daily_report.stop()
         await self.anti_bullying.stop()
@@ -809,7 +836,7 @@ class MaiSecretaryPlugin(MaiBotPlugin):
         "chat.receive.before_process",
         name="secretary_role_remember_speaker",
         mode=HookMode.BLOCKING,
-        order=HookOrder.EARLY,
+        order=HookOrder.NORMAL,
         error_policy=ErrorPolicy.SKIP,
         description="按真实平台账号记录当前消息发送者",
     )
@@ -818,6 +845,21 @@ class MaiSecretaryPlugin(MaiBotPlugin):
     ) -> None:
         del kwargs
         self.role_recognition.remember(message)
+
+    @HookHandler(
+        "chat.receive.before_process",
+        name="secretary_message_debounce",
+        mode=HookMode.BLOCKING,
+        order=HookOrder.EARLY,
+        timeout_ms=35000,
+        error_policy=ErrorPolicy.SKIP,
+        description="把同一用户短时间内连续发来的消息合并后再处理",
+    )
+    async def debounce_inbound_message(
+        self, message: dict[str, Any] | None = None, **kwargs: Any,
+    ) -> dict[str, Any] | None:
+        del kwargs
+        return await self.message_debounce.on_inbound(message)
 
     @HookHandler(
         "chat.receive.before_process",
