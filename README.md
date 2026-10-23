@@ -4,6 +4,8 @@
 
 [English](README.en.md) · **简体中文**
 
+麦麦小秘书能按时间主动聊天、执行定时任务、生成日报，并记住关系和待回访的话题；还提供知识库、联网搜索与蓝莓余额、语音、戳一戳、QQ群管、反霸凌和消息防抖。管理员可以用自然语言开关功能。
+
 **[打开知识库：上传文档或粘贴文本](/extensions/worldcopyist.mai-secretary/knowledge)**
 
 **[打开定时任务：日历、任务列表与手动创建](/extensions/worldcopyist.mai-secretary/tasks)**
@@ -11,10 +13,6 @@
 **[打开模块管理：开关、关系、回访、任务回执与蓝莓预算](/extensions/worldcopyist.mai-secretary/workbench)**
 
 以上入口供已登录 MaiBot WebUI 使用；在 GitHub 页面直接点击不会打开服务器工作区。
-
-面向 MaiBot 1.3.7 / 插件 SDK 2.12.0 的独立插件。各功能各自保存状态，便于继续增加模块。已核验管理员可以在聊天里自然地说“列出小秘书功能”“开启约定回访”“关闭联网搜索”“恢复主动发言的页面配置”；麦麦会调用 `secretary_feature_switch`。普通用户不能改全局开关。聊天开关保存在插件数据文件中，覆盖 WebUI 配置值；模块管理页同时显示两者。若 MaiBot 管理页整体停用了插件，需要先在管理页重新启用。
-
-插件列表中的头像使用 `assets/icon.png`，在 `_manifest.json` 的 `display.icon` 中声明。
 
 ## 功能一览
 
@@ -255,6 +253,10 @@ WebUI ──── webui.json → assets/*.html
 ```
 
 `plugin.py` 是唯一的 MaiBot 插件入口。每个业务模块负责自己的行为及状态，入口只注册模块并转发 SDK 工具、事件钩子和 WebUI API。模块按 `module_contract.py` 实现 `name`、`state_keys`、`load_state`、`dump_state`、`on_config_update`、`tick`。状态集中写进 `secretary-state.json`，注册时会拒绝重复状态键，读写时保留未知键，方便升级后继续增添模块。聊天里设定的开关是 `feature_control.py` 的状态覆盖层：它不改服务器原 `config.toml`，重启后仍保留；管理页会同时显示原配置和当前开关。全局插件若在 MaiBot 管理页被卸载或停用，聊天工具无法把它重新唤醒。
+
+已核验管理员可以在聊天里说“列出小秘书功能”“开启约定回访”“关闭联网搜索”“恢复主动发言的页面配置”；麦麦会调用 `secretary_feature_switch`。普通用户不能改全局开关。
+
+插件列表中的头像使用 `assets/icon.png`，在 `_manifest.json` 的 `display.icon` 中声明。
 
 | 模块文件 | 功能与边界 |
 | --- | --- |

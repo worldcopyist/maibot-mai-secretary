@@ -4,9 +4,7 @@
 
 **English** · [简体中文](README.md)
 
-Mai Secretary is a modular MaiBot plugin for proactive conversations, natural-language tasks, daily reports, relationship management, knowledge retrieval, voice, QQ interactions, and web search. It runs through the MaiBot plugin SDK; it does not modify MaiBot's source code. The avatar above is also declared in `_manifest.json` for MaiBot's plugin list.
-
-**Compatibility:** tested on MaiBot 1.3.7 and plugin SDK 2.12.0. Consult `_manifest.json` for the declared bounds and capabilities. The repository's manifest version is `0.20.0`.
+Mai Secretary starts timed conversations, runs scheduled tasks, creates daily reports, and remembers relationships and follow-ups. It also offers a knowledge base, web search and Blueberry balance, voice replies, pokes, QQ group management, anti-bullying, message debouncing, and natural-language feature switches.
 
 ## Open the plugin pages
 
@@ -61,7 +59,11 @@ WebUI      → webui.json → assets/workbench.html, tasks.html, knowledge.html
 
 `plugin.py` is the only SDK entry point. Each feature owns its behavior and state fields, while the entry point registers it and forwards SDK events. New modules implement `name`, `state_keys`, `load_state`, `dump_state`, `on_config_update`, and `tick` from `module_contract.py`; `_register_module` rejects duplicate state keys. The shared `secretary-state.json` uses schema version 1 and retains unknown keys for future modules. The switch overlay lives there rather than writing back to the server's `config.toml`. Balance snapshots use `deepseek-balance.sqlite3`, and knowledge documents and indexes remain in the plugin's data directory. `prompts.py` keeps tool-routing text together and gives MaiBot's existing persona priority.
 
+The avatar above is declared as `assets/icon.png` in `_manifest.json` for MaiBot's plugin list.
+
 ## Install and test
+
+This plugin runs through the MaiBot SDK without changing MaiBot's source code. It was tested on MaiBot 1.3.7 and plugin SDK 2.12.0; consult `_manifest.json` for declared bounds and capabilities. The repository's manifest version is `0.20.0`.
 
 Place this repository in its own directory under MaiBot's `plugins/` directory, install `requirements.txt` in MaiBot's Python environment, then enable the plugin and configure it in MaiBot WebUI. Preserve the installation's actual `config.toml` and `data/plugins/worldcopyist.mai-secretary/` when updating. Keep API keys out of Git. The default DeepSeek web module, daily scheduled report, follow-ups, and Blueberry budget alerts are off until configured. A proactive target list left empty sends no random messages.
 
