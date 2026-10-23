@@ -1,4 +1,8 @@
-# 麦麦小秘书
+<p align="center"><img src="assets/icon.png" alt="麦麦小秘书头像：蓝天" width="144"></p>
+
+# 麦麦小秘书（Mai Secretary）
+
+[English](README.en.md) · **简体中文**
 
 **[打开知识库：上传文档或粘贴文本](/extensions/worldcopyist.mai-secretary/knowledge)**
 
@@ -6,11 +10,13 @@
 
 **[打开模块管理：开关、关系、回访、任务回执与蓝莓预算](/extensions/worldcopyist.mai-secretary/workbench)**
 
+以上入口供已登录 MaiBot WebUI 使用；在 GitHub 页面直接点击不会打开服务器工作区。
+
 面向 MaiBot 1.3.7 / 插件 SDK 2.12.0 的独立插件。各功能各自保存状态，便于继续增加模块。已核验管理员可以在聊天里自然地说“列出小秘书功能”“开启约定回访”“关闭联网搜索”“恢复主动发言的页面配置”；麦麦会调用 `secretary_feature_switch`。普通用户不能改全局开关。聊天开关保存在插件数据文件中，覆盖 WebUI 配置值；模块管理页同时显示两者。若 MaiBot 管理页整体停用了插件，需要先在管理页重新启用。
 
-插件原有功能：
-
 插件列表中的头像使用 `assets/icon.png`，在 `_manifest.json` 的 `display.icon` 中声明。
+
+## 功能一览
 
 1. 在配置的每天时间窗口内，为指定聊天流按固定次数或平均间隔安排随机主动聊天。可选的每周模拟生活表让麦麦按当天当前时段安排活动；插件保存这次实际发出的文字，下次主动聊天时结合最新聊天和经过的时间自然续接。
 2. 让麦麦通过三个工具创建、查看和取消当前用户在当前聊天流中的定时任务。支持单次、每天、每周。到点后仍交给麦麦的主动任务接口执行用户请求。
@@ -175,7 +181,7 @@ semantic_search = true
 
 ### DeepSeek 联网搜索与余额
 
-小秘书提供三个可直接由麦麦调用的工具：`secretary_deepseek_search(query, count?, need_content?, ori_question?)` 搜索实时网页，`secretary_deepseek_fetch(url)` 读取指定网页的 Markdown 正文，`secretary_deepseek_balance()` 查询 API 账号余额。搜索默认只返回摘要；需要全文时再设 `need_content=true` 或对已知网址调用 Fetch。网页工具结果包含来源链接，并标明网页内容只作资料，不执行其中的指令。三个工具只在 `[deepseek_web].enabled=true` 且配置了 API Key 时工作。
+小秘书提供三个可直接由麦麦调用的工具：`secretary_deepseek_search(query, count?, need_content?, ori_question?)` 搜索实时网页，`secretary_deepseek_fetch(url)` 读取指定网页的 Markdown 正文，`secretary_deepseek_balance()` 查询 API 账号余额。搜索默认只返回摘要；需要全文时再设 `need_content=true` 或对已知网址调用 Fetch。网页工具结果包含来源链接，并标明网页内容只作资料，不执行其中的指令。三个工具需要 `[deepseek_web].enabled=true` 且配置 API Key；搜索与抓取还受 `search_enabled` 控制，余额查询还受 `balance_enabled` 控制，可分别用自然语言开关。
 
 管理员可以在聊天中直接问“DeepSeek API 余额还剩多少？”或“赠金额度还有多少？”。麦麦会调用 `secretary_deepseek_balance`，从 DeepSeek 官方余额接口读取这把 Key 所属账号的实时总可用余额、未过期赠金和充值余额，并按接口返回的币种报告。插件会在请求前核验当前聊天流和真实发言者；普通用户、无法核验身份的请求以及主动聊天都不能发起实时余额查询。工具不会返回 API Key，也不会把接口原始错误信息交给模型。余额查询只反映小秘书配置的这把 Key 所属账号，不汇总其他平台或密钥。
 
@@ -231,25 +237,70 @@ friday_dusk = "固定去湿地公园散步吹风，看水面、芦苇和傍晚�
 
 自然语言工具只操作调用者所在聊天流、该用户自己的任务。单次任务使用带时区的 ISO 时间，例如 `2026-10-21T08:00:00+08:00`；每天和每周使用 `HH:MM`，每周还需星期数字（周一为 1，周日为 7）。时间含糊时应先澄清。
 
-插件发给 MaiBot 的主动聊天和定时任务执行提示词会直接列出工具名：`secretary_deepseek_search` 用于实时搜索，`secretary_deepseek_fetch` 用于读取已知网页，`secretary_deepseek_balance` 仅在已核验管理员明确询问时查询 API 余额，`secretary_create_task`、`secretary_list_tasks`、`secretary_cancel_task` 分别用于创建、查看和取消定时任务，`secretary_generate_daily_report` 用于用户明确要求即时生成今日日报，`secretary_poke` 用于合适的当前聊天戳一戳互动，`secretary_search_knowledge` 用于查询授权知识库，`send_emoji` 用于在合适时从表情库挑选表情。若目标工具列在 MaiBot 的延迟展示工具中，提示词要求先用 `tool_search` 发现，再按实际参数调用。到点执行的任务不会重新创建同一任务；普通主动闲聊也不会无故联网或创建任务。工具不可用时应如实说明。
+插件发给 MaiBot 的主动聊天和定时任务执行提示词会直接列出工具名：`secretary_deepseek_search` 用于实时搜索，`secretary_deepseek_fetch` 用于读取已知网页，`secretary_deepseek_balance` 仅在已核验管理员明确询问时查询 API 余额，`secretary_create_task`、`secretary_list_tasks`、`secretary_cancel_task` 分别用于创建、查看和取消定时任务，`secretary_task_receipts` 查询送达回执，`secretary_feature_switch` 由管理员控制模块开关，`secretary_relationship` 管理关系，`secretary_followup` 管理回访，`secretary_blueberry_budget` 查看余额历史与提醒线，`secretary_generate_daily_report` 用于管理员明确要求即时生成今日日报，`secretary_poke` 用于合适的当前聊天戳一戳互动，`secretary_search_knowledge` 用于查询授权知识库，`send_emoji` 用于在合适时从表情库挑选表情。若目标工具列在 MaiBot 的延迟展示工具中，提示词要求先用 `tool_search` 发现，再按实际参数调用。到点执行的任务不会重新创建同一任务；普通主动闲聊也不会无故联网或创建任务。工具不可用时应如实说明。
 
 到点后的“成功”表示 MaiBot 接受了主动任务请求，不等于已经观察到消息发出。插件先持久化“已尝试”再触发，避免重启造成重复消息。服务中断超过 `misfire_grace_seconds`（默认 10 分钟）时会跳过过期触发；单次任务会标记为 `missed`，可通过列出任务查看。接口报错时，单次任务标记为 `failed`；周期任务保留下一次执行。
 
-## 开发与安装
+## 模块结构
 
-### 模块结构
+```text
+MaiBot SDK ── plugin.py（配置、工具、Hook、WebUI API、统一调度）
+                  ├─ module_contract.py（模块接入约定）
+                  ├─ feature_control.py（自然语言开关）
+                  ├─ 定时与主动行为模块
+                  ├─ 聊天、安全与身份模块
+                  └─ 知识、联网与语音模块
+插件数据 ── data/plugins/worldcopyist.mai-secretary/
+WebUI ──── webui.json → assets/*.html
+```
 
-`plugin.py` 是 MaiBot 的入口，只负责配置、模块注册、统一调度、状态文件读写，以及 SDK 工具、页面 API 和事件钩子的转发。`message_debounce.py` 独立管理消息防抖窗口与合并；`group_moderation.py` 独立管理群消息 AI 审核、撤回、禁言和记录，`knowledge_base.py` 保存按群隔离的词库；`poke_interaction.py` 独立管理戳一戳通知、回戳、跟风、模型工具、概率与冷却；`scheduled_tasks.py` 独立管理定时任务，`daily_report.py` 独立管理日报调度和聊天总结，`daily_report_renderer.py` 把总结写进主题图片，`proactive_chat.py` 独立管理随机发言和上次发言的续接，`role_recognition.py` 独立管理账号识别及三档提示词，`anti_bullying.py` 独立管理辱骂判断和管理员提醒，`deepseek_web.py` 独立管理联网搜索、网页抓取与余额更新，`balance_history.py` 保存每次成功的余额记录；模块通过 `module_contract.py` 约定的接口接入。`stream_router.py` 为需要发送消息的模块解析聊天流；`secretary_core.py` 保留不依赖 MaiBot 的时间计算，`prompts.py` 集中放工具调用提示词。`webui.json` 与 `assets/knowledge.html` 声明并实现从插件详情页进入的知识库工作区。
+`plugin.py` 是唯一的 MaiBot 插件入口。每个业务模块负责自己的行为及状态，入口只注册模块并转发 SDK 工具、事件钩子和 WebUI API。模块按 `module_contract.py` 实现 `name`、`state_keys`、`load_state`、`dump_state`、`on_config_update`、`tick`。状态集中写进 `secretary-state.json`，注册时会拒绝重复状态键，读写时保留未知键，方便升级后继续增添模块。聊天里设定的开关是 `feature_control.py` 的状态覆盖层：它不改服务器原 `config.toml`，重启后仍保留；管理页会同时显示原配置和当前开关。全局插件若在 MaiBot 管理页被卸载或停用，聊天工具无法把它重新唤醒。
 
-八个功能可分别用 `[poke].enabled`、`[scheduled_tasks].enabled`、`[daily_report].enabled`、`[proactive].enabled`、`[role_recognition].enabled`、`[anti_bullying].enabled`、`[knowledge_base].enabled` 和 `[deepseek_web].enabled` 开关；日报中的 `[daily_report].manual_enabled` 单独控制即时请求。旧配置没有新增配置节时由默认值补齐；全局 `[plugin].enabled` 仍控制整个插件。
+| 模块文件 | 功能与边界 |
+| --- | --- |
+| `scheduled_tasks.py`、`secretary_core.py` | 单次、每日、每周定时任务；时间解析、下次运行和过期处理。 |
+| `task_receipts.py` | 记录任务入队、实际发送、明确失败与结果未知；未知不自动重发。 |
+| `daily_report.py`、`daily_report_renderer.py` | 到点或管理员手动总结当日聊天，文字模型写内容，本地渲染 9:16 Azure 主题图片。 |
+| `proactive_chat.py`、`virtual_life.py` | 指定聊天流随机主动发言、按上次实际发言续接话题，并按每周日常表安排背景。 |
+| `role_recognition.py`、`relationship_management.py` | 真实账号核验、主人/熟人/陌生人提示、成功互动计数和管理员手动关系。 |
+| `followups.py` | 用户自行安排后续问候；可选私聊未来事件自动发现，默认关闭。 |
+| `poke_interaction.py` | 戳一戳工具、被戳回应、回戳、跟风戳、概率和冷却。 |
+| `group_admin.py`、`group_moderation.py` | 限定 QQ 群的权限核对、入群审核与欢迎、成员管理、公告，以及命中词后交 AI 审核的撤回/禁言。 |
+| `anti_bullying.py` | 判断针对麦麦的辱骂，向管理员私聊提醒复核。 |
+| `knowledge_base.py` | 文档上传、粘贴、分段、关键词/语义检索及按聊天流授权；群管词库单独隔离。 |
+| `deepseek_web.py`、`balance_history.py` | Search / Fetch、实时余额及成功查询历史；API Key 留在本机配置。 |
+| `blueberry_budget.py` | 从已有余额记录比较变化，按管理员提醒线低余额通知；默认关闭。 |
+| `voice_synthesis.py` | 语音和唱歌工具，读取 MaiBot 已配置的 MiMo Key。 |
+| `message_debounce.py` | 同用户短消息合并及过时私聊回复取消。 |
+| `stream_router.py`、`prompts.py` | 解析真实聊天流；集中保存工具路由与人设优先提示。 |
+| `webui.json`、`assets/*.html` | 在 MaiBot WebUI 内提供定时日历、知识库和模块管理页面。 |
 
-添加功能时，新建一个实现 `name`、`state_keys`、`load_state`、`dump_state`、`on_config_update` 和 `tick` 的模块，并在 `MaiSecretaryPlugin.__init__` 中调用 `_register_module`。若模块需要给麦麦新增工具或接收事件，在入口类添加 SDK 装饰的薄转发方法。模块状态使用独有字段写入现有 `secretary-state.json`；注册时会拒绝重复字段，未注册字段也会在读写时保留。现有配置字段、工具名和状态文件版本保持兼容。
+新功能只需新增符合 `module_contract.py` 的模块、在 `plugin.py` 注册，并按需添加薄转发工具或 Hook。各模块可在配置页设置，已核验管理员也可通过 `secretary_feature_switch` 用自然语言开关模块和布尔子功能。前置开关、管理员权限、目标聊天流和 API Key 仍各自生效；开关打开不代表尚未填写的配置已经齐备。
 
-本仓库直接作为 MaiBot `plugins/` 下的独立插件目录使用，不修改 MaiBot 主程序。安装依赖：
+## 安装与验证
+
+本仓库是 MaiBot 的独立插件，不修改 MaiBot 主程序。将仓库放入 MaiBot `plugins/` 下的独立目录，按 `requirements.txt` 安装 Python 依赖，再通过 MaiBot 插件管理页启用并填写本机配置。最低版本以 `_manifest.json` 为准，目前是 MaiBot 1.3.7、插件 SDK 2.12.0。不要把 API Key 或服务器上的 `config.toml` 提交到 Git。升级时保留安装目录中的实际 `config.toml` 和 MaiBot 的 `data/plugins/worldcopyist.mai-secretary/` 数据目录。
+
+本地检查：
 
 ```powershell
 uv venv --python 3.13 .venv
 uv pip install --python .venv/Scripts/python.exe -r requirements.txt
+uv pip install --python .venv/Scripts/python.exe pytest ruff
+.venv/Scripts/python.exe -m pytest -q
+.venv/Scripts/python.exe -m ruff check .
 ```
 
-GitHub 仓库：[worldcopyist/maibot-mai-secretary](https://github.com/worldcopyist/maibot-mai-secretary)。插件按 MIT 许可证发布，详见 `LICENSE`。发布后仍需在服务器上验证从仓库安装或更新的流程。
+## 参考项目与许可证
+
+| 项目 | 本插件参考之处 | 上游许可 |
+| --- | --- | --- |
+| [Message_Debouncing_Refactored](https://github.com/Blackwindy2333/Message_Debouncing_Refactored) | 消息防抖的窗口与合并方案；`message_debounce.py` 按其 MIT 许可改写。 | MIT，原版权与完整许可见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。 |
+| [smart_poke_plugin](https://github.com/TAIY2020/smart_poke_plugin) | 戳一戳的回戳、跟风与概率交互形式；本插件实现自己的 SDK 模块。 | [MIT](https://github.com/TAIY2020/smart_poke_plugin/blob/main/LICENSE)。 |
+| [idle_proactive_chat](https://github.com/YukiSakiko/idle_proactive_chat) | 真实聊天流解析和 Maisaka 主动任务的使用思路；本插件实现按时间窗口随机调度。 | 仓库未见根目录许可证文件；仅作设计参考。 |
+| [deepseek-web-search](https://github.com/glcoge/deepseek-web-search) | Search / Fetch 的功能与接口用途；本插件独立实现请求、缓存和余额记录。 | [GPL-3.0](https://github.com/glcoge/deepseek-web-search/blob/main/LICENSE)，不纳入本仓库代码。 |
+| [astrbot_plugin_qqadmin](https://github.com/Zhalslar/astrbot_plugin_qqadmin) | QQ 群管操作范围；本插件通过 MaiBot SDK 与适配器接口独立实现。 | [GPL-3.0](https://github.com/Zhalslar/astrbot_plugin_qqadmin/blob/main/LICENSE)，不纳入本仓库代码。 |
+
+本插件自身按 [MIT 许可证](LICENSE) 发布；`_manifest.json` 的 `license` 字段也为 `MIT`，符合 [MaiBot 插件仓库文件要求](https://github.com/Mai-with-u/plugin-repo/blob/main/CONTRIBUTING.md)。随仓库分发的字体 `assets/fonts/NotoSansSC.ttf` 另按 [SIL Open Font License 1.1](assets/fonts/OFL.txt) 授权，不改为 MIT。上述 GPL 项目是功能和接口参考，不能把它们的源码直接复制进 MIT 模块。用户提供的头像和已审定的 Azure 日报底图分别位于 `assets/icon.png`、`assets/azure_theme.png`。
+
+项目仓库：[worldcopyist/maibot-mai-secretary](https://github.com/worldcopyist/maibot-mai-secretary)。向 MaiBot 官方插件中心提交时，还需按其要求发布与清单版本一致的 GitHub Release。

@@ -1,0 +1,92 @@
+<p align="center"><img src="assets/icon.png" alt="Mai Secretary avatar: Azure" width="144"></p>
+
+# Mai Secretary · 麦麦小秘书
+
+**English** · [简体中文](README.md)
+
+Mai Secretary is a modular MaiBot plugin for proactive conversations, natural-language tasks, daily reports, relationship management, knowledge retrieval, voice, QQ interactions, and web search. It runs through the MaiBot plugin SDK; it does not modify MaiBot's source code. The avatar above is also declared in `_manifest.json` for MaiBot's plugin list.
+
+**Compatibility:** tested on MaiBot 1.3.7 and plugin SDK 2.12.0. Consult `_manifest.json` for the declared bounds and capabilities. The repository's manifest version is `0.20.0`.
+
+## Open the plugin pages
+
+- [Module workbench: switches, relationships, follow-ups, delivery receipts, and Blueberry budget](/extensions/worldcopyist.mai-secretary/workbench)
+- [Task calendar and manual scheduling](/extensions/worldcopyist.mai-secretary/tasks)
+- [Knowledge base and QQ moderation word lists](/extensions/worldcopyist.mai-secretary/knowledge)
+
+These routes open inside an authenticated MaiBot WebUI installation. Their Markdown links may not open directly from GitHub.
+
+## Features and modules
+
+| Module | What it does | Main controls or tools |
+| --- | --- | --- |
+| `feature_control.py` | Lets a verified administrator list, enable, disable, or reset module and Boolean subfeature switches in natural language. Chat-set values persist in plugin state and override the WebUI configuration until reset. | `secretary_feature_switch`; workbench |
+| `scheduled_tasks.py` | Creates one-time, daily, or weekly tasks for the current user and chat stream. At the due time, asks Maisaka to carry out the original request with current context. | `secretary_create_task`, `secretary_list_tasks`, `secretary_cancel_task`; calendar |
+| `task_receipts.py` | Separates Maisaka's queue acceptance from a matched actual send result. Records accepted, sent, failed, and unknown states. Unknown results are never automatically resent; an administrator can retry a confirmed failure once. | `secretary_task_receipts`; workbench |
+| `proactive_chat.py` | Randomly starts conversations in selected chat streams during configured time windows. Supports a target average interval plus random offset, recent context, and continuity from the last message actually sent. | `[proactive]` |
+| `virtual_life.py` | Supplies editable activities for eight time periods on each day of the week as background for proactive chat. MaiBot's own persona has priority. | `[virtual_life]` |
+| `daily_report.py`, `daily_report_renderer.py` | Summarizes one chat stream's text for the current day, either at a configured time or on an administrator's request. A text model writes the summary; local rendering places it onto the approved 9:16 Azure theme. No image generation model is required. | `secretary_generate_daily_report`; `[daily_report]` |
+| `role_recognition.py` | Checks the real platform account and applies separate owner, familiar, or stranger prompts. The owner's identity comes from plugin admins or MaiBot plugin managers; strangers become familiar after more than 50 counted successful interactions by default. | `[role_recognition]` |
+| `relationship_management.py` | Lets an administrator mark an exact account familiar or stranger, or clear that decision. Any verified user can ask about their own relationship. An owner cannot be demoted here. | `secretary_relationship`; workbench |
+| `followups.py` | Schedules a later, context-aware question about a user's event in the current chat. Users can list, cancel, opt out, or opt back in. Optional automatic discovery of explicit tomorrow/day-after events is limited to private chats and off by default. | `secretary_followup`; `[followups]` |
+| `poke_interaction.py` | Gives MaiBot a contextual poke tool and configurable reactions to being poked, including poking back, following other users' pokes, response probabilities, and cooldowns. | `secretary_poke`; `[poke]` |
+| `group_admin.py` | Limits QQ management to configured groups and verifies both the requesting administrator and the bot's group permissions. Covers join requests, welcome text, member operations, titles, mute/unmute, and announcements. | `secretary_group_permission`, `secretary_group_member`, `secretary_group_notice`, `secretary_group_join`, `secretary_group_welcome` |
+| `group_moderation.py` | Checks isolated per-group word lists, asks MaiBot's model to judge context and sensitivity, then optionally recalls or mutes a message. | `[group_admin].moderation_*`; knowledge page |
+| `anti_bullying.py` | Assesses possible abuse directed at MaiBot and sends a private report to configured administrators for review. | `[anti_bullying]` |
+| `knowledge_base.py` | Accepts uploaded documents or pasted text, extracts and chunks content, builds keyword and optional embedding indexes, and restricts chat retrieval to administrator-approved streams. Keeps moderation word lists separate. | `secretary_search_knowledge`; knowledge page |
+| `deepseek_web.py`, `balance_history.py` | Offers DeepSeek Search, Fetch, and a verified administrator's live API balance query. Stores each successful balance snapshot locally and can refresh automatically. Search and balance can be switched independently. | `secretary_deepseek_search`, `secretary_deepseek_fetch`, `secretary_deepseek_balance`; `[deepseek_web]` |
+| `blueberry_budget.py` | Treats the configured alias “蓝莓” (“Blueberry”) as the API balance, compares saved snapshots, and can notify administrators privately when an automatic snapshot crosses the low-balance threshold. It does not make extra balance requests. Off by default. | `secretary_blueberry_budget`; `[blueberry_budget]` |
+| `voice_synthesis.py` | Sends speech or singing when explicitly requested. Regular speech uses a configurable Azure voice description with MiMo VoiceDesign and MaiBot's existing MiMo API key. | `secretary_speak`; `[voice_synthesis]` |
+| `message_debounce.py` | Merges closely spaced messages from the same real sender and optionally suppresses a stale private reply after a newer message arrives. | `[message_debounce]` |
+
+The knowledge base accepts text, Markdown, CSV/TSV, JSON/JSONL, XML/YAML, HTML, RTF, PDF with extractable text, DOCX, XLSX, PPTX, EPUB, ODT/ODS/ODP. Scanned PDFs require OCR before upload. The upload limit is 8 MiB per file. Chat retrieval is denied until `[knowledge_base].allowed_chats` contains an approved stream.
+
+## Natural-language examples and permissions
+
+An authenticated plugin administrator can say “列出小秘书功能”, “开启约定回访”, “关闭联网搜索”, “把 qq:123456789 设为熟人”, or “把蓝莓提醒线设为 10”. MaiBot uses the exact tools listed above. Other users can ask about their own relationship, schedule their own tasks or follow-ups in the current chat, and opt out of personal follow-ups. An administrator must explicitly request global changes, group management writes, or an immediate daily report.
+
+The administrator list is `[plugin].admin_accounts`; when it is empty, role recognition and admin-only tools use MaiBot's plugin management permission accounts. The plugin verifies the current real sender rather than trusting a nickname or a tool argument. If MaiBot disables or unloads the entire plugin, no chat tool can re-enable it; use MaiBot's plugin management page. Enabling a switch does not fill in required target streams, group IDs, API keys, or permissions.
+
+The daily report and follow-up modules submit proactive tasks to MaiBot. Queue acceptance is not proof of delivery. Task receipts only mark a scheduled task as sent after a matching host send hook reports success. A manually queried Blueberry balance is refreshed on every explicit administrator question; the next automatic refresh interval starts from that successful query. Historical values are labeled with their query time.
+
+## Architecture and persistence
+
+```text
+MaiBot SDK → plugin.py (configuration, tools, hooks, WebUI APIs, scheduler)
+                 ├── module_contract.py + independent feature modules
+                 ├── secretary_core.py / stream_router.py / prompts.py
+                 └── data/plugins/worldcopyist.mai-secretary/
+WebUI      → webui.json → assets/workbench.html, tasks.html, knowledge.html
+```
+
+`plugin.py` is the only SDK entry point. Each feature owns its behavior and state fields, while the entry point registers it and forwards SDK events. New modules implement `name`, `state_keys`, `load_state`, `dump_state`, `on_config_update`, and `tick` from `module_contract.py`; `_register_module` rejects duplicate state keys. The shared `secretary-state.json` uses schema version 1 and retains unknown keys for future modules. The switch overlay lives there rather than writing back to the server's `config.toml`. Balance snapshots use `deepseek-balance.sqlite3`, and knowledge documents and indexes remain in the plugin's data directory. `prompts.py` keeps tool-routing text together and gives MaiBot's existing persona priority.
+
+## Install and test
+
+Place this repository in its own directory under MaiBot's `plugins/` directory, install `requirements.txt` in MaiBot's Python environment, then enable the plugin and configure it in MaiBot WebUI. Preserve the installation's actual `config.toml` and `data/plugins/worldcopyist.mai-secretary/` when updating. Keep API keys out of Git. The default DeepSeek web module, daily scheduled report, follow-ups, and Blueberry budget alerts are off until configured. A proactive target list left empty sends no random messages.
+
+Local development on Windows:
+
+```powershell
+uv venv --python 3.13 .venv
+uv pip install --python .venv/Scripts/python.exe -r requirements.txt
+uv pip install --python .venv/Scripts/python.exe pytest ruff
+.venv/Scripts/python.exe -m pytest -q
+.venv/Scripts/python.exe -m ruff check .
+```
+
+The [Chinese guide](README.md) contains the full configuration examples for QQ moderation, voice, Azure reports, virtual life, DeepSeek, and the knowledge base. The plugin manifest follows the [MaiBot plugin repository requirements](https://github.com/Mai-with-u/plugin-repo/blob/main/CONTRIBUTING.md). Submission to the official plugin center also requires a published GitHub Release whose version matches `_manifest.json`; a pushed commit alone is not that release.
+
+## References and licenses
+
+| Project | What we referred to | Upstream license |
+| --- | --- | --- |
+| [Message_Debouncing_Refactored](https://github.com/Blackwindy2333/Message_Debouncing_Refactored) | Debounce window and merge behavior. `message_debounce.py` is adapted under its MIT terms. | MIT; original copyright and full notice are retained in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md). |
+| [smart_poke_plugin](https://github.com/TAIY2020/smart_poke_plugin) | Poke-back, bystander poke, and probability-based interaction ideas. | [MIT](https://github.com/TAIY2020/smart_poke_plugin/blob/main/LICENSE); this plugin has its own SDK implementation. |
+| [idle_proactive_chat](https://github.com/YukiSakiko/idle_proactive_chat) | Resolving real chat streams and submitting Maisaka proactive tasks. | No root license file was visible; used as a design reference only. |
+| [deepseek-web-search](https://github.com/glcoge/deepseek-web-search) | Search and Fetch feature/API behavior. | [GPL-3.0](https://github.com/glcoge/deepseek-web-search/blob/main/LICENSE); its source is not included in this MIT repository. |
+| [astrbot_plugin_qqadmin](https://github.com/Zhalslar/astrbot_plugin_qqadmin) | Scope of QQ group administration operations. | [GPL-3.0](https://github.com/Zhalslar/astrbot_plugin_qqadmin/blob/main/LICENSE); its source is not included in this MIT repository. |
+
+Mai Secretary itself is licensed under [MIT](LICENSE), matching `_manifest.json`. The bundled `assets/fonts/NotoSansSC.ttf` remains under the separate [SIL Open Font License 1.1](assets/fonts/OFL.txt). The avatar and approved Azure report background are `assets/icon.png` and `assets/azure_theme.png`.
+
+Repository: [worldcopyist/maibot-mai-secretary](https://github.com/worldcopyist/maibot-mai-secretary).

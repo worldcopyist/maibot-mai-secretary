@@ -2,6 +2,12 @@
 https://github.com/Blackwindy2333/Message_Debouncing_Refactored
 原作者：Copyright (c) 2026 BlackBee114514
 
+The `message_debounce.py` module is adapted from Message_Debouncing_Refactored
+under its MIT license. The original copyright and complete license text follow.
+
+Bundled font: `assets/fonts/NotoSansSC.ttf` is licensed separately under
+SIL Open Font License 1.1; see `assets/fonts/OFL.txt` for its copyright and terms.
+
 MIT License
 
 Copyright (c) 2026 BlackBee114514
