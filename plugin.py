@@ -467,8 +467,17 @@ class RoleRecognitionSettings(PluginConfigBase):
         default_factory=list,
         json_schema_extra={
             "label": "熟人账号",
-            "hint": "每行一个 平台:账号，例如 qq:123456789。主人优先于熟人；其余账号为陌生人。",
+            "hint": "每行一个 平台:账号，例如 qq:123456789。手动熟人立即生效；主人优先于熟人。",
             "placeholder": "qq:123456789",
+        },
+    )
+    auto_upgrade_threshold: int = Field(
+        default=50,
+        ge=1,
+        le=10000,
+        json_schema_extra={
+            "label": "自动升级熟人所需互动次数",
+            "hint": "陌生人收到麦麦成功回复的次数超过此值后自动成为熟人；设为 50 时第 51 次升级。按平台账号跨聊天流累计。",
         },
     )
     owner_prompt: str = Field(
@@ -1082,6 +1091,22 @@ class MaiSecretaryPlugin(MaiBotPlugin):
         self, message: dict[str, Any] | None = None, sent: bool = False, **kwargs: Any
     ) -> None:
         await self.proactive.capture_proactive_reply(message, sent, **kwargs)
+
+    @HookHandler(
+        "send_service.after_send",
+        name="secretary_role_count_interaction",
+        mode=HookMode.OBSERVE,
+        description="麦麦成功回复陌生人后累计互动次数并自动升级熟人",
+    )
+    async def count_role_interaction(
+        self,
+        message: dict[str, Any] | None = None,
+        sent: bool = False,
+        reply_message_id: str | None = None,
+        **kwargs: Any,
+    ) -> None:
+        del kwargs
+        await self.role_recognition.record_interaction(message, sent, reply_message_id)
 
     @Tool(
         "secretary_create_task",

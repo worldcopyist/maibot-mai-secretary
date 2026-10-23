@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import importlib
 import logging
 import sys
@@ -30,6 +31,7 @@ def _setup(config: dict | None = None, permissions: list[str] | None = None):
             logger=logging.getLogger("role_test"),
         ),
         _save_state=lambda: None,
+        _lock=asyncio.Lock(),
     )
     return role_module.RoleRecognitionModule(plugin), values
 
@@ -50,6 +52,15 @@ def _request(message_id: str, *, session: str = "stream") -> dict:
         "items": [
             {"item_type": "UserMessageItem", "parts": [{"type": "text", "text": f'<message msg_id="{message_id}" time="10:00" user="同名昵称">\n你好'}]},
         ],
+    }
+
+
+def _sent_reply(message_id: str, *, session: str = "stream") -> dict:
+    return {
+        "session_id": session,
+        "account_id": "2966970067",
+        "message_info": {"user_info": {"user_id": "2966970067"}},
+        "reply_to": message_id,
     }
 
 
@@ -182,8 +193,78 @@ async def test_permission_refresh_and_persisted_mapping():
     assert "级别：陌生人" in _note(new_request)
 
 
+@pytest.mark.asyncio
+async def test_stranger_becomes_familiar_only_after_51_delivered_replies_across_chats():
+    role, _ = _setup()
+    for number in range(1, 52):
+        session = "group" if number % 2 else "private"
+        message_id = f"inbound-{number}"
+        role.remember(_message(message_id, "222", session=session))
+        await role.record_interaction(_sent_reply(message_id, session=session), True, message_id)
+        if number == 50:
+            request = _request(message_id, session=session)
+            await role.inject(request)
+            assert "级别：陌生人" in _note(request)
+    assert role.interaction_counts == {"qq:222": 51}
+    assert role.auto_familiar_accounts == {"qq:222"}
+    request = _request("inbound-51", session="group")
+    await role.inject(request)
+    assert "级别：熟人" in _note(request)
+
+
+@pytest.mark.asyncio
+async def test_failed_duplicate_and_unanchored_sends_do_not_add_interactions():
+    role, _ = _setup()
+    role.remember(_message("m1", "222"))
+    await role.record_interaction(_sent_reply("m1"), False, "m1")
+    await role.record_interaction(_sent_reply("m1"), True, "unrelated")
+    await role.record_interaction(_sent_reply("m1", session="different"), True, "m1")
+    await role.record_interaction(_sent_reply(""), True)
+    await role.record_interaction(
+        {**_sent_reply("m1"), "message_info": {"user_info": {"user_id": "someone-else"}}},
+        True,
+        "m1",
+    )
+    assert role.interaction_counts == {}
+    await role.record_interaction(_sent_reply("m1"), True, "m1")
+    role.remember(_message("m1", "222"))  # Replayed inbound message must not clear the counted flag.
+    await role.record_interaction(_sent_reply("m1"), True, "m1")
+    assert role.interaction_counts == {"qq:222": 1}
+
+
+@pytest.mark.asyncio
+async def test_promotion_survives_restart_and_owner_keeps_priority():
+    role, _ = _setup({"role_recognition": {"auto_upgrade_threshold": 1}})
+    for message_id in ("m1", "m2"):
+        role.remember(_message(message_id, "222"))
+        await role.record_interaction(_sent_reply(message_id), True, message_id)
+    state: dict = {}
+    role.dump_state(state)
+    restored, _ = _setup({"role_recognition": {"auto_upgrade_threshold": 1}})
+    restored.load_state(state)
+    assert restored.auto_familiar_accounts == {"qq:222"}
+    request = _request("m2")
+    await restored.inject(request)
+    assert "级别：熟人" in _note(request)
+    restored.plugin.config.plugin.admin_accounts = ["qq:222"]
+    owner_request = _request("m2")
+    await restored.inject(owner_request)
+    assert "级别：主人" in _note(owner_request)
+
+
+@pytest.mark.asyncio
+async def test_manual_familiar_and_owner_are_not_counted_as_strangers():
+    role, _ = _setup({"role_recognition": {"familiar_accounts": ["qq:111"]}})
+    for message_id, account in (("familiar", "111"), ("owner", "2767263382")):
+        role.remember(_message(message_id, account))
+        await role.record_interaction(_sent_reply(message_id), True, message_id)
+    assert role.interaction_counts == {}
+
+
 def test_account_and_prompt_validation():
     with pytest.raises(ValueError):
         plugin_module.RoleRecognitionSettings.model_validate({"familiar_accounts": ["qq:not-qq"]})
     with pytest.raises(ValueError):
         plugin_module.RoleRecognitionSettings.model_validate({"owner_prompt": " "})
+    with pytest.raises(ValueError):
+        plugin_module.RoleRecognitionSettings.model_validate({"auto_upgrade_threshold": 0})

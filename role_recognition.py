@@ -30,11 +30,13 @@ def _display_id(value: str) -> str:
 
 class RoleRecognitionModule:
     name = "role_recognition"
-    state_keys = frozenset({"role_speakers"})
+    state_keys = frozenset({"role_speakers", "role_interaction_counts", "role_auto_familiar_accounts"})
 
     def __init__(self, plugin: Any) -> None:
         self.plugin = plugin
         self.records: dict[str, dict[str, Any]] = {}
+        self.interaction_counts: dict[str, int] = {}
+        self.auto_familiar_accounts: set[str] = set()
         self.host_owners: set[str] = set()
         self._permission_refresh_at = 0.0
         self._proactive_sessions: dict[str, str | None] = {}
@@ -43,7 +45,7 @@ class RoleRecognitionModule:
     def load_state(self, data: dict[str, Any]) -> None:
         raw = data.get("role_speakers", {})
         if not isinstance(raw, dict):
-            return
+            raw = {}
         self.records = {
             key: value
             for key, value in raw.items()
@@ -54,12 +56,36 @@ class RoleRecognitionModule:
             and isinstance(value.get("message_id"), str)
             and isinstance(value.get("seen_at"), (int, float))
         }
+        counts = data.get("role_interaction_counts", {})
+        self.interaction_counts = {}
+        if isinstance(counts, dict):
+            for account, count in counts.items():
+                if not isinstance(account, str) or type(count) is not int or count < 0:
+                    continue
+                try:
+                    self.interaction_counts[normalize_admin_account(account)] = count
+                except ValueError:
+                    continue
+        auto_familiar = data.get("role_auto_familiar_accounts", [])
+        self.auto_familiar_accounts = set()
+        if isinstance(auto_familiar, list):
+            for account in auto_familiar:
+                if not isinstance(account, str):
+                    continue
+                try:
+                    self.auto_familiar_accounts.add(normalize_admin_account(account))
+                except ValueError:
+                    continue
         self._prune()
 
     def dump_state(self, payload: dict[str, Any]) -> None:
         self._prune()
         if self.records:
             payload["role_speakers"] = self.records
+        if self.interaction_counts:
+            payload["role_interaction_counts"] = self.interaction_counts
+        if self.auto_familiar_accounts:
+            payload["role_auto_familiar_accounts"] = sorted(self.auto_familiar_accounts)
 
     def on_config_update(self) -> None:
         self._permission_refresh_at = 0.0
@@ -157,6 +183,8 @@ class RoleRecognitionModule:
             return
         key = f"{session_id}:{message_id}"
         self.clear_proactive(session_id)
+        if key in self.records:
+            return
         self.records[key] = {
             "session_id": session_id,
             "message_id": message_id,
@@ -170,6 +198,52 @@ class RoleRecognitionModule:
             ),
         }
         self.plugin._save_state()
+
+    async def record_interaction(
+        self,
+        message: dict[str, Any] | None,
+        sent: bool,
+        reply_message_id: str | None = None,
+    ) -> None:
+        """Count one delivered reply to one verified inbound message."""
+        if (
+            not self.plugin.config.plugin.enabled
+            or not self.plugin.config.role_recognition.enabled
+            or sent is not True
+            or not isinstance(message, dict)
+        ):
+            return
+        session_id = str(message.get("session_id") or "").strip()
+        anchor_id = str(reply_message_id or message.get("reply_to") or "").strip()
+        info = message.get("message_info")
+        user = info.get("user_info") if isinstance(info, dict) else None
+        bot_id = str(message.get("account_id") or "").strip()
+        sender_id = str(user.get("user_id") or "").strip() if isinstance(user, dict) else ""
+        if not session_id or not anchor_id or not bot_id or sender_id != bot_id:
+            return
+        owners = await self.admin_accounts()
+        async with self.plugin._lock:
+            record = self._find_speaker_record(session_id, anchor_id)
+            if (
+                record is None
+                or record.get("interaction_counted") is True
+                or time.time() - float(record["seen_at"]) > _TTL_SECONDS
+            ):
+                return
+            account = str(record["account"])
+            if (
+                account in owners
+                or account in self.plugin.config.role_recognition.familiar_accounts
+                or account in self.auto_familiar_accounts
+            ):
+                return
+            record["interaction_counted"] = True
+            count = self.interaction_counts.get(account, 0) + 1
+            self.interaction_counts[account] = count
+            if count > self.plugin.config.role_recognition.auto_upgrade_threshold:
+                self.auto_familiar_accounts.add(account)
+                self.plugin.ctx.logger.info("角色识别：%s 已自动升级为熟人（%d 次互动）", account, count)
+            self.plugin._save_state()
 
     @staticmethod
     def _inbound_text(message: dict[str, Any]) -> str:
@@ -329,7 +403,7 @@ class RoleRecognitionModule:
         config = self.plugin.config.role_recognition
         if account in owners:
             level, prompt = "主人", config.owner_prompt
-        elif account in config.familiar_accounts:
+        elif account in config.familiar_accounts or account in self.auto_familiar_accounts:
             level, prompt = "熟人", config.familiar_prompt
         else:
             level, prompt = "陌生人", config.stranger_prompt

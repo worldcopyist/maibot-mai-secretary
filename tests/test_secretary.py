@@ -96,6 +96,7 @@ def test_sdk_exposes_secretary_tools_apis_and_hooks(tmp_path):
         ("API", "secretary_tasks_cancel"),
         ("HOOK_HANDLER", "secretary_cancel_pending_on_inbound"),
         ("HOOK_HANDLER", "secretary_capture_proactive_reply"),
+        ("HOOK_HANDLER", "secretary_role_count_interaction"),
         ("HOOK_HANDLER", "secretary_anti_bullying_inspect"),
         ("HOOK_HANDLER", "secretary_role_remember_speaker"),
         ("HOOK_HANDLER", "secretary_role_planner_prompt"),
