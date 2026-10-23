@@ -4,7 +4,16 @@
 
 **English** · [简体中文](README.md)
 
-Mai Secretary starts timed conversations, runs scheduled tasks, creates daily reports, and remembers relationships and follow-ups. It also offers a knowledge base, web search and Blueberry balance, voice replies, pokes, QQ group management, anti-bullying, message debouncing, and natural-language feature switches.
+## At a glance
+
+- **Companionship and plans:** proactive chat, scheduled tasks, daily reports, relationships, and follow-ups.
+- **Information and expression:** knowledge retrieval, web search, Blueberry balance, voice replies, and pokes.
+- **Chat management:** QQ group management, anti-bullying, message debouncing, and natural-language feature switches for administrators.
+
+## Token usage and cost
+
+> [!IMPORTANT]
+> **Token usage:** Most features exposed to MaiBot send tool results or extra context back to the LLM (language model) for a decision or reply, increasing input token use and potentially increasing cost when the model charges per token. Daily summaries and AI group moderation may also make separate model calls. Actual usage depends on how often features run and how much text they return.
 
 ## Open the plugin pages
 
