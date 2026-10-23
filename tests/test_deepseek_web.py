@@ -42,14 +42,14 @@ def make_module(handler, overrides=None, data_dir=None):
     return plugin, plugin.deepseek_web
 
 
-def authorize_balance(plugin, account="qq:123456789"):
+def authorize_balance(plugin, account="qq:123456789", message_id="message-1"):
     now = time.time()
-    plugin.role_recognition.records["private-stream:message-1"] = {
-        "session_id": "private-stream", "message_id": "message-1", "account": account,
+    plugin.role_recognition.records[f"private-stream:{message_id}"] = {
+        "session_id": "private-stream", "message_id": message_id, "account": account,
         "seen_at": now, "balance_request": True,
     }
     plugin.role_recognition._planner_speakers["private-stream"] = {
-        "account": account, "message_id": "message-1", "verified_at": now,
+        "account": account, "message_id": message_id, "verified_at": now,
     }
     return {"stream_id": "private-stream", "chat_id": "private-stream"}
 
@@ -151,6 +151,10 @@ async def test_auto_and_manual_balances_are_saved_and_restored_for_current_key(t
     settings = {"balance_alias": "蓝莓", "auto_balance_enabled": True,
                 "balance_context_all_chats": True}
     plugin, module = make_module(handler, settings, tmp_path)
+    assert module.is_balance_request("蓝莓还剩多少？")
+    assert module.is_balance_request("蓝莓够不够用？")
+    assert module.is_balance_request("蓝莓？")
+    assert not module.is_balance_request("蓝莓")
     await module.start()
     now = datetime.now(UTC)
     await module.tick(now)
@@ -159,6 +163,20 @@ async def test_auto_and_manual_balances_are_saved_and_restored_for_current_key(t
     assert len(calls) == 1
     assert "蓝莓余额" in module.balance_context_note()
     assert "总可用 10" in module.balance_context_note()
+    assert "主人说“蓝莓”默认指这个 API 余额" in module.balance_context_note()
+    assert "蓝天最喜欢的食物" in module.balance_context_note()
+    assert "每次询问" in module.balance_context_note()
+    authorize_balance(plugin, message_id="prompt-question")
+    question_prompt = {"session_id": "private-stream", "reply_message_id": "prompt-question",
+                       "items": [{"item_type": "SystemMessageItem",
+                                  "parts": [{"type": "text", "text": "蓝天的人设"}]}]}
+    await plugin.inject_role_for_planner(**question_prompt)
+    question_text = "\n".join(
+        str(part.get("text") or "")
+        for item in question_prompt["items"] for part in item.get("parts") or []
+    )
+    assert "先调用 `secretary_deepseek_balance` 获取本次结果" in question_text
+    assert "总可用 10" not in question_text
     for hook in (plugin.inject_role_for_planner, plugin.inject_role_for_replyer):
         prompt = {"session_id": "group-stream", "items": [
             {"item_type": "SystemMessageItem", "parts": [{"type": "text", "text": "蓝天的人设"}]},
@@ -167,6 +185,7 @@ async def test_auto_and_manual_balances_are_saved_and_restored_for_current_key(t
         texts = [str(part.get("text") or "") for item in prompt["items"] for part in item.get("parts") or []]
         assert texts[0] == "蓝天的人设"
         assert any("蓝莓余额" in value and "总可用 10" in value and "查询时间" in value for value in texts)
+        assert any("主人说“蓝莓”默认指这个 API 余额" in value for value in texts)
     await module.tick(now + timedelta(hours=1))
     assert len(calls) == 1
     await module.tick(now + timedelta(hours=7))
@@ -176,19 +195,26 @@ async def test_auto_and_manual_balances_are_saved_and_restored_for_current_key(t
     result = await plugin.secretary_deepseek_balance(**authorize_balance(plugin))
     assert result["success"] is True
     assert "蓝莓余额" in result["content"] and "总可用 30" in result["content"]
+    again = await plugin.secretary_deepseek_balance(
+        **authorize_balance(plugin, message_id="message-2")
+    )
+    assert again["success"] is True
+    assert "总可用 40" in again["content"]
+    assert len(calls) == 4
     with sqlite3.connect(tmp_path / "deepseek-balance.sqlite3") as db:
         rows = db.execute("SELECT source, alias FROM balance_snapshots ORDER BY id").fetchall()
-    assert rows == [("automatic", "蓝莓"), ("automatic", "蓝莓"), ("manual", "蓝莓")]
+    assert rows == [("automatic", "蓝莓"), ("automatic", "蓝莓"),
+                    ("manual", "蓝莓"), ("manual", "蓝莓")]
     await module.stop()
 
     restored, restored_module = make_module(handler, settings, tmp_path)
     await restored_module.start()
-    assert "总可用 30" in restored_module.balance_context_note()
+    assert "总可用 40" in restored_module.balance_context_note()
     restored._plugin_config_instance = plugin_module.SecretaryConfig.model_validate({
         "deepseek_web": {"enabled": True, "api_key": "test-secret", "balance_alias": "蓝莓"}
     })
     restored_module.on_config_update()
-    assert "总可用 30" not in restored_module.balance_context_note()
+    assert "总可用 40" not in restored_module.balance_context_note()
     restored._plugin_config_instance = plugin_module.SecretaryConfig.model_validate({
         "deepseek_web": {"enabled": True, "api_key": "different-key", "balance_alias": "蓝莓",
                          "balance_context_all_chats": True}
@@ -196,6 +222,37 @@ async def test_auto_and_manual_balances_are_saved_and_restored_for_current_key(t
     restored_module.on_config_update()
     assert "没有保存成功" in restored_module.balance_context_note()
     await restored_module.stop()
+
+
+@pytest.mark.asyncio
+async def test_manual_balance_query_restarts_auto_refresh_interval(tmp_path):
+    calls = []
+
+    def handler(request):
+        calls.append(request)
+        return httpx.Response(200, json={
+            "is_available": True,
+            "balance_infos": [{"currency": "CNY", "total_balance": "10",
+                               "granted_balance": "0", "topped_up_balance": "10"}],
+        })
+
+    plugin, module = make_module(handler, {"balance_alias": "蓝莓",
+                                            "auto_balance_enabled": True}, tmp_path)
+    await module.start()
+    await module.tick(datetime.now(UTC))
+    await asyncio.wait_for(module._balance_refresh_task, 2)
+    assert len(calls) == 1
+
+    result = await plugin.secretary_deepseek_balance(**authorize_balance(plugin))
+    assert result["success"] is True
+    assert len(calls) == 2
+    manual_at = datetime.fromisoformat(module._latest_balance["queried_at"])
+    await module.tick(manual_at + timedelta(hours=5, minutes=59))
+    assert len(calls) == 2
+    await module.tick(manual_at + timedelta(hours=6, seconds=1))
+    await asyncio.wait_for(module._balance_refresh_task, 2)
+    assert len(calls) == 3
+    await module.stop()
 
 
 @pytest.mark.asyncio

@@ -632,7 +632,7 @@ class DeepSeekWebSettings(PluginConfigBase):
         max_length=20,
         json_schema_extra={
             "label": "API 余额的别称",
-            "hint": "例如填“蓝莓”，麦麦就能用这个称呼谈论最近保存的余额；只有管理员能要求实时查询。",
+            "hint": "例如填“蓝莓”：主人说蓝莓就指 API 余额，也可作为蓝天最爱的食物来表达；管理员每次询问余额都会实时查询。",
         },
     )
     auto_balance_enabled: bool = Field(
@@ -653,7 +653,7 @@ class DeepSeekWebSettings(PluginConfigBase):
         default=6.0, ge=1.0, le=24.0,
         json_schema_extra={
             "label": "自动查询间隔（小时）",
-            "hint": "默认 6 小时；失败后至少等待 30 分钟再尝试，不会每隔 30 秒请求接口。",
+            "hint": "默认 6 小时；管理员手动查询成功后从该次查询重新计时；自动查询失败后至少等待 30 分钟再试。",
         },
     )
 
@@ -999,11 +999,24 @@ class MaiSecretaryPlugin(MaiBotPlugin):
     )
     async def inject_role_for_planner(self, **kwargs: Any) -> dict[str, Any]:
         result = await self.role_recognition.inject(kwargs, track_for_tools=True)
-        return self._inject_balance_context(result)
+        session_id = str(kwargs.get("session_id") or "").strip()
+        speaker = self.role_recognition._planner_speakers.get(session_id)
+        record = (
+            self.role_recognition.records.get(f"{session_id}:{speaker['message_id']}")
+            if speaker else None
+        )
+        require_live_query = bool(
+            record and record.get("balance_request")
+            and self.role_recognition.peek_planner_speaker(session_id) == speaker["account"]
+            and speaker["account"] in await self.role_recognition.admin_accounts()
+        )
+        return self._inject_balance_context(result, require_live_query=require_live_query)
 
-    def _inject_balance_context(self, result: dict[str, Any]) -> dict[str, Any]:
+    def _inject_balance_context(
+        self, result: dict[str, Any], *, require_live_query: bool = False,
+    ) -> dict[str, Any]:
         items = result.get("modified_kwargs", {}).get("items")
-        note = self.deepseek_web.balance_context_note()
+        note = self.deepseek_web.balance_context_note(require_live_query=require_live_query)
         marker = "【麦麦小秘书·余额背景】"
         if (
             note
@@ -1306,9 +1319,11 @@ class MaiSecretaryPlugin(MaiBotPlugin):
     @Tool(
         "secretary_deepseek_balance",
         description=(
-            "只有已核验的小秘书管理员明确询问 DeepSeek API 余额、配置的余额别称还剩多少或赠金额度时调用。"
+            "已核验的小秘书管理员每次询问 DeepSeek API 余额、配置的余额别称余量或赠金额度时都必须调用，"
+            "包括主人询问“蓝莓”的数量或状态；即使提示词里已有上次缓存也要重新查询。"
             "读取小秘书 DeepSeek 联网模块所配置 API Key 对应账号的实时余额；"
-            "不要向普通用户透露余额，不要在没有管理员请求时调用。按工具结果回答，不猜测金额。"
+            "只有管理员能触发实时查询；普通聊天可按共享余额配置引用上次记录。"
+            "不要在没有管理员请求时调用。按本次工具结果回答，不猜测金额。"
         ),
         parameters=[],
         visibility="visible",

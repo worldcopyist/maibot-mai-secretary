@@ -92,9 +92,12 @@ class DeepSeekWebModule:
         query = unicodedata.normalize("NFKC", text).casefold()
         alias = unicodedata.normalize("NFKC", self.settings.balance_alias).casefold()
         subjects = ("api", "deepseek", alias)
-        return any(subject and subject in query for subject in subjects) and bool(
-            re.search(r"余额|还剩|剩余|多少|额度|结余|查询|查一下|看看", query)
-        )
+        if not any(subject and subject in query for subject in subjects):
+            return False
+        return bool(re.search(
+            r"余额|还剩|剩余|多少|额度|结余|查询|查一下|看看|还有|够不够|够用|够吃|吃完|用完|消耗|情况|状态|怎么样|如何",
+            query,
+        )) or bool(alias and re.fullmatch(rf"{re.escape(alias)}[？?]+", query.strip()))
 
     async def tick(self, now: datetime) -> None:
         if (
@@ -115,12 +118,16 @@ class DeepSeekWebModule:
             return
         self._last_auto_attempt_at = now
         self._balance_refresh_task = asyncio.create_task(
-            self._auto_refresh_balance(), name="mai-secretary-balance-refresh"
+            self._auto_refresh_balance(self._latest_balance["queried_at"] if self._latest_balance else None),
+            name="mai-secretary-balance-refresh",
         )
 
-    async def _auto_refresh_balance(self) -> None:
+    async def _auto_refresh_balance(self, scheduled_latest_at: str | None) -> None:
         try:
             async with self._balance_lock:
+                latest_at = self._latest_balance["queried_at"] if self._latest_balance else None
+                if latest_at != scheduled_latest_at:
+                    return
                 await self._fetch_and_store_balance("automatic")
             self.plugin.ctx.logger.info("小秘书 DeepSeek 余额已自动更新并保存")
         except asyncio.CancelledError:
@@ -255,29 +262,40 @@ class DeepSeekWebModule:
             self._latest_balance = None
         return snapshot
 
-    def balance_context_note(self) -> str:
+    def balance_context_note(self, *, require_live_query: bool = False) -> str:
         if not self.plugin.config.plugin.enabled or not self.settings.enabled:
             return ""
         alias = self.settings.balance_alias
+        owner_alias_rule = (
+            "已核验的主人说“蓝莓”默认指这个 API 余额，不必再说“API”或“余额”；"
+            "蓝莓也是蓝天最喜欢的食物，可以按 MaiBot 人设用珍惜蓝莓的口吻谈余额，"
+            "但不要虚构水果颗数或库存。"
+            if alias == "蓝莓" else ""
+        )
         if not alias and not self.settings.balance_context_all_chats:
             return ""
         if not self.settings.balance_context_all_chats:
             return (
                 f"【麦麦小秘书·余额背景】{alias}是 DeepSeek API 账号余额的别称。"
-                f"只有已核验管理员明确询问“{alias}还剩多少”等余额问题时，"
-                "才调用 `secretary_deepseek_balance`；不要猜测金额。MaiBot 当前人设优先。"
+                f"{owner_alias_rule}已核验管理员每次询问“{alias}还剩多少”等余额问题时，"
+                "必须调用 `secretary_deepseek_balance` 实时查询，不能只用缓存回答；"
+                "查询失败时不要猜测金额。MaiBot 当前人设优先。"
             )
         alias = alias or "API 余额"
         snapshot = self._latest_balance
-        if snapshot is None:
+        if require_live_query:
+            balance_line = "本轮管理员正在询问余额；此处不提供上次金额，先调用 `secretary_deepseek_balance` 获取本次结果。"
+        elif snapshot is None:
             balance_line = "目前还没有保存成功的余额查询结果，不要猜测数量。"
         else:
             balance_line = self._render_balance(snapshot, realtime=False)
         return (
             f"【麦麦小秘书·余额背景】{alias}是 DeepSeek API 账号余额的别称。"
             f"{balance_line} 这是后台资料，不是聊天消息；MaiBot 当前人设优先。"
-            "当聊天里的别称指余额时，可以按当前话题自然引用；若指真正的食物或别的事，不要混淆。"
-            "无关话题不要反复提余额。管理员明确要求实时查询时才调用 `secretary_deepseek_balance`。"
+            f"{owner_alias_rule}其他人提到别称时结合上下文理解。"
+            f"已核验管理员每次询问余额、{alias}余量或状态时，必须先调用 `secretary_deepseek_balance` "
+            "重新查询，再按工具结果回答；不能拿上次缓存当作本次结果。成功查询会重新开始自动查询间隔。"
+            "无关话题不要反复提余额。"
         )
 
     async def _request_balance(self, *, base_url: str, key: str) -> dict[str, Any]:
