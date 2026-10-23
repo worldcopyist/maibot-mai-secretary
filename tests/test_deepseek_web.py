@@ -3,6 +3,7 @@ from __future__ import annotations
 import importlib
 import logging
 import sys
+import time
 import types
 from pathlib import Path
 
@@ -18,6 +19,7 @@ plugin_module = importlib.import_module("mai_secretary.plugin")
 
 def make_module(handler, overrides=None):
     config = {
+        "plugin": {"admin_accounts": ["qq:123456789"]},
         "deepseek_web": {
             "enabled": True,
             "api_key": "test-secret",
@@ -32,6 +34,83 @@ def make_module(handler, overrides=None):
     plugin._ctx = types.SimpleNamespace(logger=logging.getLogger("test_deepseek_web"))
     plugin.deepseek_web._client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
     return plugin, plugin.deepseek_web
+
+
+def authorize_balance(plugin, account="qq:123456789"):
+    now = time.time()
+    plugin.role_recognition.records["private-stream:message-1"] = {
+        "session_id": "private-stream", "message_id": "message-1", "account": account, "seen_at": now,
+    }
+    plugin.role_recognition._planner_speakers["private-stream"] = {
+        "account": account, "message_id": "message-1", "verified_at": now,
+    }
+    return {"stream_id": "private-stream", "chat_id": "private-stream"}
+
+
+@pytest.mark.asyncio
+async def test_balance_reads_official_endpoint_for_verified_admin_only():
+    calls = []
+
+    def handler(request):
+        calls.append(request)
+        assert request.method == "GET"
+        assert str(request.url) == "https://api.deepseek.com/user/balance"
+        assert request.headers["authorization"] == "Bearer test-secret"
+        return httpx.Response(200, json={
+            "is_available": True,
+            "balance_infos": [{"currency": "CNY", "total_balance": "110.00", "granted_balance": "10.00", "topped_up_balance": "100.00"}],
+        })
+
+    plugin, module = make_module(handler)
+    kwargs = authorize_balance(plugin)
+    result = await plugin.secretary_deepseek_balance(**kwargs)
+    assert result["success"] is True
+    assert "CNY" in result["content"] and "110.00" in result["content"]
+    assert "未过期赠金 10.00" in result["content"]
+    assert "test-secret" not in str(result)
+    assert len(calls) == 1
+    repeated = await plugin.secretary_deepseek_balance(**kwargs)
+    assert repeated["success"] is False and len(calls) == 1
+    await module.stop()
+
+
+@pytest.mark.asyncio
+async def test_balance_rejects_non_admin_and_mismatched_chat_without_request():
+    calls = []
+
+    def handler(request):
+        calls.append(request)
+        raise AssertionError("unauthorized request reached DeepSeek")
+
+    plugin, module = make_module(handler)
+    kwargs = authorize_balance(plugin, "qq:987654321")
+    result = await plugin.secretary_deepseek_balance(**kwargs)
+    assert result["success"] is False and "管理员" in result["content"]
+    kwargs = authorize_balance(plugin)
+    result = await plugin.secretary_deepseek_balance(**{**kwargs, "chat_id": "other-stream"})
+    assert result["success"] is False and "聊天流" in result["content"]
+    assert not calls
+    await module.stop()
+
+
+@pytest.mark.asyncio
+async def test_balance_rejects_invalid_response_and_hides_auth_error():
+    def malformed(request):
+        return httpx.Response(200, json={"is_available": True, "balance_infos": [{"currency": "CNY", "total_balance": "fake", "granted_balance": "0", "topped_up_balance": "0"}]})
+
+    plugin, module = make_module(malformed)
+    result = await plugin.secretary_deepseek_balance(**authorize_balance(plugin))
+    assert result["success"] is False and "金额格式" in result["content"]
+    await module.stop()
+
+    def rejected(request):
+        return httpx.Response(401, json={"error": {"message": "invalid test-secret"}})
+
+    plugin, module = make_module(rejected)
+    result = await plugin.secretary_deepseek_balance(**authorize_balance(plugin))
+    assert result["success"] is False and "API Key" in result["content"]
+    assert "test-secret" not in str(result)
+    await module.stop()
 
 
 @pytest.mark.asyncio

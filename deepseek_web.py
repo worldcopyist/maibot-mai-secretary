@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 from collections import OrderedDict
 from datetime import datetime
+from decimal import Decimal, InvalidOperation
 from time import monotonic
 from typing import TYPE_CHECKING, Any, ClassVar
 from urllib.parse import urlsplit
@@ -119,6 +120,91 @@ class DeepSeekWebModule:
         except Exception:
             self.plugin.ctx.logger.exception("小秘书 DeepSeek 抓取出现未预期错误")
             return self._failure("网页抓取", "内部错误，请检查插件日志。")
+
+    async def balance(self, **kwargs: Any) -> dict[str, Any]:
+        """Return the configured DeepSeek account balance to a verified admin."""
+        try:
+            self._check_enabled()
+            stream_id = str(kwargs.get("stream_id") or "").strip()
+            chat_id = str(kwargs.get("chat_id") or "").strip()
+            if not stream_id or stream_id != chat_id:
+                raise WebSearchError("无法核验当前聊天流，不能查询 API 余额。")
+            role = self.plugin.role_recognition
+            account = role.consume_planner_speaker(stream_id)
+            if not account or account not in await role.admin_accounts(force_refresh=True):
+                raise WebSearchError("只有已核验的小秘书管理员可以查询 DeepSeek API 余额。")
+            data = await self._request_balance()
+            return {"success": True, "content": self._render_balance(data)}
+        except WebSearchError as exc:
+            return self._failure("API 余额查询", str(exc))
+        except Exception:
+            self.plugin.ctx.logger.exception("小秘书 DeepSeek 余额查询出现未预期错误")
+            return self._failure("API 余额查询", "内部错误，请检查插件日志。")
+
+    async def _request_balance(self) -> dict[str, Any]:
+        key = self._api_key()
+        address = f"{self._base_url()}/user/balance"
+        client = await self._client_instance()
+        for attempt in range(3):
+            try:
+                response = await client.get(
+                    address,
+                    headers={"Authorization": f"Bearer {key}", "Accept": "application/json"},
+                    timeout=self.settings.timeout_seconds,
+                )
+            except httpx.RequestError as exc:
+                if attempt < 2:
+                    await asyncio.sleep(0.5 * (2**attempt))
+                    continue
+                reason = "请求超时" if isinstance(exc, httpx.TimeoutException) else "网络连接失败"
+                raise WebSearchError(f"DeepSeek {reason}。") from exc
+            if response.status_code == 200:
+                try:
+                    data = response.json()
+                except ValueError as exc:
+                    raise WebSearchError("DeepSeek 余额接口返回的数据不是合法 JSON。") from exc
+                if not isinstance(data, dict):
+                    raise WebSearchError("DeepSeek 余额接口返回的数据结构不正确。")
+                return data
+            if response.status_code in self._retry_statuses and attempt < 2:
+                await asyncio.sleep(self._retry_delay(response, attempt))
+                continue
+            if response.status_code == 401:
+                raise WebSearchError("DeepSeek API Key 无效或已失效，请在插件设置中检查。")
+            if response.status_code == 402:
+                raise WebSearchError("DeepSeek 报告余额不足。")
+            raise WebSearchError(f"DeepSeek 余额接口返回 HTTP {response.status_code}。")
+        raise WebSearchError("DeepSeek 余额请求未完成。")
+
+    @staticmethod
+    def _render_balance(data: dict[str, Any]) -> str:
+        available = data.get("is_available")
+        infos = data.get("balance_infos")
+        if not isinstance(available, bool) or not isinstance(infos, list) or not infos:
+            raise WebSearchError("DeepSeek 余额接口没有返回完整的余额信息。")
+        lines = ["DeepSeek API 账号余额（实时查询）：", f"当前可用于 API 调用：{'是' if available else '否'}"]
+        for item in infos:
+            if not isinstance(item, dict):
+                raise WebSearchError("DeepSeek 余额信息格式不正确。")
+            currency = item.get("currency")
+            if not isinstance(currency, str) or not currency.isascii() or not 3 <= len(currency) <= 5 or not currency.isalpha():
+                raise WebSearchError("DeepSeek 余额币种格式不正确。")
+            amounts: list[str] = []
+            for field in ("total_balance", "granted_balance", "topped_up_balance"):
+                value = item.get(field)
+                if not isinstance(value, str) or len(value) > 40:
+                    raise WebSearchError("DeepSeek 余额金额格式不正确。")
+                try:
+                    amount = Decimal(value)
+                except InvalidOperation as exc:
+                    raise WebSearchError("DeepSeek 余额金额格式不正确。") from exc
+                if not amount.is_finite():
+                    raise WebSearchError("DeepSeek 余额金额格式不正确。")
+                amounts.append(str(amount))
+            lines.append(
+                f"{currency.upper()}：总可用 {amounts[0]}；未过期赠金 {amounts[1]}；充值余额 {amounts[2]}。"
+            )
+        return "\n".join(lines)
 
     def _check_enabled(self) -> None:
         if not self.plugin.config.plugin.enabled or not self.settings.enabled:

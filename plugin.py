@@ -580,14 +580,14 @@ class KnowledgeBaseSettings(PluginConfigBase):
 
 
 class DeepSeekWebSettings(PluginConfigBase):
-    """独立的 DeepSeek 网页搜索和抓取模块。"""
+    """独立的 DeepSeek 搜索、抓取与账号余额模块。"""
 
-    __ui_label__: ClassVar[str] = "DeepSeek 联网搜索"
+    __ui_label__: ClassVar[str] = "DeepSeek 联网与余额"
 
     enabled: bool = Field(
         default=False,
-        description="启用小秘书自带的 DeepSeek Search / Fetch 工具",
-        json_schema_extra={"label": "启用联网搜索", "hint": "填写 API Key 并开启后，麦麦可按需搜索网页和读取已知网址。"},
+        description="启用小秘书自带的 DeepSeek Search / Fetch 与余额查询工具",
+        json_schema_extra={"label": "启用 DeepSeek 模块", "hint": "填写 API Key 并开启后，麦麦可搜索、读取网页；已核验的管理员还可查询该 Key 所属账号的余额。"},
     )
     api_key: str = Field(
         default="",
@@ -1166,6 +1166,19 @@ class MaiSecretaryPlugin(MaiBotPlugin):
     async def secretary_deepseek_fetch(self, url: str, **kwargs: Any) -> dict[str, Any]:
         del kwargs
         return await self.deepseek_web.fetch(url)
+
+    @Tool(
+        "secretary_deepseek_balance",
+        description=(
+            "只有当前聊天中已核验的小秘书管理员明确询问 DeepSeek API 余额、还剩多少钱或赠金额度时调用。"
+            "读取小秘书 DeepSeek 联网模块所配置 API Key 对应账号的实时余额；"
+            "不要向普通用户透露余额，不要在没有管理员请求时调用。按工具结果回答，不猜测金额。"
+        ),
+        parameters=[],
+        visibility="visible",
+    )
+    async def secretary_deepseek_balance(self, **kwargs: Any) -> dict[str, Any]:
+        return await self.deepseek_web.balance(**kwargs)
 
     @staticmethod
     async def _kb_api(operation: Awaitable[dict[str, Any]]) -> dict[str, Any]:

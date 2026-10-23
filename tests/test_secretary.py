@@ -77,6 +77,7 @@ def test_sdk_exposes_secretary_tools_apis_and_hooks(tmp_path):
         ("TOOL", "secretary_search_knowledge"),
         ("TOOL", "secretary_deepseek_search"),
         ("TOOL", "secretary_deepseek_fetch"),
+        ("TOOL", "secretary_deepseek_balance"),
         ("API", "secretary_kb_list"),
         ("API", "secretary_kb_search"),
         ("API", "secretary_kb_start"),

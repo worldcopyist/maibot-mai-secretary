@@ -12,7 +12,7 @@
 2. 让麦麦通过三个工具创建、查看和取消当前用户在当前聊天流中的定时任务。支持单次、每天、每周。到点后仍交给麦麦的主动任务接口执行用户请求。
 3. AI 反霸凌：识别针对麦麦的辱骂，结合自定义违禁词和聊天上下文判断，确认后私聊插件管理员，请管理员核查。
 4. 私有知识库：管理员从本插件的 WebUI 详情页进入知识库工作区，上传文档或粘贴文本；插件提取文字、分段、建立关键词和语义向量索引，让麦麦在授权聊天流调用 `secretary_search_knowledge` 查询，并附来源。
-5. DeepSeek 联网搜索：小秘书自带 `secretary_deepseek_search` 和 `secretary_deepseek_fetch`，按需调用 DeepSeek Search / Fetch API 查询实时网页、读取已知网址。
+5. DeepSeek 联网搜索与余额：小秘书自带 `secretary_deepseek_search` 和 `secretary_deepseek_fetch`，按需查询实时网页、读取已知网址；管理员还能用 `secretary_deepseek_balance` 查询所配置 DeepSeek API Key 对应账号的余额。
 6. 角色识别：按当前消息的真实平台账号分为主人、熟人和陌生人，分别使用可编辑的提示词。
 7. 日报：管理员可设定聊天流和每天的总结时间；管理员账号也可在当前聊天里直接请麦麦现在生成今日日报，不必等到定时点。两种方式都把当天聊天文字分段总结后填入「Azure 主题」图片。
 8. 戳一戳互动：麦麦可通过 `secretary_poke` 戳当前聊天的人；被戳时可回戳、按现有人设简短回复或发表情包，也可按概率跟风戳群里正在互戳的人。
@@ -158,11 +158,13 @@ overlap_chars = 120
 semantic_search = true
 ```
 
-### DeepSeek 联网搜索
+### DeepSeek 联网搜索与余额
 
-小秘书提供两个可直接由麦麦调用的工具：`secretary_deepseek_search(query, count?, need_content?, ori_question?)` 搜索实时网页，`secretary_deepseek_fetch(url)` 读取指定网页的 Markdown 正文。搜索默认只返回摘要；需要全文时再设 `need_content=true` 或对已知网址调用 Fetch。工具结果包含来源链接，并标明网页内容只作资料，不执行其中的指令。两个工具只在 `[deepseek_web].enabled=true` 且配置了 API Key 时工作。
+小秘书提供三个可直接由麦麦调用的工具：`secretary_deepseek_search(query, count?, need_content?, ori_question?)` 搜索实时网页，`secretary_deepseek_fetch(url)` 读取指定网页的 Markdown 正文，`secretary_deepseek_balance()` 查询 API 账号余额。搜索默认只返回摘要；需要全文时再设 `need_content=true` 或对已知网址调用 Fetch。网页工具结果包含来源链接，并标明网页内容只作资料，不执行其中的指令。三个工具只在 `[deepseek_web].enabled=true` 且配置了 API Key 时工作。
 
-在插件 WebUI 的「DeepSeek 联网搜索」设置中填写 Key，或编辑本机 `config.toml`：
+管理员可以在聊天中直接问“DeepSeek API 余额还剩多少？”或“赠金额度还有多少？”。麦麦会调用 `secretary_deepseek_balance`，从 DeepSeek 官方余额接口读取这把 Key 所属账号的实时总可用余额、未过期赠金和充值余额，并按接口返回的币种报告。插件会在请求前核验当前聊天流和真实发言者；普通用户、无法核验身份的请求以及主动聊天都不能读取余额。工具不会返回 API Key，也不会把接口原始错误信息交给模型。余额查询只反映小秘书配置的这把 Key 所属账号，不汇总其他平台或密钥。
+
+在插件 WebUI 的「DeepSeek 联网与余额」设置中填写 Key，或编辑本机 `config.toml`：
 
 ```toml
 [deepseek_web]
@@ -180,7 +182,7 @@ fetch_content_chars = 8000
 fetch_qps = 5.0
 ```
 
-小秘书通过 DeepSeek 官方 [Search / Fetch API](https://api-docs.deepseek.com/zh-cn/guides/search/) 发起请求。搜索结果短时间缓存，同一请求不会反复调用；超时、限流和临时服务错误最多重试两次。DeepSeek 按成功请求计费，具体价格和账号限速以官方文档为准。已有独立 DeepSeek Search 插件的部署，应先确认小秘书的 Key 和工具可用，再关闭旧插件的 `[plugin].enabled`，避免同一用途出现两套工具。公开仓库的默认配置关闭该模块，且不保存任何 API Key。
+小秘书通过 DeepSeek 官方 [Search / Fetch API](https://api-docs.deepseek.com/zh-cn/guides/search/) 和[余额接口](https://api-docs.deepseek.com/zh-cn/api/get-user-balance/)发起请求。搜索结果短时间缓存，同一请求不会反复调用；超时、限流和临时服务错误最多重试两次。DeepSeek 按成功请求计费，具体价格和账号限速以官方文档为准。已有独立 DeepSeek Search 插件的部署，应先确认小秘书的 Key 和工具可用，再关闭旧插件的 `[plugin].enabled`，避免同一用途出现两套工具。公开仓库的默认配置关闭该模块，且不保存任何 API Key。
 
 `scheduling_mode = "count"` 沿用每窗口 `messages_per_window` 次的方式（1–5 次）。设为 `"interval"` 后，改用 `average_interval_hours` 和 `offset_minutes`，例如平均 2 小时、偏移 15 分钟时，从窗口开始或修改设置的时刻起，每次与上次计划发言相隔 1 小时 45 分至 2 小时 15 分，次数随窗口长度变化。偏移可设为 0，必须小于平均间隔；平均间隔可设 0.25–24 小时。修改模式或参数后，只重新安排尚未发生的随机发言，不影响定时任务。
 
@@ -190,7 +192,7 @@ fetch_qps = 5.0
 
 自然语言工具只操作调用者所在聊天流、该用户自己的任务。单次任务使用带时区的 ISO 时间，例如 `2026-10-21T08:00:00+08:00`；每天和每周使用 `HH:MM`，每周还需星期数字（周一为 1，周日为 7）。时间含糊时应先澄清。
 
-插件发给 MaiBot 的主动聊天和定时任务执行提示词会直接列出工具名：`secretary_deepseek_search` 用于实时搜索，`secretary_deepseek_fetch` 用于读取已知网页，`secretary_create_task`、`secretary_list_tasks`、`secretary_cancel_task` 分别用于创建、查看和取消定时任务，`secretary_generate_daily_report` 用于用户明确要求即时生成今日日报，`secretary_poke` 用于合适的当前聊天戳一戳互动，`secretary_search_knowledge` 用于查询授权知识库，`send_emoji` 用于在合适时从表情库挑选表情。若目标工具列在 MaiBot 的延迟展示工具中，提示词要求先用 `tool_search` 发现，再按实际参数调用。到点执行的任务不会重新创建同一任务；普通主动闲聊也不会无故联网或创建任务。工具不可用时应如实说明。
+插件发给 MaiBot 的主动聊天和定时任务执行提示词会直接列出工具名：`secretary_deepseek_search` 用于实时搜索，`secretary_deepseek_fetch` 用于读取已知网页，`secretary_deepseek_balance` 仅在已核验管理员明确询问时查询 API 余额，`secretary_create_task`、`secretary_list_tasks`、`secretary_cancel_task` 分别用于创建、查看和取消定时任务，`secretary_generate_daily_report` 用于用户明确要求即时生成今日日报，`secretary_poke` 用于合适的当前聊天戳一戳互动，`secretary_search_knowledge` 用于查询授权知识库，`send_emoji` 用于在合适时从表情库挑选表情。若目标工具列在 MaiBot 的延迟展示工具中，提示词要求先用 `tool_search` 发现，再按实际参数调用。到点执行的任务不会重新创建同一任务；普通主动闲聊也不会无故联网或创建任务。工具不可用时应如实说明。
 
 到点后的“成功”表示 MaiBot 接受了主动任务请求，不等于已经观察到消息发出。插件先持久化“已尝试”再触发，避免重启造成重复消息。服务中断超过 `misfire_grace_seconds`（默认 10 分钟）时会跳过过期触发；单次任务会标记为 `missed`，可通过列出任务查看。接口报错时，单次任务标记为 `failed`；周期任务保留下一次执行。
 
