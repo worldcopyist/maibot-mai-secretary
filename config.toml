@@ -23,6 +23,7 @@ command_prefixes = ["/", "!", "！"]
 [poke]
 enabled = true
 respond_to_poke = true
+received_action_description = "戳一戳"
 reaction_probability = 0.85
 back_poke_probability = 0.6
 reply_after_back_poke_probability = 0.3

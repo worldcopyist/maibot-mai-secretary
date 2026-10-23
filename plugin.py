@@ -174,6 +174,22 @@ class PokeSettings(PluginConfigBase):
         default=True,
         json_schema_extra={"label": "被戳后回应", "hint": "让麦麦按现有人设回复，或调用 send_emoji 发表情包。"},
     )
+    received_action_description: str = Field(
+        default="戳一戳", min_length=1, max_length=80,
+        json_schema_extra={
+            "label": "收到戳一戳后告诉麦麦的动作",
+            "hint": "例如填“摸摸头”。麦麦会把这次 QQ 戳一戳理解为对方摸摸头，并按现有人设回应；这里只描述动作，不是固定回复台词。",
+        },
+    )
+
+    @field_validator("received_action_description")
+    @classmethod
+    def normalize_received_action(cls, value: str) -> str:
+        action = " ".join(value.split())
+        if not action or len(action) > 80:
+            raise ValueError("收到戳一戳的动作描述须为 1–80 个字符")
+        return action
+
     reaction_probability: float = Field(
         default=0.85, ge=0.0, le=1.0,
         json_schema_extra={"label": "被戳后作出反应的概率", "hint": "0 表示只记录被戳事件；1 表示每次通过限频检查后都会反应。"},

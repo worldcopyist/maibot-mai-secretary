@@ -29,6 +29,7 @@ def _notice(*, poker: str = "123456789", target: str = "2966970067", group: str 
 async def test_poked_bot_uses_maibot_persona_and_emoji_tool_without_duplicate(tmp_path):
     plugin, proactive = make_plugin(tmp_path, {"poke": {
         "reaction_probability": 1, "back_poke_probability": 0, "bystander_probability": 0,
+        "received_action_description": "摸摸头",
     }})
     events = []
 
@@ -43,11 +44,13 @@ async def test_poked_bot_uses_maibot_persona_and_emoji_tool_without_duplicate(tm
     assert len(proactive.calls) == 1
     call = proactive.calls[0]
     assert call["stream_id"] == "group-stream"
+    assert call["reason"] == "收到互动"
     assert "当前配置的人物身份" in call["intent"]
     assert "`send_emoji`" in call["intent"]
+    assert '对你做了 "摸摸头" 这个动作' in call["intent"]
     assert "不要调用 `secretary_poke`" in call["intent"]
     assert plugin.role_recognition._proactive_sessions["group-stream"] == "qq:123456789"
-    assert len(events) == 1 and '昵称 "小鱼" 的 QQ 123456789 刚刚戳了我' in events[0]
+    assert len(events) == 1 and '昵称 "小鱼" 的 QQ 123456789 刚刚对我做了 "摸摸头" 这个动作' in events[0]
     assert await plugin.handle_poke_notice(_notice()) == {"action": "abort"}
     assert await plugin.handle_poke_notice(_notice(target="987654321")) == {"action": "abort"}
     assert await plugin.handle_poke_notice(_notice(poker="2966970067")) == {"action": "abort"}
@@ -191,7 +194,7 @@ async def test_back_poke_records_both_events_and_optional_persona_reply(tmp_path
     await asyncio.gather(*plugin.poke.jobs)
     assert len(sent) == 1 and sent[0][1]["user_id"] == 123456789
     assert len(events) == 2
-    assert "刚刚戳了我" in events[0] and "我刚刚戳了戳" in events[1]
+    assert '刚刚对我做了 "戳一戳" 这个动作' in events[0] and "我刚刚戳了戳" in events[1]
     assert len(proactive.calls) == 1
     assert "你已经回戳了对方" in proactive.calls[0]["intent"]
 
@@ -221,7 +224,9 @@ async def test_bystander_poke_uses_probability_and_records_own_action(tmp_path):
 
 @pytest.mark.asyncio
 async def test_silent_reaction_still_tells_maibot_who_poked_it(tmp_path):
-    plugin, proactive = make_plugin(tmp_path, {"poke": {"reaction_probability": 0}})
+    plugin, proactive = make_plugin(tmp_path, {"poke": {
+        "reaction_probability": 0, "received_action_description": "摸摸头",
+    }})
     events = []
 
     async def append(**kwargs):
@@ -231,8 +236,16 @@ async def test_silent_reaction_still_tells_maibot_who_poked_it(tmp_path):
     plugin.ctx.maisaka.context = types.SimpleNamespace(append=append)
     assert await plugin.handle_poke_notice(_notice()) == {"action": "abort"}
     await asyncio.gather(*plugin.poke.jobs)
-    assert len(events) == 1 and '昵称 "小鱼" 的 QQ 123456789' in events[0]
+    assert len(events) == 1 and '昵称 "小鱼" 的 QQ 123456789 刚刚对我做了 "摸摸头"' in events[0]
     assert not proactive.calls
+
+
+def test_received_action_description_is_required_and_normalized():
+    from mai_secretary.plugin import PokeSettings
+
+    assert PokeSettings.model_validate({"received_action_description": "  摸摸头  "}).received_action_description == "摸摸头"
+    with pytest.raises(ValueError):
+        PokeSettings.model_validate({"received_action_description": "  "})
 
 
 @pytest.mark.asyncio
