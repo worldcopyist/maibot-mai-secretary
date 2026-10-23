@@ -102,6 +102,7 @@ semantic_search = true
 [deepseek_web]
 enabled = false
 api_key = ""
+balance_alias = ""
 base_url = "https://api.deepseek.com"
 timeout_seconds = 20.0
 default_count = 4

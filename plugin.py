@@ -7,6 +7,8 @@ import contextlib
 import json
 import logging
 import os
+import re
+import uuid
 from collections.abc import Awaitable
 from datetime import UTC, datetime
 from pathlib import Path
@@ -625,6 +627,22 @@ class DeepSeekWebSettings(PluginConfigBase):
         description="DeepSeek Search / Fetch API Key",
         json_schema_extra={"label": "DeepSeek API Key", "hint": "仅保存在本机插件配置文件中，不写进仓库或聊天提示词。", "x-widget": "password"},
     )
+    balance_alias: str = Field(
+        default="",
+        max_length=20,
+        json_schema_extra={
+            "label": "API 余额的别称",
+            "hint": "例如填“大白饭”，管理员就可以问“大白饭还剩多少”；留空则只按 API / DeepSeek 识别。",
+        },
+    )
+
+    @field_validator("balance_alias")
+    @classmethod
+    def validate_balance_alias(cls, value: str) -> str:
+        value = value.strip()
+        if value and not re.fullmatch(r"[\w\u4e00-\u9fff· -]{1,20}", value):
+            raise ValueError("余额别称只能使用中文、字母、数字、空格、点或连字符")
+        return value
     base_url: str = Field(
         default="https://api.deepseek.com",
         description="DeepSeek API 根地址",
@@ -958,7 +976,40 @@ class MaiSecretaryPlugin(MaiBotPlugin):
         description="规划回复时加入已核验发送者的角色提示词",
     )
     async def inject_role_for_planner(self, **kwargs: Any) -> dict[str, Any]:
-        return await self.role_recognition.inject(kwargs, track_for_tools=True)
+        result = await self.role_recognition.inject(kwargs, track_for_tools=True)
+        alias = self.config.deepseek_web.balance_alias
+        items = result.get("modified_kwargs", {}).get("items")
+        marker = "【麦麦小秘书·余额别称】"
+        if (
+            self.config.plugin.enabled
+            and self.config.deepseek_web.enabled
+            and alias
+            and isinstance(items, list)
+            and not any(
+                marker in str(part.get("text") or "")
+                for item in items if isinstance(item, dict)
+                for part in item.get("parts") or [] if isinstance(part, dict)
+            )
+        ):
+            system_index = next(
+                (index for index, item in enumerate(items)
+                 if isinstance(item, dict) and item.get("item_type") == "SystemMessageItem"),
+                -1,
+            )
+            items.insert(system_index + 1, {
+                "item_type": "UserMessageItem",
+                "meta": {
+                    "item_id": f"mai-secretary-balance-alias-{uuid.uuid4().hex}",
+                    "logical_turn_id": None,
+                    "timestamp": datetime.now().astimezone().isoformat(),
+                },
+                "parts": [{"type": "text", "text": (
+                    f"{marker} 管理员把 DeepSeek API 账号余额称为“{alias}”。"
+                    f"管理员明确询问“{alias}还剩多少”等余额问题时，调用 `secretary_deepseek_balance`。"
+                    "此别称只改变说法，不改变管理员核验或余额来源。按 MaiBot 人设自然回答。"
+                )}],
+            })
+        return result
 
     @HookHandler(
         "maisaka.replyer.before_model_request",
@@ -1235,7 +1286,7 @@ class MaiSecretaryPlugin(MaiBotPlugin):
     @Tool(
         "secretary_deepseek_balance",
         description=(
-            "只有当前聊天中已核验的小秘书管理员明确询问 DeepSeek API 余额、还剩多少钱或赠金额度时调用。"
+            "只有已核验的小秘书管理员明确询问 DeepSeek API 余额、配置的余额别称还剩多少或赠金额度时调用。"
             "读取小秘书 DeepSeek 联网模块所配置 API Key 对应账号的实时余额；"
             "不要向普通用户透露余额，不要在没有管理员请求时调用。按工具结果回答，不猜测金额。"
         ),

@@ -10,7 +10,7 @@ TOOL_ROUTING_PROMPT = (
     "\n按需使用以下 MaiBot 工具，调用时使用准确的工具名："
     "`secretary_deepseek_search` 接收 query，可选 count、need_content、ori_question，用于天气、新闻等实时信息的联网搜索；"
     "`secretary_deepseek_fetch` 接收 url，用于读取已知链接的网页正文，不用它寻找未知链接；"
-    "`secretary_deepseek_balance` 无需参数，仅当当前已核验的小秘书管理员明确询问 DeepSeek API 账号余额时调用，"
+    "`secretary_deepseek_balance` 无需参数，仅当已核验的小秘书管理员明确询问 DeepSeek API 账号余额或配置的余额别称时调用，"
     "查询小秘书联网模块所配置密钥的实时余额；普通用户不可查询，不能猜测余额；"
     "`secretary_create_task` 接收 instruction、schedule、at，用于用户要求新建未来的定时任务；"
     "`secretary_list_tasks` 用于查看用户已有的定时任务；"

@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import asyncio
+import re
+import unicodedata
 from collections import OrderedDict
 from datetime import datetime
 from decimal import Decimal, InvalidOperation
@@ -46,6 +48,15 @@ class DeepSeekWebModule:
     def on_config_update(self) -> None:
         self._cache.clear()
         self._next_at = {"search": 0.0, "fetch": 0.0}
+
+    def is_balance_request(self, text: str) -> bool:
+        """Recognize an explicit balance question in a real inbound message."""
+        query = unicodedata.normalize("NFKC", text).casefold()
+        alias = unicodedata.normalize("NFKC", self.settings.balance_alias).casefold()
+        subjects = ("api", "deepseek", alias)
+        return any(subject and subject in query for subject in subjects) and bool(
+            re.search(r"余额|还剩|剩余|多少|额度|结余|查询|查一下|看看", query)
+        )
 
     async def tick(self, now: datetime) -> None:
         del now
@@ -130,11 +141,15 @@ class DeepSeekWebModule:
             if not stream_id or stream_id != chat_id:
                 raise WebSearchError("无法核验当前聊天流，不能查询 API 余额。")
             role = self.plugin.role_recognition
-            account = role.consume_planner_speaker(stream_id)
-            if not account or account not in await role.admin_accounts(force_refresh=True):
+            admins = await role.admin_accounts(force_refresh=True)
+            account = role.consume_balance_request(stream_id, admins)
+            if not account:
                 raise WebSearchError("只有已核验的小秘书管理员可以查询 DeepSeek API 余额。")
             data = await self._request_balance()
-            return {"success": True, "content": self._render_balance(data)}
+            content = self._render_balance(data)
+            if self.settings.balance_alias:
+                content += f"\n管理员设定的 API 别称：{self.settings.balance_alias}。回答时可以使用这个称呼。"
+            return {"success": True, "content": content}
         except WebSearchError as exc:
             return self._failure("API 余额查询", str(exc))
         except Exception:

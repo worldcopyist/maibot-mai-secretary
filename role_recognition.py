@@ -162,6 +162,12 @@ class RoleRecognitionModule:
             "message_id": message_id,
             "account": account,
             "seen_at": time.time(),
+            "balance_request": bool(
+                getattr(self.plugin, "deepseek_web", None)
+                and self.plugin.deepseek_web.is_balance_request(
+                    str(message.get("processed_plain_text") or "")
+                )
+            ),
         }
         self.plugin._save_state()
 
@@ -213,6 +219,26 @@ class RoleRecognitionModule:
         account = self.peek_planner_speaker(session_id)
         self._planner_speakers.pop(session_id, None)
         return account
+
+    def consume_balance_request(self, session_id: str, admins: set[str]) -> str | None:
+        """Claim one recent, explicit admin request even if group messages interleave."""
+        if session_id in self._proactive_sessions:
+            return None
+        cutoff = time.time() - _TOOL_SPEAKER_TTL_SECONDS
+        candidates = [
+            row for row in self.records.values()
+            if row["session_id"] == session_id
+            and row["account"] in admins
+            and row.get("balance_request") is True
+            and not row.get("balance_claimed")
+            and float(row["seen_at"]) >= cutoff
+        ]
+        if not candidates:
+            return None
+        record = max(candidates, key=lambda row: float(row["seen_at"]))
+        record["balance_claimed"] = True
+        self.plugin._save_state()
+        return str(record["account"])
 
     async def inject(self, kwargs: dict[str, Any], *, track_for_tools: bool = False) -> dict[str, Any]:
         result = {"action": "continue", "modified_kwargs": kwargs}

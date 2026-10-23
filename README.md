@@ -170,12 +170,15 @@ semantic_search = true
 
 管理员可以在聊天中直接问“DeepSeek API 余额还剩多少？”或“赠金额度还有多少？”。麦麦会调用 `secretary_deepseek_balance`，从 DeepSeek 官方余额接口读取这把 Key 所属账号的实时总可用余额、未过期赠金和充值余额，并按接口返回的币种报告。插件会在请求前核验当前聊天流和真实发言者；普通用户、无法核验身份的请求以及主动聊天都不能读取余额。工具不会返回 API Key，也不会把接口原始错误信息交给模型。余额查询只反映小秘书配置的这把 Key 所属账号，不汇总其他平台或密钥。
 
+在插件 WebUI 的「DeepSeek 联网与余额」中，可把「API 余额的别称」设为“大白饭”。管理员在聊天里问“大白饭还剩多少”时，麦麦会使用同一余额工具；回答时也可以使用这个称呼。别称只改变说法，不改变查询账号和管理员权限。群聊里即使另一位成员紧接着发言，插件也会凭管理员那条明确的余额请求和真实消息 ID 完成核验；每条请求只能查询一次，超过两分钟失效。
+
 在插件 WebUI 的「DeepSeek 联网与余额」设置中填写 Key，或编辑本机 `config.toml`：
 
 ```toml
 [deepseek_web]
 enabled = true
 api_key = "在本机填写，不要提交到 Git 仓库"
+balance_alias = "大白饭"
 base_url = "https://api.deepseek.com"
 timeout_seconds = 20.0
 default_count = 4
