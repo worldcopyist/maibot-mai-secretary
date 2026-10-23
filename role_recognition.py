@@ -189,9 +189,9 @@ class RoleRecognitionModule:
                     return self._find_speaker_record(session_id, match.group(1))
         return None
 
-    def consume_planner_speaker(self, session_id: str) -> str | None:
-        """Resolve the real speaker captured for this planner turn, once."""
-        marker = self._planner_speakers.pop(session_id, None)
+    def peek_planner_speaker(self, session_id: str) -> str | None:
+        """Read the verified current speaker without spending the mutation token."""
+        marker = self._planner_speakers.get(session_id)
         if marker is None or session_id in self._proactive_sessions:
             return None
         if time.time() - float(marker["verified_at"]) > _TOOL_SPEAKER_TTL_SECONDS:
@@ -207,6 +207,12 @@ class RoleRecognitionModule:
         if latest is None or latest["message_id"] != record["message_id"]:
             return None
         return str(record["account"])
+
+    def consume_planner_speaker(self, session_id: str) -> str | None:
+        """Resolve the real speaker captured for this planner turn, once."""
+        account = self.peek_planner_speaker(session_id)
+        self._planner_speakers.pop(session_id, None)
+        return account
 
     async def inject(self, kwargs: dict[str, Any], *, track_for_tools: bool = False) -> dict[str, Any]:
         result = {"action": "continue", "modified_kwargs": kwargs}

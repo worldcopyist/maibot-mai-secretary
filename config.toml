@@ -29,6 +29,17 @@ poke_cooldown_seconds = 60
 max_pokes_per_hour = 6
 adapter_plugin_id = ""
 
+[group_admin]
+enabled = false
+managed_group_ids = []
+welcome_enabled = false
+welcome_template = "欢迎 {name} 来到群里！"
+review_mode = "manual"
+review_accept_words = []
+review_reject_words = []
+review_reject_reason = "申请信息不符合本群要求"
+adapter_plugin_id = ""
+
 [voice_synthesis]
 enabled = true
 voice_prompt = "请设计听感约16岁的少女普通话声线：音高偏高但不尖，声音轻盈、软甜，带一点浅浅的鼻音和自然的嗲感，像和亲近的人轻声撒娇聊天；不要成熟厚重，也不要夸张夹嗓或幼儿奶声。语速中等稍快，字与字自然连贯，咬字柔和，不逐字强调、不在每个词后停顿；句尾偶尔软软地轻拖一点并微微上扬。情绪带一点好奇、黏人和憨憨的笑意，认真说明事情时也保持这条年轻柔软的声线。"

@@ -66,6 +66,11 @@ def test_sdk_exposes_secretary_tools_apis_and_hooks(tmp_path):
         ("TOOL", "secretary_cancel_task"),
         ("TOOL", "secretary_generate_daily_report"),
         ("TOOL", "secretary_poke"),
+        ("TOOL", "secretary_group_permission"),
+        ("TOOL", "secretary_group_member"),
+        ("TOOL", "secretary_group_notice"),
+        ("TOOL", "secretary_group_join"),
+        ("TOOL", "secretary_group_welcome"),
         ("TOOL", "secretary_speak"),
         ("TOOL", "secretary_search_knowledge"),
         ("TOOL", "secretary_deepseek_search"),
@@ -89,6 +94,7 @@ def test_sdk_exposes_secretary_tools_apis_and_hooks(tmp_path):
         ("HOOK_HANDLER", "secretary_role_planner_prompt"),
         ("HOOK_HANDLER", "secretary_role_replyer_prompt"),
         ("HOOK_HANDLER", "secretary_poke_notice"),
+        ("HOOK_HANDLER", "secretary_group_join_welcome"),
     }
 
 

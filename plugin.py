@@ -25,6 +25,7 @@ from pydantic import field_validator, model_validator
 from .anti_bullying import AntiBullyingModule, normalize_admin_account
 from .daily_report import DailyReportModule
 from .deepseek_web import DeepSeekWebModule
+from .group_admin import GroupAdminModule
 from .knowledge_base import KnowledgeBaseModule, KnowledgeError
 from .module_contract import SecretaryModule
 from .poke_interaction import PokeInteractionModule
@@ -222,6 +223,29 @@ class PokeSettings(PluginConfigBase):
         default="",
         json_schema_extra={"label": "QQ 适配器插件 ID", "hint": "留空自动查找公开接口；有多个兼容适配器时填写确切插件 ID。"},
     )
+
+
+class GroupAdminSettings(PluginConfigBase):
+    """QQ group management, restricted to explicitly listed groups."""
+
+    __ui_label__: ClassVar[str] = "QQ群管"
+    enabled: bool = Field(default=False, json_schema_extra={"label": "启用QQ群管模块", "hint": "只有下方群号列表中的群会启用。"})
+    managed_group_ids: list[str] = Field(default_factory=list, json_schema_extra={"label": "启用的QQ群号", "hint": "每行一个QQ群号；留空时任何群都不能使用群管工具。"})
+    welcome_enabled: bool = Field(default=False, json_schema_extra={"label": "新成员入群时发送欢迎语"})
+    welcome_template: str = Field(default="欢迎 {name} 来到群里！", min_length=1, max_length=500, json_schema_extra={"label": "入群欢迎语", "hint": "可使用 {name} 昵称、{qq} QQ号、{group} 群号。"})
+    review_mode: Literal["manual", "keyword"] = Field(default="manual", json_schema_extra={"label": "进群审核方式", "hint": "manual 只列出申请并由管理员确认；keyword 根据下方词语自动通过或拒绝，未命中保持待审。"})
+    review_accept_words: list[str] = Field(default_factory=list, json_schema_extra={"label": "自动通过关键词", "hint": "仅 keyword 模式使用；申请答案包含任一词时通过。"})
+    review_reject_words: list[str] = Field(default_factory=list, json_schema_extra={"label": "自动拒绝关键词", "hint": "仅 keyword 模式使用；拒绝词优先于通过词。"})
+    review_reject_reason: str = Field(default="申请信息不符合本群要求", max_length=200, json_schema_extra={"label": "自动拒绝理由"})
+    adapter_plugin_id: str = Field(default="", json_schema_extra={"label": "QQ 适配器插件 ID", "hint": "留空自动调用已注册的 NapCat 公开接口。"})
+
+    @field_validator("managed_group_ids")
+    @classmethod
+    def validate_groups(cls, values: list[str]) -> list[str]:
+        rows = [str(value).strip() for value in values]
+        if len(rows) > 30 or any(not row.isascii() or not row.isdecimal() or int(row) <= 0 for row in rows):
+            raise ValueError("QQ群号最多 30 个，且每项必须是正整数群号")
+        return list(dict.fromkeys(rows))
 
 
 class DailyReportSettings(PluginConfigBase):
@@ -616,6 +640,7 @@ class SecretaryConfig(PluginConfigBase):
     plugin: PluginSettings = Field(default_factory=PluginSettings)
     role_recognition: RoleRecognitionSettings = Field(default_factory=RoleRecognitionSettings)
     poke: PokeSettings = Field(default_factory=PokeSettings)
+    group_admin: GroupAdminSettings = Field(default_factory=GroupAdminSettings)
     voice_synthesis: VoiceSynthesisSettings = Field(default_factory=VoiceSynthesisSettings)
     scheduled_tasks: ScheduledTasksSettings = Field(
         default_factory=ScheduledTasksSettings
@@ -638,6 +663,7 @@ class MaiSecretaryPlugin(MaiBotPlugin):
         self.daily_report = DailyReportModule(self)
         self.role_recognition = RoleRecognitionModule(self)
         self.poke = PokeInteractionModule(self)
+        self.group_admin = GroupAdminModule(self)
         self.voice_synthesis = VoiceSynthesisModule(self)
         self.proactive = ProactiveChatModule(self)
         self.anti_bullying = AntiBullyingModule(self)
@@ -648,6 +674,7 @@ class MaiSecretaryPlugin(MaiBotPlugin):
         self._register_module(self.daily_report)
         self._register_module(self.role_recognition)
         self._register_module(self.poke)
+        self._register_module(self.group_admin)
         self._register_module(self.voice_synthesis)
         self._register_module(self.proactive)
         self._register_module(self.anti_bullying)
@@ -807,6 +834,16 @@ class MaiSecretaryPlugin(MaiBotPlugin):
         return await self.poke.on_notice(message)
 
     @HookHandler(
+        "chat.receive.before_process",
+        name="secretary_group_join_welcome",
+        mode=HookMode.OBSERVE,
+        description="指定QQ群有新成员加入时发送欢迎语",
+    )
+    async def handle_group_join_notice(self, message: dict[str, Any] | None = None, **kwargs: Any) -> None:
+        del kwargs
+        await self.group_admin.on_notice(message)
+
+    @HookHandler(
         "maisaka.planner.before_request",
         name="secretary_role_planner_prompt",
         mode=HookMode.BLOCKING,
@@ -960,6 +997,69 @@ class MaiSecretaryPlugin(MaiBotPlugin):
     )
     async def secretary_poke(self, target: str = "", **kwargs: Any) -> dict[str, Any]:
         return await self.poke.send_from_tool(target, **kwargs)
+
+    @Tool(
+        "secretary_group_permission",
+        description="检查麦麦在当前已启用 QQ 群的身份和是否拥有群管理权限；操作前可先调用。",
+        parameters=[], visibility="visible",
+    )
+    async def secretary_group_permission(self, **kwargs: Any) -> dict[str, Any]:
+        return await self.group_admin.permission(**kwargs)
+
+    @Tool(
+        "secretary_group_member",
+        description=(
+            "仅在已核验的插件管理员明确要求时管理当前已启用的 QQ 群。"
+            "action 可为 mute 禁言、unmute 解禁、kick 踢出、card 改名片、title 赋予头衔、admin 设置管理员、"
+            "whole_mute 全员禁言、whole_unmute 解除全员禁言、rename 改群名。"
+            "target 必须是准确 QQ 号；mute 还需 duration_minutes；card/title/rename 用 text；"
+            "admin 用 enable 指定设立或撤销。成功与否以工具结果为准，不要猜测。"
+        ),
+        parameters=[
+            ToolParameterInfo(name="action", param_type=ToolParamType.STRING, description="mute/unmute/kick/card/title/admin/whole_mute/whole_unmute/rename", required=True),
+            ToolParameterInfo(name="target", param_type=ToolParamType.STRING, description="成员的准确 QQ 号；全员禁言或改群名时省略", required=False),
+            ToolParameterInfo(name="duration_minutes", param_type=ToolParamType.INTEGER, description="禁言分钟数，1–43200", required=False),
+            ToolParameterInfo(name="text", param_type=ToolParamType.STRING, description="新群名片、头衔或群名", required=False),
+            ToolParameterInfo(name="enable", param_type=ToolParamType.BOOLEAN, description="admin 是否设为管理员；kick 是否禁止再次申请", required=False),
+        ], visibility="visible",
+    )
+    async def secretary_group_member(self, action: str, target: str = "", duration_minutes: int = 0, text: str = "", enable: bool = False, **kwargs: Any) -> dict[str, Any]:
+        return await self.group_admin.member(action, target, duration_minutes, text, enable, **kwargs)
+
+    @Tool(
+        "secretary_group_notice",
+        description="已核验的插件管理员查看、发布或删除当前已启用 QQ 群的公告；action 为 list/create/delete。发布用 text，删除先 list 再传准确 notice_id。",
+        parameters=[
+            ToolParameterInfo(name="action", param_type=ToolParamType.STRING, description="list、create 或 delete", required=True),
+            ToolParameterInfo(name="text", param_type=ToolParamType.STRING, description="发布公告正文", required=False),
+            ToolParameterInfo(name="notice_id", param_type=ToolParamType.STRING, description="删除时使用 list 返回的准确公告 ID", required=False),
+        ], visibility="visible",
+    )
+    async def secretary_group_notice(self, action: str, text: str = "", notice_id: str = "", **kwargs: Any) -> dict[str, Any]:
+        return await self.group_admin.notice(action, text, notice_id, **kwargs)
+
+    @Tool(
+        "secretary_group_join",
+        description="已核验的插件管理员查询或处理当前已启用 QQ 群的加群申请；action 为 list/approve/reject。先 list 获取准确 request_id，拒绝可填 reason。",
+        parameters=[
+            ToolParameterInfo(name="action", param_type=ToolParamType.STRING, description="list、approve 或 reject", required=True),
+            ToolParameterInfo(name="request_id", param_type=ToolParamType.STRING, description="申请编号，来自 list 结果", required=False),
+            ToolParameterInfo(name="reason", param_type=ToolParamType.STRING, description="拒绝理由，可选", required=False),
+        ], visibility="visible",
+    )
+    async def secretary_group_join(self, action: str, request_id: str = "", reason: str = "", **kwargs: Any) -> dict[str, Any]:
+        return await self.group_admin.join(action, request_id, reason, **kwargs)
+
+    @Tool(
+        "secretary_group_welcome",
+        description="已核验的插件管理员查看或设置当前已启用 QQ 群的入群欢迎语；action 为 show/set/enable/disable/reset，set 时传 text，支持 {name}、{qq}、{group}。",
+        parameters=[
+            ToolParameterInfo(name="action", param_type=ToolParamType.STRING, description="show、set、enable、disable 或 reset", required=True),
+            ToolParameterInfo(name="text", param_type=ToolParamType.STRING, description="set 时填写新的欢迎语", required=False),
+        ], visibility="visible",
+    )
+    async def secretary_group_welcome(self, action: str, text: str = "", **kwargs: Any) -> dict[str, Any]:
+        return await self.group_admin.welcome(action, text, **kwargs)
 
     @Tool(
         "secretary_speak",
