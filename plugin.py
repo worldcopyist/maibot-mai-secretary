@@ -999,24 +999,17 @@ class MaiSecretaryPlugin(MaiBotPlugin):
     )
     async def inject_role_for_planner(self, **kwargs: Any) -> dict[str, Any]:
         result = await self.role_recognition.inject(kwargs, track_for_tools=True)
-        session_id = str(kwargs.get("session_id") or "").strip()
-        speaker = self.role_recognition._planner_speakers.get(session_id)
-        record = (
-            self.role_recognition.records.get(f"{session_id}:{speaker['message_id']}")
-            if speaker else None
-        )
-        require_live_query = bool(
-            record and record.get("balance_request")
-            and self.role_recognition.peek_planner_speaker(session_id) == speaker["account"]
-            and speaker["account"] in await self.role_recognition.admin_accounts()
-        )
-        return self._inject_balance_context(result, require_live_query=require_live_query)
+        record = self.role_recognition.balance_request_for_planner(kwargs)
+        query_result = None
+        if record and record["account"] in await self.role_recognition.admin_accounts(force_refresh=True):
+            query_result = await self.deepseek_web.refresh_for_admin_question(record)
+        return self._inject_balance_context(result, query_result=query_result)
 
     def _inject_balance_context(
-        self, result: dict[str, Any], *, require_live_query: bool = False,
+        self, result: dict[str, Any], *, query_result: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         items = result.get("modified_kwargs", {}).get("items")
-        note = self.deepseek_web.balance_context_note(require_live_query=require_live_query)
+        note = self.deepseek_web.balance_context_note(query_result=query_result)
         marker = "【麦麦小秘书·余额背景】"
         if (
             note
@@ -1052,7 +1045,9 @@ class MaiSecretaryPlugin(MaiBotPlugin):
     )
     async def inject_role_for_replyer(self, **kwargs: Any) -> dict[str, Any]:
         result = await self.role_recognition.inject(kwargs)
-        return self._inject_balance_context(result)
+        record = self.role_recognition.balance_request_for_planner(kwargs)
+        query_result = record.get("balance_result") if record else None
+        return self._inject_balance_context(result, query_result=query_result)
 
     @HookHandler(
         "chat.receive.before_process",
@@ -1319,9 +1314,10 @@ class MaiSecretaryPlugin(MaiBotPlugin):
     @Tool(
         "secretary_deepseek_balance",
         description=(
-            "已核验的小秘书管理员每次询问 DeepSeek API 余额、配置的余额别称余量或赠金额度时都必须调用，"
-            "包括主人询问“蓝莓”的数量或状态；即使提示词里已有上次缓存也要重新查询。"
-            "读取小秘书 DeepSeek 联网模块所配置 API Key 对应账号的实时余额；"
+            "已核验的小秘书管理员询问 DeepSeek API 余额、配置的余额别称余量或赠金额度时可调用，"
+            "包括主人询问“蓝莓”的数量或状态。插件会在规划前先实时查询一次；"
+            "若本轮提示词已有本次结果，工具会复用该结果，不会重复请求。"
+            "读取小秘书 DeepSeek 联网模块所配置 API Key 对应账号的余额；"
             "只有管理员能触发实时查询；普通聊天可按共享余额配置引用上次记录。"
             "不要在没有管理员请求时调用。按本次工具结果回答，不猜测金额。"
         ),

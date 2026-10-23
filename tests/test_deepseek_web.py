@@ -77,7 +77,7 @@ async def test_balance_reads_official_endpoint_for_verified_admin_only():
     assert "test-secret" not in str(result)
     assert len(calls) == 1
     repeated = await plugin.secretary_deepseek_balance(**kwargs)
-    assert repeated["success"] is False and len(calls) == 1
+    assert repeated == result and len(calls) == 1
     await module.stop()
 
 
@@ -92,7 +92,14 @@ async def test_group_balance_claims_admin_question_despite_interleaved_member_me
             "balance_infos": [{"currency": "CNY", "total_balance": "15", "granted_balance": "5", "topped_up_balance": "10"}],
         })
 
-    plugin, module = make_module(handler, {"balance_alias": "大白饭"})
+    plugin, module = make_module(handler, {"balance_alias": "大白饭",
+                                            "balance_context_all_chats": True})
+    module._latest_balance = {
+        "is_available": True,
+        "balance_infos": [{"currency": "CNY", "total_balance": "999",
+                           "granted_balance": "0", "topped_up_balance": "999"}],
+        "queried_at": datetime.now(UTC).isoformat(),
+    }
     role = plugin.role_recognition
     role.remember({
         "message_id": "admin-query", "session_id": "group-stream", "platform": "qq",
@@ -106,12 +113,88 @@ async def test_group_balance_claims_admin_question_despite_interleaved_member_me
         "message_info": {"user_info": {"user_id": "987654321"}},
     })
     assert role.peek_planner_speaker("group-stream") is None
+    planner = {"session_id": "group-stream", "reply_message_id": "admin-query",
+               "items": [{"item_type": "SystemMessageItem",
+                          "parts": [{"type": "text", "text": "蓝天的人设"}]}]}
+    await plugin.inject_role_for_planner(**planner)
+    planner_text = "\n".join(
+        str(part.get("text") or "")
+        for item in planner["items"] for part in item.get("parts") or []
+    )
+    assert "本轮管理员的余额问题已通过" in planner_text
+    assert "总可用 999" not in planner_text
+    assert "总可用 15" in planner_text
+    assert len(calls) == 1
+    await plugin.inject_role_for_planner(**planner)
+    assert len(calls) == 1
     result = await plugin.secretary_deepseek_balance(stream_id="group-stream", chat_id="group-stream")
     assert result["success"] is True
     assert "大白饭" in result["content"]
     assert len(calls) == 1
     repeated = await plugin.secretary_deepseek_balance(stream_id="group-stream", chat_id="group-stream")
-    assert repeated["success"] is False and len(calls) == 1
+    assert repeated == result and len(calls) == 1
+    role.remember({
+        "message_id": "admin-query-2", "session_id": "group-stream", "platform": "qq",
+        "account_id": "2966970067", "processed_plain_text": "蓝天，大白饭够不够用？",
+        "message_info": {"user_info": {"user_id": "123456789"}},
+    })
+    next_planner = {"session_id": "group-stream", "reply_message_id": "admin-query-2",
+                    "items": [{"item_type": "SystemMessageItem",
+                               "parts": [{"type": "text", "text": "蓝天的人设"}]}]}
+    await plugin.inject_role_for_planner(**next_planner)
+    assert len(calls) == 2
+    await module.stop()
+
+
+@pytest.mark.asyncio
+async def test_planner_balance_failure_avoids_old_amount_and_nonadmin_cannot_refresh():
+    calls = []
+
+    def handler(request):
+        calls.append(request)
+        return httpx.Response(401)
+
+    plugin, module = make_module(handler, {"balance_alias": "蓝莓",
+                                            "balance_context_all_chats": True})
+    module._latest_balance = {
+        "is_available": True,
+        "balance_infos": [{"currency": "CNY", "total_balance": "999",
+                           "granted_balance": "0", "topped_up_balance": "999"}],
+        "queried_at": datetime.now(UTC).isoformat(),
+    }
+    role = plugin.role_recognition
+    role.remember({
+        "message_id": "nonadmin", "session_id": "group-stream", "platform": "qq",
+        "account_id": "2966970067", "processed_plain_text": "蓝莓还剩多少？",
+        "message_info": {"user_info": {"user_id": "987654321"}},
+    })
+    nonadmin_prompt = {"session_id": "group-stream", "reply_message_id": "nonadmin",
+                       "items": [{"item_type": "SystemMessageItem",
+                                  "parts": [{"type": "text", "text": "蓝天的人设"}]}]}
+    await plugin.inject_role_for_planner(**nonadmin_prompt)
+    assert not calls
+
+    role.remember({
+        "message_id": "admin", "session_id": "group-stream", "platform": "qq",
+        "account_id": "2966970067", "processed_plain_text": "蓝莓？",
+        "message_info": {"user_info": {"user_id": "123456789"}},
+    })
+    admin_prompt = {"session_id": "group-stream", "reply_message_id": "admin",
+                    "items": [{"item_type": "SystemMessageItem",
+                               "parts": [{"type": "text", "text": "蓝天的人设"}]}]}
+    await plugin.inject_role_for_planner(**admin_prompt)
+    admin_text = "\n".join(
+        str(part.get("text") or "")
+        for item in admin_prompt["items"] for part in item.get("parts") or []
+    )
+    assert len(calls) == 1
+    assert "API Key 无效" in admin_text
+    assert "总可用 999" not in admin_text
+    repeated = await plugin.secretary_deepseek_balance(
+        stream_id="group-stream", chat_id="group-stream",
+    )
+    assert repeated["success"] is False and "API Key 无效" in repeated["content"]
+    assert len(calls) == 1
     await module.stop()
 
 
@@ -166,17 +249,6 @@ async def test_auto_and_manual_balances_are_saved_and_restored_for_current_key(t
     assert "主人说“蓝莓”默认指这个 API 余额" in module.balance_context_note()
     assert "蓝天最喜欢的食物" in module.balance_context_note()
     assert "每次询问" in module.balance_context_note()
-    authorize_balance(plugin, message_id="prompt-question")
-    question_prompt = {"session_id": "private-stream", "reply_message_id": "prompt-question",
-                       "items": [{"item_type": "SystemMessageItem",
-                                  "parts": [{"type": "text", "text": "蓝天的人设"}]}]}
-    await plugin.inject_role_for_planner(**question_prompt)
-    question_text = "\n".join(
-        str(part.get("text") or "")
-        for item in question_prompt["items"] for part in item.get("parts") or []
-    )
-    assert "先调用 `secretary_deepseek_balance` 获取本次结果" in question_text
-    assert "总可用 10" not in question_text
     for hook in (plugin.inject_role_for_planner, plugin.inject_role_for_replyer):
         prompt = {"session_id": "group-stream", "items": [
             {"item_type": "SystemMessageItem", "parts": [{"type": "text", "text": "蓝天的人设"}]},

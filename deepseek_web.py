@@ -226,19 +226,47 @@ class DeepSeekWebModule:
                 raise WebSearchError("无法核验当前聊天流，不能查询 API 余额。")
             role = self.plugin.role_recognition
             admins = await role.admin_accounts(force_refresh=True)
-            account = role.consume_balance_request(stream_id, admins)
-            if not account:
+            completed = role.balance_result_for_planner(stream_id, admins)
+            if completed is not None:
+                return completed
+            record = role.consume_balance_request(stream_id, admins)
+            if record is None:
                 raise WebSearchError("只有已核验的小秘书管理员可以查询 DeepSeek API 余额。")
-            async with self._balance_lock:
-                snapshot = await self._fetch_and_store_balance("manual")
-            if snapshot["account_fingerprint"] != self._account_fingerprint():
-                raise WebSearchError("查询期间 API Key 发生变化，请重新查询。")
-            return {"success": True, "content": self._render_balance(snapshot, realtime=True)}
+            return await self._query_balance_for_record(record, already_claimed=True)
         except WebSearchError as exc:
             return self._failure("API 余额查询", str(exc))
         except Exception:
             self.plugin.ctx.logger.exception("小秘书 DeepSeek 余额查询出现未预期错误")
             return self._failure("API 余额查询", "内部错误，请检查插件日志。")
+
+    async def refresh_for_admin_question(self, record: dict[str, Any]) -> dict[str, Any]:
+        """Fetch a fresh balance before the planner sees an admin's question."""
+        return await self._query_balance_for_record(record, already_claimed=False)
+
+    async def _query_balance_for_record(
+        self, record: dict[str, Any], *, already_claimed: bool,
+    ) -> dict[str, Any]:
+        async with self._balance_lock:
+            completed = record.get("balance_result")
+            if isinstance(completed, dict):
+                return completed
+            if record.get("balance_claimed") and not already_claimed:
+                return self._failure("API 余额查询", "本条消息已经发起过查询，请重新发送一条消息。")
+            record["balance_claimed"] = True
+            self.plugin._save_state()
+            try:
+                snapshot = await self._fetch_and_store_balance("manual")
+                if snapshot["account_fingerprint"] != self._account_fingerprint():
+                    raise WebSearchError("查询期间 API Key 发生变化，请重新查询。")
+                answer = {"success": True, "content": self._render_balance(snapshot, realtime=True)}
+            except WebSearchError as exc:
+                answer = self._failure("API 余额查询", str(exc))
+            except Exception:
+                self.plugin.ctx.logger.exception("小秘书 DeepSeek 余额查询出现未预期错误")
+                answer = self._failure("API 余额查询", "内部错误，请检查插件日志。")
+            record["balance_result"] = answer
+            self.plugin._save_state()
+            return answer
 
     async def _fetch_and_store_balance(self, source: str) -> dict[str, Any]:
         self._check_enabled()
@@ -262,7 +290,7 @@ class DeepSeekWebModule:
             self._latest_balance = None
         return snapshot
 
-    def balance_context_note(self, *, require_live_query: bool = False) -> str:
+    def balance_context_note(self, *, query_result: dict[str, Any] | None = None) -> str:
         if not self.plugin.config.plugin.enabled or not self.settings.enabled:
             return ""
         alias = self.settings.balance_alias
@@ -272,6 +300,13 @@ class DeepSeekWebModule:
             "但不要虚构水果颗数或库存。"
             if alias == "蓝莓" else ""
         )
+        if query_result is not None:
+            outcome = str(query_result.get("content") or "余额查询没有返回结果。")
+            return (
+                f"【麦麦小秘书·余额背景】{owner_alias_rule}本轮管理员的余额问题已通过与 "
+                f"`secretary_deepseek_balance` 相同的接口实时查询一次，无需重复查询。{outcome} "
+                "请按 MaiBot 当前人设向用户说明本次结果；若查询失败，不要拿旧缓存冒充实时余额。"
+            )
         if not alias and not self.settings.balance_context_all_chats:
             return ""
         if not self.settings.balance_context_all_chats:
@@ -283,9 +318,7 @@ class DeepSeekWebModule:
             )
         alias = alias or "API 余额"
         snapshot = self._latest_balance
-        if require_live_query:
-            balance_line = "本轮管理员正在询问余额；此处不提供上次金额，先调用 `secretary_deepseek_balance` 获取本次结果。"
-        elif snapshot is None:
+        if snapshot is None:
             balance_line = "目前还没有保存成功的余额查询结果，不要猜测数量。"
         else:
             balance_line = self._render_balance(snapshot, realtime=False)

@@ -234,7 +234,7 @@ class RoleRecognitionModule:
         self._planner_speakers.pop(session_id, None)
         return account
 
-    def consume_balance_request(self, session_id: str, admins: set[str]) -> str | None:
+    def consume_balance_request(self, session_id: str, admins: set[str]) -> dict[str, Any] | None:
         """Claim one recent, explicit admin request even if group messages interleave."""
         if session_id in self._proactive_sessions:
             return None
@@ -252,7 +252,42 @@ class RoleRecognitionModule:
         record = max(candidates, key=lambda row: float(row["seen_at"]))
         record["balance_claimed"] = True
         self.plugin._save_state()
-        return str(record["account"])
+        return record
+
+    def balance_result_for_planner(self, session_id: str, admins: set[str]) -> dict[str, Any] | None:
+        """Reuse this planner message's completed live query without another API call."""
+        marker = self._planner_speakers.get(session_id)
+        if marker is None or session_id in self._proactive_sessions:
+            return None
+        if time.time() - float(marker["verified_at"]) > _TOOL_SPEAKER_TTL_SECONDS:
+            return None
+        record = self._find_speaker_record(session_id, str(marker["message_id"]))
+        if record is None or record["account"] != marker["account"] or record["account"] not in admins:
+            return None
+        result = record.get("balance_result")
+        if record.get("balance_request") is True and isinstance(result, dict):
+            return result
+        return None
+
+    def balance_request_for_planner(self, kwargs: dict[str, Any]) -> dict[str, Any] | None:
+        """Match a balance question to this planner turn's inbound message ID."""
+        session_id = str(kwargs.get("session_id") or "").strip()
+        items = kwargs.get("items")
+        if (
+            not self.plugin.config.plugin.enabled or not self.plugin.config.role_recognition.enabled
+            or not session_id or session_id in self._proactive_sessions or not isinstance(items, list)
+        ):
+            return None
+        message_id = str(kwargs.get("reply_message_id") or "").strip()
+        record = self._find_speaker_record(session_id, message_id) if message_id else None
+        if record is None:
+            record = self._speaker_record_from_items(session_id, items)
+        if (
+            record is None or record.get("balance_request") is not True
+            or time.time() - float(record["seen_at"]) > _TOOL_SPEAKER_TTL_SECONDS
+        ):
+            return None
+        return record
 
     async def inject(self, kwargs: dict[str, Any], *, track_for_tools: bool = False) -> dict[str, Any]:
         result = {"action": "continue", "modified_kwargs": kwargs}
