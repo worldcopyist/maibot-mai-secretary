@@ -8,6 +8,7 @@ real inbound message so the secretary's role checks remain valid.
 from __future__ import annotations
 
 import asyncio
+from collections import OrderedDict, deque
 from dataclasses import dataclass, field
 from datetime import datetime
 from time import monotonic
@@ -30,6 +31,7 @@ class MessageDebounceModule:
     def __init__(self, plugin: Any) -> None:
         self.plugin = plugin
         self._windows: dict[tuple[str, str, str, str], _Window] = {}
+        self._recent_private: OrderedDict[tuple[str, str, str], deque[tuple[str, float]]] = OrderedDict()
         self._lock = asyncio.Lock()
 
     def load_state(self, data: dict[str, Any]) -> None:
@@ -53,6 +55,7 @@ class MessageDebounceModule:
                 if window.timer is not None:
                     window.timer.cancel()
                 window.event.set()
+            self._recent_private.clear()
 
     async def on_inbound(self, message: dict[str, Any] | None) -> dict[str, Any] | None:
         cfg = self.plugin.config.message_debounce
@@ -61,6 +64,8 @@ class MessageDebounceModule:
         key = self._key(message)
         if key is None or not self._eligible(message, cfg):
             return None
+        if cfg.suppress_stale_private_replies and not message["message_info"].get("group_info"):
+            self._remember_private(key[:3], str(message["message_id"]))
 
         async with self._lock:
             window = self._windows.get(key)
@@ -100,6 +105,51 @@ class MessageDebounceModule:
             key[2], key[3], len(window.messages),
         )
         return {"action": "continue", "modified_kwargs": {"message": merged}}
+
+    def before_send(self, message: dict[str, Any] | None) -> dict[str, str] | None:
+        """Cancel a private reply if a newer user message arrived while it was generated."""
+        cfg = self.plugin.config.message_debounce
+        if not (
+            self.plugin.config.plugin.enabled
+            and cfg.enabled
+            and cfg.enable_private
+            and cfg.suppress_stale_private_replies
+        ):
+            return None
+        if not isinstance(message, dict):
+            return None
+        info = message.get("message_info")
+        user = info.get("user_info") if isinstance(info, dict) else None
+        if not isinstance(user, dict) or info.get("group_info"):
+            return None
+        if str(user.get("user_id") or "") != str(message.get("account_id") or ""):
+            return None
+        reply_to = str(message.get("reply_to") or "").strip()
+        if not reply_to:
+            return None
+        key = tuple(str(message.get(part) or "").strip() for part in ("platform", "account_id", "session_id"))
+        if not all(key):
+            return None
+        recent = self._recent_private.get(key)
+        if not recent:
+            return None
+        now = monotonic()
+        while recent and now - recent[0][1] > 120:
+            recent.popleft()
+        if len(recent) < 2 or reply_to == recent[-1][0]:
+            return None
+        if any(message_id == reply_to for message_id, _ in recent):
+            self.plugin.ctx.logger.info("取消过时私聊回复：聊天流 %s、旧消息 %s", key[2], reply_to)
+            return {"action": "abort"}
+        return None
+
+    def _remember_private(self, key: tuple[str, str, str], message_id: str) -> None:
+        recent = self._recent_private.setdefault(key, deque(maxlen=32))
+        if not recent or recent[-1][0] != message_id:
+            recent.append((message_id, monotonic()))
+        self._recent_private.move_to_end(key)
+        if len(self._recent_private) > 1024:
+            self._recent_private.popitem(last=False)
 
     def _schedule_locked(self, key: tuple[str, str, str, str], window: _Window, cfg: Any) -> None:
         if window.timer is not None:

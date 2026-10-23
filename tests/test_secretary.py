@@ -104,9 +104,11 @@ def test_sdk_exposes_secretary_tools_apis_and_hooks(tmp_path):
         ("HOOK_HANDLER", "secretary_group_join_welcome"),
         ("HOOK_HANDLER", "secretary_group_moderation_inbound"),
         ("HOOK_HANDLER", "secretary_message_debounce"),
+        ("HOOK_HANDLER", "secretary_suppress_stale_private_reply"),
     }
     hook_order = {item["name"]: item["metadata"].get("order") for item in components if item["type"] == "HOOK_HANDLER"}
     assert hook_order["secretary_message_debounce"] == "early"
+    assert hook_order["secretary_suppress_stale_private_reply"] == "early"
     assert hook_order["secretary_group_moderation_inbound"] == "early"
     early_names = sorted(name for name, order in hook_order.items() if order == "early")
     assert early_names.index("secretary_group_moderation_inbound") < early_names.index("secretary_message_debounce")
@@ -185,6 +187,42 @@ async def test_message_debounce_max_wait_and_unload_releases_pending(tmp_path):
     await plugin.message_debounce.stop()
     assert await asyncio.wait_for(waiting, 0.5) is None
     assert not plugin.message_debounce._windows
+
+
+@pytest.mark.asyncio
+async def test_new_private_message_cancels_only_known_stale_reply(tmp_path):
+    plugin, _ = make_plugin(tmp_path, {"message_debounce": {"debounce_seconds": 0.1}})
+    first = _debounce_message("old", "我看得很开心")
+    first["processed_plain_text"] = None  # Host calls before_process before text processing.
+    assert await plugin.debounce_inbound_message(first) is None
+
+    def outbound(reply_to: str | None, *, group_id: str = "") -> dict:
+        result = _debounce_message("out", "回复", user_id="bot-1", group_id=group_id)
+        result["reply_to"] = reply_to
+        return result
+
+    assert await plugin.suppress_stale_private_reply(outbound("old")) is None
+    second = _debounce_message("new", "先不聊天了")
+    second["processed_plain_text"] = None
+    assert await plugin.debounce_inbound_message(second) is None
+    assert await plugin.suppress_stale_private_reply(outbound("old")) == {"action": "abort"}
+    assert await plugin.suppress_stale_private_reply(outbound("new")) is None
+    assert await plugin.suppress_stale_private_reply(outbound("another-bot-segment")) is None
+    assert await plugin.suppress_stale_private_reply(outbound(None)) is None
+    assert await plugin.suppress_stale_private_reply(outbound("old", group_id="456")) is None
+
+
+@pytest.mark.asyncio
+async def test_stale_reply_filter_can_be_disabled(tmp_path):
+    plugin, _ = make_plugin(tmp_path, {"message_debounce": {
+        "debounce_seconds": 0.1,
+        "suppress_stale_private_replies": False,
+    }})
+    for msgid in ("old", "new"):
+        assert await plugin.debounce_inbound_message(_debounce_message(msgid, "一句话")) is None
+    reply = _debounce_message("out", "回复", user_id="bot-1")
+    reply["reply_to"] = "old"
+    assert await plugin.suppress_stale_private_reply(reply) is None
 
 
 @pytest.mark.asyncio

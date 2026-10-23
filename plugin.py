@@ -668,6 +668,7 @@ class MessageDebounceSettings(PluginConfigBase):
     enabled: bool = Field(default=True, json_schema_extra={"label": "启用消息防抖", "hint": "同一聊天流中同一用户的连续消息会合并，麦麦只处理一次。"})
     debounce_seconds: float = Field(default=2.0, ge=0.1, le=10.0, json_schema_extra={"label": "等候后续消息（秒）", "hint": "每收到一条新消息重新等待，推荐 2 秒。"})
     max_wait_seconds: float = Field(default=8.0, ge=1.0, le=30.0, json_schema_extra={"label": "最长等待（秒）", "hint": "连续发消息也不会无限延后，推荐 8 秒。"})
+    suppress_stale_private_replies: bool = Field(default=True, json_schema_extra={"label": "取消过时的私聊回复", "hint": "麦麦还在生成旧消息的回复时，如果你又发来新消息，就不再发送那条旧回复。"})
     merge_separator: str = Field(default="\n", max_length=10, json_schema_extra={"label": "消息分隔符"})
     enable_private: bool = Field(default=True, json_schema_extra={"label": "私聊启用"})
     enable_group: bool = Field(default=True, json_schema_extra={"label": "群聊启用"})
@@ -902,6 +903,20 @@ class MaiSecretaryPlugin(MaiBotPlugin):
     ) -> dict[str, Any] | None:
         del kwargs
         return await self.message_debounce.on_inbound(message)
+
+    @HookHandler(
+        "send_service.before_send",
+        name="secretary_suppress_stale_private_reply",
+        mode=HookMode.BLOCKING,
+        order=HookOrder.EARLY,
+        error_policy=ErrorPolicy.SKIP,
+        description="有更新的私聊消息时，不再发送针对旧消息生成的回复",
+    )
+    async def suppress_stale_private_reply(
+        self, message: dict[str, Any] | None = None, **kwargs: Any,
+    ) -> dict[str, str] | None:
+        del kwargs
+        return self.message_debounce.before_send(message)
 
     @HookHandler(
         "chat.receive.before_process",

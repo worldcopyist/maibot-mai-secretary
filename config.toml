@@ -14,6 +14,7 @@ enabled = true
 enabled = true
 debounce_seconds = 2.0
 max_wait_seconds = 8.0
+suppress_stale_private_replies = true
 merge_separator = "\n"
 enable_private = true
 enable_group = true
