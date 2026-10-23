@@ -43,7 +43,7 @@ from .role_recognition import RoleRecognitionModule
 from .scheduled_tasks import ScheduledTasksModule
 from .task_receipts import TaskReceiptModule
 from .virtual_life import VirtualLifeSettings
-from .voice_synthesis import AZURE_VOICE_PROMPT, VoiceSynthesisModule
+from .voice_synthesis import DEFAULT_VOICE_PROMPT, VoiceSynthesisModule
 
 LOG = logging.getLogger(__name__)
 
@@ -163,18 +163,18 @@ class BlueberryBudgetSettings(PluginConfigBase):
 
 
 class VoiceSynthesisSettings(PluginConfigBase):
-    """MiMo speech and the editable Azure voice description."""
+    """MiMo speech and an editable voice description."""
 
-    __ui_label__: ClassVar[str] = "蓝天语音 · MiMo"
+    __ui_label__: ClassVar[str] = "语音模块"
     enabled: bool = Field(
         default=True,
-        json_schema_extra={"label": "启用语音回复", "hint": "使用麦麦模型配置中已有的 MiMo API Key；只响应当前 QQ 聊天中的明确语音请求。"},
+        json_schema_extra={"label": "启用语音模块", "hint": "实验性功能，尚不成熟，语音生成与 QQ 发送的可靠性存疑。使用麦麦模型配置中已有的 MiMo API Key；只响应当前 QQ 聊天中的明确语音请求。"},
     )
     voice_prompt: str = Field(
-        default=AZURE_VOICE_PROMPT,
+        default=DEFAULT_VOICE_PROMPT,
         min_length=10,
         max_length=1000,
-        json_schema_extra={"label": "蓝天音色提示词", "hint": "发给 MiMo VoiceDesign 的音色与语气描述；可以直接修改音高、音色、语速。不会改动麦麦本身的人设。", "x-widget": "textarea", "rows": 6},
+        json_schema_extra={"label": "默认音色提示词", "hint": "发给 MiMo VoiceDesign 的声音描述；可按所用角色修改音色、音高和语速，不会改动 MaiBot 的人设。", "x-widget": "textarea", "rows": 6},
     )
     max_text_chars: int = Field(
         default=600, ge=20, le=2500,
@@ -194,7 +194,7 @@ class VoiceSynthesisSettings(PluginConfigBase):
     )
     singing_voice: Literal["冰糖", "茉莉", "苏打", "白桦", "Mia", "Chloe", "Milo", "Dean"] = Field(
         default="冰糖",
-        json_schema_extra={"label": "唱歌预置音色", "hint": "仅唱歌时使用；语音聊天仍使用上面的蓝天 VoiceDesign 音色。"},
+        json_schema_extra={"label": "唱歌预置音色", "hint": "仅唱歌时使用；普通语音仍使用上方配置的 VoiceDesign 音色。"},
     )
 
 
@@ -1453,10 +1453,10 @@ class MaiSecretaryPlugin(MaiBotPlugin):
     @Tool(
         "secretary_speak",
         description=(
-            "用户明确要求语音回复、朗读或唱歌时调用。text 写蓝天按当前人设准备说出的完整短句或完整歌词；"
-            "普通语音 mode=speech 使用 MiMo VoiceDesign 的蓝天声线；唱歌 mode=sing 使用同系列预置音色，"
+            "用户明确要求语音回复、朗读或唱歌时调用。text 写符合 MaiBot 当前人设和聊天场景的完整短句，或要唱的完整歌词；"
+            "普通语音 mode=speech 使用配置的 MiMo VoiceDesign 音色；唱歌 mode=sing 使用同系列预置音色，"
             "音色可能与平常说话不同。只向当前 QQ 聊天发送一条语音。工具成功后不要重复发语音或把同一段话再朗读一遍；"
-            "失败时按蓝天人设用文字说明。普通文字聊天不必调用。"
+            "失败时按 MaiBot 当前人设用文字说明。普通文字聊天不必调用。"
         ),
         parameters=[
             ToolParameterInfo(name="text", param_type=ToolParamType.STRING, description="要朗读的完整短句，或要唱的完整歌词", required=True),

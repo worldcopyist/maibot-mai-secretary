@@ -7,7 +7,7 @@
 ## At a glance
 
 - **Companionship and plans:** proactive chat, scheduled tasks, daily reports, relationships, and follow-ups.
-- **Information and expression:** knowledge retrieval, web search, Blueberry balance, voice replies, and pokes.
+- **Information and expression:** knowledge retrieval, web search, Blueberry balance, experimental voice replies, and pokes.
 - **Chat management:** QQ group management, anti-bullying, message debouncing, and natural-language feature switches for administrators.
 
 ## Token usage and cost
@@ -43,7 +43,7 @@ These routes open inside an authenticated MaiBot WebUI installation. Their Markd
 | `knowledge_base.py` | Accepts uploaded documents or pasted text, extracts and chunks content, builds keyword and optional embedding indexes, and restricts chat retrieval to administrator-approved streams. Keeps moderation word lists separate. | `secretary_search_knowledge`; knowledge page |
 | `deepseek_web.py`, `balance_history.py` | Offers DeepSeek Search, Fetch, and a verified administrator's live API balance query. Stores each successful balance snapshot locally and can refresh automatically. Search and balance can be switched independently. | `secretary_deepseek_search`, `secretary_deepseek_fetch`, `secretary_deepseek_balance`; `[deepseek_web]` |
 | `blueberry_budget.py` | Treats the configured alias “蓝莓” (“Blueberry”) as the API balance, compares saved snapshots, and can notify administrators privately when an automatic snapshot crosses the low-balance threshold. It does not make extra balance requests. Off by default. | `secretary_blueberry_budget`; `[blueberry_budget]` |
-| `voice_synthesis.py` | Sends speech or singing when explicitly requested. Regular speech uses a configurable Azure voice description with MiMo VoiceDesign and MaiBot's existing MiMo API key. | `secretary_speak`; `[voice_synthesis]` |
+| `voice_synthesis.py` (Voice module) | Experimental; reliability remains uncertain. Sends speech or singing when explicitly requested. The editable default VoiceDesign prompt avoids a fixed character, age, or gender and uses MaiBot's existing MiMo API key. | `secretary_speak`; `[voice_synthesis]` |
 | `message_debounce.py` | Merges closely spaced messages from the same real sender and optionally suppresses a stale private reply after a newer message arrives. | `[message_debounce]` |
 
 The knowledge base accepts text, Markdown, CSV/TSV, JSON/JSONL, XML/YAML, HTML, RTF, PDF with extractable text, DOCX, XLSX, PPTX, EPUB, ODT/ODS/ODP. Scanned PDFs require OCR before upload. The upload limit is 8 MiB per file. Chat retrieval is denied until `[knowledge_base].allowed_chats` contains an approved stream.
@@ -72,7 +72,7 @@ The avatar above is declared as `assets/icon.png` in `_manifest.json` for MaiBot
 
 ## Install and test
 
-This plugin runs through the MaiBot SDK without changing MaiBot's source code. It was tested on MaiBot 1.3.7 and plugin SDK 2.12.0; consult `_manifest.json` for declared bounds and capabilities. The repository's manifest version is `0.20.0`.
+This plugin runs through the MaiBot SDK without changing MaiBot's source code. It was tested on MaiBot 1.3.7 and plugin SDK 2.12.0; consult `_manifest.json` for declared bounds and capabilities. The repository's manifest version is `0.20.1`.
 
 Place this repository in its own directory under MaiBot's `plugins/` directory, install `requirements.txt` in MaiBot's Python environment, then enable the plugin and configure it in MaiBot WebUI. Preserve the installation's actual `config.toml` and `data/plugins/worldcopyist.mai-secretary/` when updating. Keep API keys out of Git. The default DeepSeek web module, daily scheduled report, follow-ups, and Blueberry budget alerts are off until configured. A proactive target list left empty sends no random messages.
 

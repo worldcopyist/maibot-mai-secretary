@@ -34,7 +34,7 @@ class FeatureControlModule:
         "group_recall": ("group_admin", "moderation_recall", "群审核自动撤回", ("审核撤回",)),
         "group_mute": ("group_admin", "moderation_mute", "群审核自动禁言", ("审核禁言",)),
         "group_welcome": ("group_admin", "welcome_enabled", "入群欢迎", ("欢迎新成员",)),
-        "voice": ("voice_synthesis", "enabled", "语音回复", ("语音", "文字转语音")),
+        "voice": ("voice_synthesis", "enabled", "语音模块", ("语音回复", "语音", "文字转语音")),
         "singing": ("voice_synthesis", "singing_enabled", "唱歌", ("唱歌功能",)),
         "anti_bullying": ("anti_bullying", "enabled", "AI反霸凌", ("反霸凌", "辱骂告状")),
         "knowledge_base": ("knowledge_base", "enabled", "知识库", ("文档检索",)),

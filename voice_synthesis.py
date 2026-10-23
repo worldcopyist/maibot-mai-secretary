@@ -20,12 +20,11 @@ if TYPE_CHECKING:
 
 VOICE_DESIGN_MODEL = "mimo-v2.5-tts-voicedesign"
 SINGING_MODEL = "mimo-v2.5-tts"
-AZURE_VOICE_PROMPT = (
-    "请设计听感约16岁的少女普通话声线：音高偏高但不尖，声音轻盈、软甜，"
-    "带一点浅浅的鼻音和自然的嗲感，像和亲近的人轻声撒娇聊天；"
-    "不要成熟厚重，也不要夸张夹嗓或幼儿奶声。语速中等稍快，字与字自然连贯，"
-    "咬字柔和，不逐字强调、不在每个词后停顿；句尾偶尔软软地轻拖一点并微微上扬。"
-    "情绪带一点好奇、黏人和憨憨的笑意，认真说明事情时也保持这条年轻柔软的声线。"
+DEFAULT_VOICE_PROMPT = (
+    "请生成适合不同角色和日常内容的自然普通话声线。音色清晰、亲和、稳定，"
+    "不要预设特定年龄、性别或人物身份。语速适中，字句连贯，按语义和标点自然停顿，"
+    "重音服务于表达，不逐字强调。根据文本调整语气：闲聊轻松，说明清楚，严肃内容克制；"
+    "避免机械播报、固定卖萌或夸张表演。只朗读提供的文本，不添加称呼、口头禅或额外台词。"
 )
 
 
@@ -90,7 +89,7 @@ class VoiceSynthesisModule:
             return {"success": False, "error": str(exc)}
         except Exception:
             self.plugin.ctx.logger.exception("小秘书语音合成或发送失败")
-            return {"success": False, "error": "语音暂时无法生成或发送，请用蓝天的人设向用户说明并改用文字回复。"}
+            return {"success": False, "error": "语音暂时无法生成或发送；请按当前人设向用户说明，并改用文字回复。"}
 
     async def _verify_stream(self, stream_id: str) -> None:
         response = await self.plugin.ctx.chat.get_all_streams(platform="qq")
@@ -128,13 +127,13 @@ class VoiceSynthesisModule:
         if mode == "sing":
             model = SINGING_MODEL
             audio = {"format": "wav", "voice": self.settings.singing_voice}
-            context = "用亲近、轻快、自然的年轻女声唱出完整歌词，咬字清楚，保持自然节奏。"
+            context = "请用所选预置音色自然唱出提供的歌词，保持与歌词相符的节奏和情绪，吐字清楚，不添加额外歌词。"
         else:
             model = VOICE_DESIGN_MODEL
             audio = {"format": "wav"}
             context = self.settings.voice_prompt.strip()
             if not context:
-                raise ValueError("请先填写蓝天的音色描述")
+                raise ValueError("请先填写语音模块的音色提示词")
         payload = {
             "model": model,
             "messages": [
