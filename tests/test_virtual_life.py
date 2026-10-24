@@ -11,7 +11,6 @@ from test_secretary import make_plugin, module
 
 life_module = importlib.import_module("mai_secretary.virtual_life")
 DAY_NAMES = life_module.DAY_NAMES
-DEFAULT_WEEK = life_module.DEFAULT_WEEK
 DEFAULT_CHOICES = life_module.DEFAULT_CHOICES
 PERIODS = life_module.PERIODS
 VirtualLifeSettings = life_module.VirtualLifeSettings
@@ -20,33 +19,32 @@ ROOT = Path(__file__).resolve().parents[1]
 ZONE = ZoneInfo("Asia/Shanghai")
 
 
-def test_full_week_defaults_and_public_config_match():
+def test_random_pools_and_fixed_list_schema():
     settings = VirtualLifeSettings()
     source = tomllib.loads((ROOT / "config.toml").read_text(encoding="utf-8"))
     assert len(DAY_NAMES) == 7 and len(PERIODS) == 8
-    for day in DAY_NAMES:
-        for period, *_ in PERIODS:
-            field = f"{day}_{period}"
-            assert getattr(settings, field) == DEFAULT_WEEK[day][period]
-            assert source["virtual_life"][field] == DEFAULT_WEEK[day][period]
-        assert "00:00" in getattr(settings, f"{day}_late_night")
-        assert "07:00" in getattr(settings, f"{day}_predawn")
-    assert "清理蓝天小窝" in settings.wednesday_afternoon
-    assert "疯狂星期四" in settings.thursday_afternoon
-    assert "KFC" in settings.thursday_afternoon
-    assert "湿地公园散步吹风" in settings.friday_dusk
-    assert settings.fixed_slots == "wednesday_afternoon,thursday_afternoon,friday_dusk"
-    assert source["virtual_life"]["fixed_slots"] == settings.fixed_slots
     for period, *_ in PERIODS:
         assert getattr(settings, f"{period}_choices").splitlines() == list(DEFAULT_CHOICES[period])
         assert source["virtual_life"][f"{period}_choices"].strip().splitlines() == list(DEFAULT_CHOICES[period])
+    assert len(settings.fixed_activities) == 3
+    assert [item.model_dump() for item in settings.fixed_activities] == source["virtual_life"]["fixed_activities"]
+    assert "清理蓝天小窝" in settings.fixed_activities[0].activity
+    assert "疯狂星期四" in settings.fixed_activities[1].activity
+    assert "湿地公园散步吹风" in settings.fixed_activities[2].activity
+    assert not {"fixed_slots", "wednesday_afternoon", "sunday_predawn"} & VirtualLifeSettings.model_fields.keys()
+    assert set(source["virtual_life"]) == {"enabled", "fixed_activities", *[f"{period}_choices" for period, *_ in PERIODS]}
     assert module.SecretaryConfig.model_validate(source).virtual_life.enabled is False
     schema = module.MaiSecretaryPlugin.build_config_schema()
     fields = schema["sections"]["virtual_life"]["fields"]
-    assert len(fields) == 66
-    assert fields["wednesday_afternoon"]["ui_type"] == "textarea"
-    assert fields["wednesday_afternoon"]["label"].startswith("周三 · 下午")
+    assert len(fields) == 10
     assert fields["afternoon_choices"]["ui_type"] == "textarea"
+    fixed = fields["fixed_activities"]
+    assert fixed["ui_type"] == "list" and fixed["item_type"] == "object"
+    assert fixed["item_fields"]["day"]["type"] == "select"
+    assert fixed["item_fields"]["day"]["choices"] == list(life_module.DAY_LABELS)
+    assert fixed["item_fields"]["period"]["type"] == "select"
+    assert fixed["item_fields"]["period"]["choices"] == [part[1] for part in PERIODS]
+    assert fixed["item_fields"]["activity"]["type"] == "string"
 
 
 @pytest.mark.parametrize(("hour", "minute", "expected"), [
@@ -61,19 +59,60 @@ def test_period_boundaries(hour, minute, expected):
     assert label.startswith("周三" + expected)
 
 
-def test_one_field_edits_keep_other_daily_defaults():
+def test_fixed_activity_can_be_added_removed_and_legacy_fields_migrate():
     settings = VirtualLifeSettings.model_validate({
         "enabled": True,
-        "wednesday_afternoon": "给蓝天小窝换一张软毯子",
+        "fixed_activities": [
+            {"day": "周六", "period": "下午", "activity": " 拼乐高 "},
+        ],
     })
-    assert settings.wednesday_afternoon == "给蓝天小窝换一张软毯子"
-    assert settings.wednesday_morning == DEFAULT_WEEK["wednesday"]["morning"]
-    assert settings.thursday_afternoon == DEFAULT_WEEK["thursday"]["afternoon"]
-    with pytest.raises(ValueError):
-        VirtualLifeSettings.model_validate({"wednesday_afternoon": "  "})
+    assert settings.fixed_activities[0].activity == "拼乐高"
+    assert VirtualLifeSettings.model_validate({"fixed_activities": []}).fixed_activities == []
+    legacy = VirtualLifeSettings.model_validate({
+        "enabled": True,
+        "fixed_slots": "周三下午，周六夜晚",
+        "wednesday_afternoon": "给小窝换一张软毯子",
+        "saturday_night": "看一部电影",
+        "monday_morning": "旧版非固定内容",
+    })
+    assert [(item.day, item.period, item.activity) for item in legacy.fixed_activities] == [
+        ("周三", "下午", "给小窝换一张软毯子"),
+        ("周六", "夜晚", "看一部电影"),
+    ]
+    assert "fixed_slots" not in legacy.model_dump()
+    assert "monday_morning" not in legacy.model_dump()
+    assert VirtualLifeSettings.model_validate({"fixed_slots": ""}).fixed_activities == []
+    assert VirtualLifeSettings.model_validate({
+        "fixed_activities": [], "fixed_slots": "周三下午", "wednesday_afternoon": "旧内容",
+    }).fixed_activities == []
 
 
-def test_random_candidates_are_time_bound_and_fixed_slots_win():
+def test_sdk_default_merge_preserves_legacy_fixed_content():
+    raw = tomllib.loads((ROOT / "config.toml").read_text(encoding="utf-8"))
+    raw["virtual_life"] = {
+        "enabled": True,
+        "fixed_slots": "周三下午,周四下午,周六夜晚",
+        "wednesday_afternoon": "旧版自定义打扫内容",
+        "thursday_afternoon": "旧版自定义晚餐内容",
+        "saturday_night": "旧版自定义看剧内容",
+    }
+    normalized, changed = module.MaiSecretaryPlugin().normalize_plugin_config(raw)
+    assert changed
+    fixed = normalized["virtual_life"]["fixed_activities"]
+    assert [(item["day"], item["period"], item["activity"]) for item in fixed] == [
+        ("周三", "下午", "旧版自定义打扫内容"),
+        ("周四", "下午", "旧版自定义晚餐内容"),
+        ("周六", "夜晚", "旧版自定义看剧内容"),
+    ]
+    assert "fixed_slots" not in normalized["virtual_life"]
+    assert "wednesday_afternoon" not in normalized["virtual_life"]
+
+    raw["virtual_life"]["fixed_activities"] = []
+    normalized, _ = module.MaiSecretaryPlugin().normalize_plugin_config(raw)
+    assert normalized["virtual_life"]["fixed_activities"] == []
+
+
+def test_random_candidates_are_time_bound_and_fixed_activity_wins():
     class PickFirst:
         @staticmethod
         def choice(choices):
@@ -82,7 +121,7 @@ def test_random_candidates_are_time_bound_and_fixed_slots_win():
     settings = VirtualLifeSettings.model_validate({
         "afternoon_choices": "玩游戏\n拼乐高",
         "morning_choices": "做早餐\n吃早餐",
-        "wednesday_afternoon": "固定打扫小窝",
+        "fixed_activities": [{"day": "周三", "period": "下午", "activity": "固定打扫小窝"}],
     })
     monday = datetime(2026, 10, 19, 14, 0, tzinfo=ZONE)
     _, first = settings.activity_at(monday, rng=PickFirst())
@@ -94,16 +133,25 @@ def test_random_candidates_are_time_bound_and_fixed_slots_win():
     assert settings.activity_at(datetime(2026, 10, 19, 7, 0, tzinfo=ZONE), rng=PickFirst())[1] == "做早餐"
 
 
-def test_candidate_and_fixed_slot_validation():
-    with pytest.raises(ValueError, match="未知的固定时段"):
+def test_candidate_and_fixed_activity_validation():
+    with pytest.raises(ValueError, match="未知的旧版固定时段"):
         VirtualLifeSettings.model_validate({"fixed_slots": "wednesday_breakfast"})
     with pytest.raises(ValueError, match="随机活动"):
         VirtualLifeSettings.model_validate({"afternoon_choices": "  \n "})
-    settings = VirtualLifeSettings.model_validate({
-        "fixed_slots": " 周三 · 下午，wednesday_afternoon;周五傍晚 ",
-        "afternoon_choices": " 玩游戏 \n\n拼乐高\n玩游戏",
-    })
-    assert settings.fixed_slots == "wednesday_afternoon,friday_dusk"
+    with pytest.raises(ValueError, match="同一星期和时间段"):
+        VirtualLifeSettings.model_validate({"fixed_activities": [
+            {"day": "周三", "period": "下午", "activity": "打扫"},
+            {"day": "周三", "period": "下午", "activity": "画画"},
+        ]})
+    with pytest.raises(ValueError, match="Input should be"):
+        VirtualLifeSettings.model_validate({"fixed_activities": [
+            {"day": "周二", "period": "晚上", "activity": "看书"},
+        ]})
+    with pytest.raises(ValueError, match="固定活动"):
+        VirtualLifeSettings.model_validate({"fixed_activities": [
+            {"day": "周二", "period": "夜晚", "activity": " "},
+        ]})
+    settings = VirtualLifeSettings.model_validate({"afternoon_choices": " 玩游戏 \n\n拼乐高\n玩游戏"})
     assert settings.afternoon_choices == "玩游戏\n拼乐高"
 
 

@@ -139,9 +139,8 @@ fetch_qps = 5.0
 
 [virtual_life]
 enabled = false
-fixed_slots = "wednesday_afternoon,thursday_afternoon,friday_dusk"
 
-# 每行一个候选活动；只在对应时段随机选择。下面的每周字段仅在 fixed_slots 指定时生效。
+# 每行一个候选活动；只在对应时段随机选择。文末可单独添加固定的星期、时间段和活动。
 morning_choices = '''
 07:00 起床洗漱，烤吐司和煎蛋当早餐。
 起床后开窗透气，做一碗酸奶水果当早餐。
@@ -193,72 +192,17 @@ late_night_choices = '''
 '''
 predawn_choices = "00:00–07:00 安稳睡觉，早上 07:00 再起床。"
 
-# 周一
-monday_morning = "07:00 起床，洗漱开窗，给自己做蓝莓酸奶和吐司当早餐。"
-monday_late_morning = "给窗边的植物浇水，整理零食架，放喜欢的歌慢慢收拾家。"
-monday_noon = "煮一碗鸡蛋面当午饭，吃完在沙发上小憩。"
-monday_afternoon = "窝在家里涂涂画画，给蓝莓和粉色小鱼画可爱的小涂鸦。"
-monday_dusk = "看看窗外的晚霞，准备简单的晚饭，吃完收拾餐具。"
-monday_night = "裹着毯子看轻松的动画或玩一会儿休闲游戏。"
-monday_late_night = "放下屏幕，洗漱、整理小窝，23:50 上床，00:00 睡觉。"
-monday_predawn = "00:00–07:00 安稳睡觉，早上 07:00 再起床。"
+[[virtual_life.fixed_activities]]
+day = "周三"
+period = "下午"
+activity = "固定清理蓝天小窝：擦桌子、收玩偶、整理床铺和地板，把小窝收拾得软乎乎又整洁。"
 
-# 周二
-tuesday_morning = "07:00 起床洗漱，烤面包抹果酱，慢慢吃早餐。"
-tuesday_late_morning = "听歌、挑喜欢的照片整理相册，顺手把桌面擦干净。"
-tuesday_noon = "做一份米饭和清爽的家常菜，饭后安静休息。"
-tuesday_afternoon = "在家试做小饼干，闻着烤箱香味等出炉。"
-tuesday_dusk = "出门散一小会儿步，顺路买水果和晚饭食材。"
-tuesday_night = "吃过晚饭后洗碗，窝在家里看故事或玩小游戏。"
-tuesday_late_night = "放下屏幕，洗漱、整理小窝，23:50 上床，00:00 睡觉。"
-tuesday_predawn = "00:00–07:00 安稳睡觉，早上 07:00 再起床。"
+[[virtual_life.fixed_activities]]
+day = "周四"
+period = "下午"
+activity = "固定过疯狂星期四：去 KFC 爽吃喜欢的炸鸡和薯条，开心地挑今天最好吃的那一口。"
 
-# 周三
-wednesday_morning = "07:00 起床，洗漱吃早餐，打开窗户让小窝透气。"
-wednesday_late_morning = "整理桌上的小物件，把要清洗和收纳的东西归到一起。"
-wednesday_noon = "做份简单午饭，吃完休息一会儿，为下午留点力气。"
-wednesday_afternoon = "固定清理蓝天小窝：擦桌子、收玩偶、整理床铺和地板，把小窝收拾得软乎乎又整洁。"
-wednesday_dusk = "洗个澡换上舒服的衣服，给自己准备晚饭。"
-wednesday_night = "小窝收拾好了，奖励自己一点甜食，窝着看动画。"
-wednesday_late_night = "放下屏幕，洗漱、整理小窝，23:50 上床，00:00 睡觉。"
-wednesday_predawn = "00:00–07:00 安稳睡觉，早上 07:00 再起床。"
-
-# 周四
-thursday_morning = "07:00 起床，洗漱后吃一份轻巧的早餐。"
-thursday_late_morning = "在家听歌、给植物浇水，想想下午想吃什么。"
-thursday_noon = "午饭吃得清淡一点，休息片刻，准备出门。"
-thursday_afternoon = "固定过疯狂星期四：去 KFC 爽吃喜欢的炸鸡和薯条，开心地挑今天最好吃的那一口。"
-thursday_dusk = "吃饱后慢慢散步回家，顺路看看傍晚的街景。"
-thursday_night = "在家放松，聊聊下午的 KFC，看看轻松的视频。"
-thursday_late_night = "放下屏幕，洗漱、整理小窝，23:50 上床，00:00 睡觉。"
-thursday_predawn = "00:00–07:00 安稳睡觉，早上 07:00 再起床。"
-
-# 周五
-friday_morning = "07:00 起床洗漱，吃早餐时打开窗帘晒晒太阳。"
-friday_late_morning = "叠好洗净的衣服，照看窗边的小植物。"
-friday_noon = "做份米饭和热乎的小菜，饭后休息。"
-friday_afternoon = "在家画小卡片、整理随身小包，准备傍晚出门。"
-friday_dusk = "固定去湿地公园散步吹风，看水面、芦苇和傍晚的天空。"
-friday_night = "从湿地公园回家，洗洗手吃晚饭，带着晚风的好心情放松。"
-friday_late_night = "放下屏幕，洗漱、整理小窝，23:50 上床，00:00 睡觉。"
-friday_predawn = "00:00–07:00 安稳睡觉，早上 07:00 再起床。"
-
-# 周六
-saturday_morning = "07:00 起床，慢慢洗漱，做一份蓝莓早餐。"
-saturday_late_morning = "去附近买水果，挑一些喜欢的蓝莓，回家收好。"
-saturday_noon = "做份简单午饭，吃完在家休息一会儿。"
-saturday_afternoon = "做小甜点或拼拼图，想起什么有趣的事就记下来。"
-saturday_dusk = "在家做热乎晚饭，开窗看看天色慢慢暗下来。"
-saturday_night = "抱着抱枕看电影，配一点自己做的小点心。"
-saturday_late_night = "放下屏幕，洗漱、整理小窝，23:50 上床，00:00 睡觉。"
-saturday_predawn = "00:00–07:00 安稳睡觉，早上 07:00 再起床。"
-
-# 周日
-sunday_morning = "07:00 起床洗漱，晒晒太阳，煎蛋配面包当早餐。"
-sunday_late_morning = "洗一小篮衣服、整理抽屉，把家里布置得舒服些。"
-sunday_noon = "煮一碗暖暖的汤和饺子，饭后在家小憩。"
-sunday_afternoon = "翻漫画、做些小手工，或者给小窝换一处可爱的摆设。"
-sunday_dusk = "在窗边看晚霞，慢慢准备晚饭。"
-sunday_night = "吃过晚饭，泡杯热饮，听音乐聊聊今天的小事。"
-sunday_late_night = "放下屏幕，洗漱、整理小窝，23:50 上床，00:00 睡觉。"
-sunday_predawn = "00:00–07:00 安稳睡觉，早上 07:00 再起床。"
+[[virtual_life.fixed_activities]]
+day = "周五"
+period = "傍晚"
+activity = "固定去湿地公园散步吹风，看水面、芦苇和傍晚的天空。"
