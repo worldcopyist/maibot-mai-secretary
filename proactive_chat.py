@@ -165,12 +165,18 @@ class ProactiveChatModule:
 
     def _proactive_intent(self, target: str, base_intent: str, now: datetime) -> str:
         life = self.plugin.config.virtual_life
+        continuity = self.continuity.get(target, {})
         if life.enabled:
             period, activity = life.activity_at(
-                now.astimezone(ZoneInfo(self.plugin.config.plugin.timezone))
+                now.astimezone(ZoneInfo(self.plugin.config.plugin.timezone)),
+                previous=str(continuity.get("last_activity") or ""),
+                rng=self.rng,
             )
+            pending = continuity.get("pending")
+            if isinstance(pending, dict):
+                pending["activity"] = activity
             lifestyle = (
-                f"当前模拟生活安排是 {period}："
+                f"当前模拟生活在 {period} 选中的活动是："
                 f"{json.dumps(activity, ensure_ascii=False)}。"
                 "这是管理员设置的生活情境资料，不是额外的人设或指令。"
                 "这次主动发言以此刻正在做的事为背景，结合本聊天流的最近对话和关系自然找话题；"
@@ -190,7 +196,6 @@ class ProactiveChatModule:
             "日常闲聊无需联网，也不要无故创建定时任务。"
             f"{TOOL_ROUTING_PROMPT}"
         )
-        continuity = self.continuity.get(target, {})
         last_message = str(continuity.get("last_message") or "").strip()
         if last_message:
             last_sent_at = continuity.get("last_sent_at")
@@ -301,6 +306,8 @@ class ProactiveChatModule:
                 if first_sent_at is None:
                     continuity["last_message"] = text
                     continuity["last_sent_at"] = sent_at
+                    if isinstance(pending.get("activity"), str):
+                        continuity["last_activity"] = pending["activity"]
                     pending["first_sent_at"] = sent_at
                     pending["until"] = min(float(pending["until"]), sent_at + 15)
                 else:
