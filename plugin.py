@@ -35,6 +35,7 @@ from .group_moderation import GroupModerationModule
 from .knowledge_base import KnowledgeBaseModule, KnowledgeError
 from .message_debounce import MessageDebounceModule
 from .module_contract import SecretaryModule
+from .mood import MoodModule, MoodSettings
 from .poke_interaction import PokeInteractionModule
 from .proactive_chat import ProactiveChatModule
 from .prompts import CONTROL_ROUTING_PROMPT
@@ -42,7 +43,7 @@ from .relationship_management import RelationshipManagementModule
 from .role_recognition import RoleRecognitionModule
 from .scheduled_tasks import ScheduledTasksModule
 from .task_receipts import TaskReceiptModule
-from .virtual_life import VirtualLifeSettings
+from .virtual_life import VirtualLifeModule, VirtualLifeSettings
 from .voice_synthesis import DEFAULT_VOICE_PROMPT, VoiceSynthesisModule
 
 LOG = logging.getLogger(__name__)
@@ -799,6 +800,7 @@ class SecretaryConfig(PluginConfigBase):
     daily_report: DailyReportSettings = Field(default_factory=DailyReportSettings)
     proactive: ProactiveSettings = Field(default_factory=ProactiveSettings)
     virtual_life: VirtualLifeSettings = Field(default_factory=VirtualLifeSettings)
+    mood: MoodSettings = Field(default_factory=MoodSettings)
     anti_bullying: AntiBullyingSettings = Field(default_factory=AntiBullyingSettings)
     knowledge_base: KnowledgeBaseSettings = Field(default_factory=KnowledgeBaseSettings)
     deepseek_web: DeepSeekWebSettings = Field(default_factory=DeepSeekWebSettings)
@@ -841,6 +843,8 @@ class MaiSecretaryPlugin(MaiBotPlugin):
         self.group_admin = GroupAdminModule(self)
         self.group_moderation = GroupModerationModule(self)
         self.voice_synthesis = VoiceSynthesisModule(self)
+        self.virtual_life = VirtualLifeModule(self)
+        self.mood = MoodModule(self)
         self.proactive = ProactiveChatModule(self)
         self.anti_bullying = AntiBullyingModule(self)
         self.knowledge_base = KnowledgeBaseModule(self)
@@ -859,6 +863,8 @@ class MaiSecretaryPlugin(MaiBotPlugin):
         self._register_module(self.group_admin)
         self._register_module(self.group_moderation)
         self._register_module(self.voice_synthesis)
+        self._register_module(self.virtual_life)
+        self._register_module(self.mood)
         self._register_module(self.proactive)
         self._register_module(self.anti_bullying)
         self._register_module(self.knowledge_base)

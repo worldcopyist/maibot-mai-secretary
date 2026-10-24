@@ -2,8 +2,8 @@
   "manifest_version": 2,
   "id": "worldcopyist.mai-secretary",
   "name": "麦麦小秘书",
-  "version": "0.24.0",
-  "description": "模块化的自然语言功能开关、关系管理、定时任务回执、约定回访、蓝莓预算提醒，以及主动聊天、日报、知识库、联网和 QQ 群管。",
+  "version": "0.25.0",
+  "description": "模块化的自然语言功能开关、共享模拟生活与心情、关系管理、定时任务回执、约定回访、蓝莓预算提醒，以及主动聊天、日报、知识库、联网和 QQ 群管。",
   "display": {
     "icon": {
       "type": "local",

@@ -180,7 +180,7 @@ async def test_proactive_uses_current_weekly_activity_and_previous_chat(tmp_path
 
 
 @pytest.mark.asyncio
-async def test_random_activity_is_saved_only_after_a_sent_proactive_reply(tmp_path):
+async def test_shared_random_activity_and_sent_only_continuity(tmp_path):
     target = "qq:private:123"
     config = {
         "proactive": {"target_chats": [target], "messages_per_window": 1},
@@ -210,7 +210,25 @@ async def test_random_activity_is_saved_only_after_a_sent_proactive_reply(tmp_pa
     restored._load_state()
     assert restored.proactive.continuity[target]["last_activity"] == selected
     next_intent = restored.proactive._proactive_intent(target, "自然闲聊", due)
-    assert ({"玩游戏", "拼乐高"} - {selected}).pop() in next_intent
+    assert selected in next_intent
+    assert restored.virtual_life.scene_at(due)["activity"] == selected
+
+
+def test_two_chat_streams_share_one_activity_until_period_changes(tmp_path):
+    plugin, _ = make_plugin(tmp_path, {"virtual_life": {
+        "enabled": True, "afternoon_choices": "玩游戏\n拼乐高",
+        "dusk_choices": "吃晚饭\n散步",
+        "fixed_activities": [],
+    }})
+    afternoon = datetime(2026, 10, 19, 14, 0, tzinfo=ZONE)
+    first = plugin.proactive._proactive_intent("qq:private:123", "自然闲聊", afternoon)
+    second = plugin.proactive._proactive_intent("qq:group:456", "自然闲聊", afternoon)
+    activity = plugin.virtual_life.scene_at(afternoon)["activity"]
+    assert activity in first and activity in second
+    assert plugin.virtual_life.scene_at(datetime(2026, 10, 19, 16, 0, tzinfo=ZONE))["activity"] == activity
+    dusk = plugin.virtual_life.scene_at(datetime(2026, 10, 19, 18, 0, tzinfo=ZONE))
+    assert dusk["activity"] in {"吃晚饭", "散步"}
+    assert dusk["key"] != "2026-10-19:afternoon"
 
 
 def test_thursday_friday_and_predawn_select_correct_activity(tmp_path):

@@ -19,6 +19,7 @@ class FeatureControlModule:
         "manual_report": ("daily_report", "manual_enabled", "即时日报", ("手动日报",)),
         "proactive": ("proactive", "enabled", "主动发言", ("随机发言", "主动聊天")),
         "virtual_life": ("virtual_life", "enabled", "模拟生活", ("虚拟生活",)),
+        "mood": ("mood", "enabled", "心情模块", ("心情", "情绪模块")),
         "role_recognition": ("role_recognition", "enabled", "角色识别", ("身份识别",)),
         "relationships": ("relationships", "enabled", "关系管理", ("关系档案",)),
         "followups": ("followups", "enabled", "约定回访", ("回访",)),

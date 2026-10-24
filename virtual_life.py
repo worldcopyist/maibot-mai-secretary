@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import hashlib
 import random
 import re
 from datetime import datetime
-from typing import ClassVar, Literal
+from typing import Any, ClassVar, Literal
+from zoneinfo import ZoneInfo
 
 from maibot_sdk import Field, PluginConfigBase
 from pydantic import field_validator, model_validator
@@ -197,8 +199,7 @@ class VirtualLifeSettings(PluginConfigBase):
             raise ValueError("同一星期和时间段只能设置一条固定活动")
         return value
 
-    def activity_at(self, local_time: datetime, *, previous: str = "",
-                    rng: random.Random | None = None) -> tuple[str, str]:
+    def period_at(self, local_time: datetime) -> tuple[str, str]:
         if local_time.tzinfo is None:
             raise ValueError("模拟生活选取时间必须包含时区")
         minutes = local_time.hour * 60 + local_time.minute
@@ -207,6 +208,13 @@ class VirtualLifeSettings(PluginConfigBase):
             if minutes >= period[3]:
                 selected = period
         field_name, period_label, clock_range, _ = selected
+        day_label = DAY_LABELS[local_time.weekday()]
+        return field_name, f"{day_label}{period_label}（{clock_range}）"
+
+    def activity_at(self, local_time: datetime, *, previous: str = "",
+                    rng: random.Random | None = None) -> tuple[str, str]:
+        field_name, period = self.period_at(local_time)
+        period_label = next(label for name, label, *_ in PERIODS if name == field_name)
         day_label = DAY_LABELS[local_time.weekday()]
         fixed = next(
             (item.activity for item in self.fixed_activities
@@ -219,4 +227,49 @@ class VirtualLifeSettings(PluginConfigBase):
             choices = getattr(self, f"{field_name}_choices").splitlines()
             fresh = [choice for choice in choices if choice != previous]
             activity = (rng or random).choice(fresh or choices)
-        return f"{day_label}{period_label}（{clock_range}）", activity
+        return period, activity
+
+
+class VirtualLifeModule:
+    """Select one time-bound activity shared by every chat stream."""
+
+    name = "virtual_life"
+    state_keys = frozenset({"virtual_life_scene"})
+
+    def __init__(self, plugin: Any) -> None:
+        self.plugin = plugin
+        self.scene: dict[str, Any] = {}
+        self.rng = random.Random()
+
+    def load_state(self, data: dict[str, Any]) -> None:
+        raw = data.get("virtual_life_scene", {})
+        self.scene = raw if isinstance(raw, dict) and all(
+            isinstance(raw.get(key), str) for key in ("key", "signature", "period", "activity")
+        ) else {}
+
+    def dump_state(self, payload: dict[str, Any]) -> None:
+        if self.scene:
+            payload["virtual_life_scene"] = self.scene
+
+    def on_config_update(self) -> None:
+        pass  # The config signature invalidates the scene on the next read.
+
+    async def tick(self, now: datetime) -> None:
+        self.scene_at(now)
+
+    def scene_at(self, now: datetime) -> dict[str, Any] | None:
+        settings = self.plugin.config.virtual_life
+        if not settings.enabled:
+            return None
+        local_time = now.astimezone(ZoneInfo(self.plugin.config.plugin.timezone))
+        period_key, _ = settings.period_at(local_time)
+        key = f"{local_time.date().isoformat()}:{period_key}"
+        signature = hashlib.sha256(settings.model_dump_json().encode("utf-8")).hexdigest()[:16]
+        if self.scene.get("key") == key and self.scene.get("signature") == signature:
+            return self.scene
+        period, activity = settings.activity_at(
+            local_time, previous=str(self.scene.get("activity") or ""), rng=self.rng,
+        )
+        self.scene = {"key": key, "signature": signature, "period": period, "activity": activity}
+        self.plugin._save_state()
+        return self.scene

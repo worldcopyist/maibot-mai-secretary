@@ -167,11 +167,9 @@ class ProactiveChatModule:
         life = self.plugin.config.virtual_life
         continuity = self.continuity.get(target, {})
         if life.enabled:
-            period, activity = life.activity_at(
-                now.astimezone(ZoneInfo(self.plugin.config.plugin.timezone)),
-                previous=str(continuity.get("last_activity") or ""),
-                rng=self.rng,
-            )
+            scene = self.plugin.virtual_life.scene_at(now)
+            assert scene is not None
+            period, activity = str(scene["period"]), str(scene["activity"])
             pending = continuity.get("pending")
             if isinstance(pending, dict):
                 pending["activity"] = activity

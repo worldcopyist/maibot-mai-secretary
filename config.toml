@@ -135,6 +135,19 @@ search_qps = 5.0
 fetch_content_chars = 8000
 fetch_qps = 5.0
 
+[mood]
+enabled = false
+# 基础概率总和必须为 100；当前模拟生活活动和上次心情会调整实际抽取概率。
+calm = 25
+happy = 25
+satisfied = 15
+excited = 10
+wronged = 8
+sad = 6
+irritable = 6
+angry = 3
+grief = 2
+
 [virtual_life]
 enabled = false
 

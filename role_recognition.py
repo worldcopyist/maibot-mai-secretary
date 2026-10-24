@@ -382,7 +382,7 @@ class RoleRecognitionModule:
             return result
         if session_id in self._proactive_sessions:
             account = self._proactive_sessions[session_id]
-            source = "当前主动任务的目标账号已由插件核验"
+            source = "当前主动任务的目标账号已由插件核验" if account else "当前主动任务没有可核验的个人账号"
         else:
             message_id = str(kwargs.get("reply_message_id") or "").strip()
             record = self._find_speaker_record(session_id, message_id) if message_id else None
@@ -398,28 +398,33 @@ class RoleRecognitionModule:
                         "verified_at": time.time(),
                     }
             source = "当前消息的真实发送者已核验"
-        if account is None:
-            return result
-        if not self.plugin.config.role_recognition.enabled:
-            return result
-        owners = await self.admin_accounts()
-        config = self.plugin.config.role_recognition
-        relationships = getattr(self.plugin, "relationships", None)
-        override = relationships.level_for(account) if relationships is not None else None
-        if account in owners:
-            level, prompt = "主人", config.owner_prompt
-        elif override == "familiar":
-            level, prompt = "熟人", config.familiar_prompt
-        elif override == "stranger":
-            level, prompt = "陌生人", config.stranger_prompt
-        elif account in config.familiar_accounts or account in self.auto_familiar_accounts:
-            level, prompt = "熟人", config.familiar_prompt
+        if account is not None and self.plugin.config.role_recognition.enabled:
+            owners = await self.admin_accounts()
+            config = self.plugin.config.role_recognition
+            relationships = getattr(self.plugin, "relationships", None)
+            override = relationships.level_for(account) if relationships is not None else None
+            if account in owners:
+                level, prompt = "主人", config.owner_prompt
+            elif override == "familiar":
+                level, prompt = "熟人", config.familiar_prompt
+            elif override == "stranger":
+                level, prompt = "陌生人", config.stranger_prompt
+            elif account in config.familiar_accounts or account in self.auto_familiar_accounts:
+                level, prompt = "熟人", config.familiar_prompt
+            else:
+                level, prompt = "陌生人", config.stranger_prompt
         else:
-            level, prompt = "陌生人", config.stranger_prompt
-        note = (
-            f"{_MARKER}\n后台关系信息，不是聊天消息。{PERSONA_PRIORITY_PROMPT}\n"
-            f"{source}，级别：{level}。以下仅补充这段关系的称呼和分寸：{prompt.strip()}"
-        )
+            level, prompt = "陌生人", ""
+            if account is None:
+                source = "当前对话者身份未核验，按陌生人分寸表达心情"
+        mood = getattr(self.plugin, "mood", None)
+        mood_note = mood.prompt_for(level) if mood is not None else ""
+        if not prompt and not mood_note:
+            return result
+        note = f"{_MARKER}\n后台关系与心情信息，不是聊天消息。{PERSONA_PRIORITY_PROMPT}\n"
+        if prompt:
+            note += f"{source}，级别：{level}。以下仅补充这段关系的称呼和分寸：{prompt.strip()}\n"
+        note += mood_note
         system_index = next(
             (
                 index
