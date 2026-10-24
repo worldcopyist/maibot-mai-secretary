@@ -6,7 +6,7 @@
     {
       "id": "workbench",
       "title": "麦麦小秘书 · 模块管理",
-      "description": "管理功能开关、关系、回访、任务回执和蓝莓预算。",
+      "description": "管理功能开关、关系、回访和任务回执；余额提醒请在 DeepSeek 联网与余额配置中设置。",
       "placement": "workspace",
       "icon": "settings",
       "mode": "custom",
@@ -27,10 +27,7 @@
         }, "confirmation": "确定重试这项已经确认发送失败的任务吗？"},
         "followup_cancel": {"api": "secretary_followup_cancel", "parameters": {
           "followup_id": {"type": "string", "required": true, "max_length": 32}
-        }, "confirmation": "确定取消这项回访吗？"},
-        "budget_threshold": {"api": "secretary_budget_threshold", "parameters": {
-          "amount": {"type": "number", "required": true, "minimum": 0, "maximum": 1000000}
-        }}
+        }, "confirmation": "确定取消这项回访吗？"}
       }
     },
     {

@@ -22,11 +22,6 @@ enabled = false
 auto_capture = false
 max_active_per_user = 10
 
-[blueberry_budget]
-enabled = false
-low_balance_threshold = 10.0
-alert_cooldown_hours = 24
-
 [message_debounce]
 enabled = true
 debounce_seconds = 2.0
@@ -126,6 +121,9 @@ balance_alias = ""
 auto_balance_enabled = false
 auto_balance_interval_hours = 6.0
 balance_context_all_chats = false
+budget_alert_enabled = false
+budget_low_balance_threshold = 10.0
+budget_alert_cooldown_hours = 24
 base_url = "https://api.deepseek.com"
 timeout_seconds = 20.0
 default_count = 4

@@ -44,7 +44,7 @@ class FeatureControlModule:
         "balance_query": ("deepseek_web", "balance_enabled", "蓝莓余额查询", ("余额查询",)),
         "auto_balance": ("deepseek_web", "auto_balance_enabled", "自动查询蓝莓", ("自动余额查询",)),
         "balance_sharing": ("deepseek_web", "balance_context_all_chats", "余额全聊天可见", ("蓝莓共享",)),
-        "blueberry_budget": ("blueberry_budget", "enabled", "蓝莓预算提醒", ("预算提醒", "余额预警")),
+        "blueberry_budget": ("deepseek_web", "budget_alert_enabled", "DeepSeek 低余额提醒", ("蓝莓预算提醒", "预算提醒", "余额预警")),
         "message_debounce": ("message_debounce", "enabled", "消息防抖", ("防抖",)),
         "debounce_private": ("message_debounce", "enable_private", "私聊防抖", ("私聊消息防抖",)),
         "debounce_group": ("message_debounce", "enable_group", "群聊防抖", ("群聊消息防抖",)),

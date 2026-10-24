@@ -9,7 +9,7 @@ import logging
 import os
 import re
 import uuid
-from collections.abc import Awaitable
+from collections.abc import Awaitable, Mapping
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, ClassVar, Literal
@@ -153,13 +153,6 @@ class FollowupSettings(PluginConfigBase):
     enabled: bool = Field(default=False, json_schema_extra={"label": "启用约定回访", "hint": "用户可请麦麦在未来回访一个话题；默认关闭以免突然打扰。"})
     auto_capture: bool = Field(default=False, json_schema_extra={"label": "自动发现次日回访", "hint": "仅在私聊中识别明确的‘我明天/后天有比赛、考试、面试’等事件，事件次日晚上回访；默认关闭。"})
     max_active_per_user: int = Field(default=10, ge=1, le=50, json_schema_extra={"label": "每人最多待回访数量"})
-
-
-class BlueberryBudgetSettings(PluginConfigBase):
-    __ui_label__: ClassVar[str] = "蓝莓预算提醒"
-    enabled: bool = Field(default=False, json_schema_extra={"label": "启用余额预警", "hint": "使用已有的 DeepSeek 余额记录；只向管理员私聊提醒，不额外产生查询请求。"})
-    low_balance_threshold: float = Field(default=10.0, ge=0.0, le=1000000.0, json_schema_extra={"label": "低余额提醒线", "hint": "按余额接口返回的各币种分别比较；0 表示只在余额为零时提醒。"})
-    alert_cooldown_hours: int = Field(default=24, ge=1, le=168, json_schema_extra={"label": "重复提醒间隔（小时）"})
 
 
 class VoiceSynthesisSettings(PluginConfigBase):
@@ -705,6 +698,18 @@ class DeepSeekWebSettings(PluginConfigBase):
             "hint": "默认 6 小时；管理员手动查询成功后从该次查询重新计时；自动查询失败后至少等待 30 分钟再试。",
         },
     )
+    budget_alert_enabled: bool = Field(
+        default=False,
+        json_schema_extra={"label": "启用低余额提醒", "hint": "使用已有的 DeepSeek 余额记录；只向管理员私聊提醒，不额外产生查询请求。"},
+    )
+    budget_low_balance_threshold: float = Field(
+        default=10.0, ge=0.0, le=1000000.0,
+        json_schema_extra={"label": "低余额提醒线", "hint": "按余额接口返回的各币种分别比较；0 表示只在余额为零时提醒。"},
+    )
+    budget_alert_cooldown_hours: int = Field(
+        default=24, ge=1, le=168,
+        json_schema_extra={"label": "低余额重复提醒间隔（小时）"},
+    )
 
     @field_validator("balance_alias")
     @classmethod
@@ -791,7 +796,6 @@ class SecretaryConfig(PluginConfigBase):
     task_receipts: TaskReceiptSettings = Field(default_factory=TaskReceiptSettings)
     relationships: RelationshipManagementSettings = Field(default_factory=RelationshipManagementSettings)
     followups: FollowupSettings = Field(default_factory=FollowupSettings)
-    blueberry_budget: BlueberryBudgetSettings = Field(default_factory=BlueberryBudgetSettings)
     daily_report: DailyReportSettings = Field(default_factory=DailyReportSettings)
     proactive: ProactiveSettings = Field(default_factory=ProactiveSettings)
     virtual_life: VirtualLifeSettings = Field(default_factory=VirtualLifeSettings)
@@ -805,6 +809,23 @@ class MaiSecretaryPlugin(MaiBotPlugin):
     """SDK entry point; modules own behavior and persistent state."""
 
     config_model = SecretaryConfig
+
+    def normalize_plugin_config(self, config_data: Mapping[str, Any] | None) -> tuple[dict[str, Any], bool]:
+        """Move legacy budget settings before the SDK merges schema defaults."""
+        raw = dict(config_data) if isinstance(config_data, Mapping) else {}
+        legacy = raw.pop("blueberry_budget", None)
+        if isinstance(legacy, Mapping):
+            web = dict(raw.get("deepseek_web") or {})
+            for old, new in (
+                ("enabled", "budget_alert_enabled"),
+                ("low_balance_threshold", "budget_low_balance_threshold"),
+                ("alert_cooldown_hours", "budget_alert_cooldown_hours"),
+            ):
+                if old in legacy:
+                    web.setdefault(new, legacy[old])
+            raw["deepseek_web"] = web
+        normalized, changed = super().normalize_plugin_config(raw)
+        return normalized, changed or "blueberry_budget" in (config_data or {})
 
     def __init__(self) -> None:
         super().__init__()
@@ -860,6 +881,7 @@ class MaiSecretaryPlugin(MaiBotPlugin):
     async def on_load(self) -> None:
         self._state_path = Path(self.ctx.paths.data_dir) / "secretary-state.json"
         self._state_path.parent.mkdir(parents=True, exist_ok=True)
+        self.blueberry_budget.on_config_update()
         self._load_state()
         self.feature_control.apply()
         await self.role_recognition.start()
@@ -1537,7 +1559,7 @@ class MaiSecretaryPlugin(MaiBotPlugin):
     async def secretary_deepseek_balance(self, **kwargs: Any) -> dict[str, Any]:
         return await self.deepseek_web.balance(**kwargs)
 
-    @API("secretary_workbench_status", description="WebUI 查看模块开关、关系、回访、任务回执与蓝莓预算")
+    @API("secretary_workbench_status", description="WebUI 查看模块开关、关系、回访与任务回执")
     async def secretary_workbench_status(self, **kwargs: Any) -> dict[str, Any]:
         del kwargs
         return {
@@ -1545,7 +1567,7 @@ class MaiSecretaryPlugin(MaiBotPlugin):
             "relationships": await self.relationships.list_rows(),
             "followups": (await self.followups.webui_list())["followups"],
             "receipts": (await self.task_receipts.webui_list())["receipts"],
-            "budget": self.blueberry_budget.status(),
+            "budget": self.blueberry_budget.status(),  # 兼容旧版 API 使用者；页面不再另设预算入口。
         }
 
     @API("secretary_feature_set", description="WebUI 调整小秘书功能开关")
@@ -1574,7 +1596,7 @@ class MaiSecretaryPlugin(MaiBotPlugin):
             self._save_state()
         return {"success": True, "content": "已取消回访"}
 
-    @API("secretary_budget_threshold", description="WebUI 设置蓝莓低余额提醒线")
+    @API("secretary_budget_threshold", description="兼容旧版 WebUI 的蓝莓低余额提醒线接口")
     async def secretary_budget_threshold(self, amount: float, **kwargs: Any) -> dict[str, Any]:
         del kwargs
         return await self.blueberry_budget.set_threshold(amount)

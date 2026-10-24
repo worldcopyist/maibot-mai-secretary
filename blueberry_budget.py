@@ -21,6 +21,7 @@ class BlueberryBudgetModule:
         self.alerted: dict[str, float] = {}
         self.pending: dict[str, dict[str, Any]] = {}
         self.threshold_override: float | None = None
+        self._configured_threshold: float | None = None
         self.streams: dict[str, str] = {}
 
     def load_state(self, data: dict[str, Any]) -> None:
@@ -42,15 +43,20 @@ class BlueberryBudgetModule:
             }
 
     def on_config_update(self) -> None:
+        current = self.plugin.config.deepseek_web.budget_low_balance_threshold
+        if self._configured_threshold is not None and current != self._configured_threshold and self.threshold_override is not None:
+            self.threshold_override = None
+            self.plugin._save_state()
+        self._configured_threshold = current
         self.streams.clear()
 
     @property
     def threshold(self) -> Decimal:
-        value = self.threshold_override if self.threshold_override is not None else self.plugin.config.blueberry_budget.low_balance_threshold
+        value = self.threshold_override if self.threshold_override is not None else self.plugin.config.deepseek_web.budget_low_balance_threshold
         return Decimal(str(value))
 
     def on_snapshot(self, snapshot: dict[str, Any]) -> None:
-        if not self.plugin.config.blueberry_budget.enabled:
+        if not self.plugin.config.deepseek_web.budget_alert_enabled:
             return
         fingerprint = str(snapshot.get("account_fingerprint") or "")
         if not fingerprint:
@@ -70,7 +76,7 @@ class BlueberryBudgetModule:
                 continue
             if snapshot.get("source") != "automatic":
                 continue  # The manual balance answer already tells the administrator.
-            cooldown = self.plugin.config.blueberry_budget.alert_cooldown_hours * 3600
+            cooldown = self.plugin.config.deepseek_web.budget_alert_cooldown_hours * 3600
             if time.time() - self.alerted.get(key, 0) < cooldown or key in self.pending:
                 continue
             self.pending[key] = {
@@ -84,7 +90,7 @@ class BlueberryBudgetModule:
 
     async def tick(self, now: datetime) -> None:
         del now
-        if not self.plugin.config.blueberry_budget.enabled or not self.plugin.config.deepseek_web.enabled:
+        if not self.plugin.config.deepseek_web.budget_alert_enabled or not self.plugin.config.deepseek_web.enabled:
             return
         if not self.pending:
             return
@@ -144,7 +150,7 @@ class BlueberryBudgetModule:
                     continue
                 trend.append({"currency": str(current["currency"]), "change_since_previous": str(difference)})
         return {
-            "enabled": self.plugin.config.blueberry_budget.enabled,
+            "enabled": self.plugin.config.deepseek_web.budget_alert_enabled,
             "threshold": str(self.threshold), "snapshot": snapshot,
             "recent": recent, "trend": trend,
             "pending_alerts": len(self.pending),

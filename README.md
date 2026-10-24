@@ -21,7 +21,7 @@
 
 **[打开定时任务：日历、任务列表与手动创建](/extensions/worldcopyist.mai-secretary/tasks)**
 
-**[打开模块管理：开关、关系、回访、任务回执与蓝莓预算](/extensions/worldcopyist.mai-secretary/workbench)**
+**[打开模块管理：开关、关系、回访与任务回执](/extensions/worldcopyist.mai-secretary/workbench)**
 
 以上入口供已登录 MaiBot WebUI 使用；在 GitHub 页面直接点击不会打开服务器工作区。
 
@@ -46,7 +46,7 @@
 - **约定回访：**`secretary_followup` 安排或取消后续问候；自动发现仅限私聊中明确提到的明天/后天事件，默认关闭。
 - **蓝莓预算：**`secretary_blueberry_budget` 比较已有余额记录并设置低余额提醒线；自动提醒不额外调用余额接口，默认关闭。
 
-模块管理页可以设置功能开关、手动关系、取消回访、查看任务回执与蓝莓历史。通过聊天调整的开关会在重启后恢复；“恢复配置”会撤销聊天覆盖值。页面需要 MaiBot WebUI 登录。
+模块管理页可以设置功能开关、手动关系、取消回访和查看任务回执。蓝莓余额与提醒统一在插件配置页的「DeepSeek 联网与余额」中设置；余额历史仍可由管理员通过 `secretary_blueberry_budget` 查询。通过聊天调整的开关会在重启后恢复；“恢复配置”会撤销聊天覆盖值。页面需要 MaiBot WebUI 登录。
 
 ### 消息防抖
 
@@ -211,6 +211,8 @@ semantic_search = true
 
 开启「所有聊天流可谈论余额」后，最近一次查询结果会作为后台事实加入麦麦的规划与回复上下文，所有群聊和私聊的人都可能听到具体金额。提示词会标明查询时间和币种，要求按 MaiBot 人设、结合话题自然使用，不把历史数字说成实时余额。主人提到“蓝莓”时默认指 API 余额；其他人的说法按上下文理解。不开此项时，别称仍能供管理员手动查询，但普通聊天看不到缓存金额。公开配置默认不自动查询，也不向聊天共享余额。
 
+**低余额提醒与联网、余额设置位于同一个「DeepSeek 联网与余额」分区。**打开「启用低余额提醒」后，插件只比较已经查询并保存的余额记录，低于提醒线时按设定间隔向管理员私聊提醒，不为提醒另发 API 请求。旧版 `[blueberry_budget]` 的开关、提醒线和间隔会自动迁到 `[deepseek_web]`；独立预算页面已移除。聊天工具 `secretary_blueberry_budget` 仍可查询历史或覆盖提醒线；配置页修改提醒线时会撤销聊天设置的覆盖值。
+
 在插件 WebUI 的「DeepSeek 联网与余额」设置中填写 Key，或编辑本机 `config.toml`：
 
 ```toml
@@ -221,6 +223,9 @@ balance_alias = "蓝莓"
 auto_balance_enabled = true
 auto_balance_interval_hours = 6.0
 balance_context_all_chats = true
+budget_alert_enabled = true
+budget_low_balance_threshold = 10.0
+budget_alert_cooldown_hours = 24
 base_url = "https://api.deepseek.com"
 timeout_seconds = 20.0
 default_count = 4

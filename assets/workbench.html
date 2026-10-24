@@ -33,7 +33,6 @@
   <section class="card"><h2>关系管理</h2><div class="form"><label for="account">QQ 账号</label><input id="account" placeholder="qq:123456789" maxlength="50"><select id="level" aria-label="关系级别"><option value="familiar">熟人</option><option value="stranger">陌生人</option><option value="reset">恢复自动判断</option></select><button class="primary" id="save-relationship">保存关系</button></div><div id="relationships" class="grid"></div></section>
   <section class="card"><h2>约定回访</h2><p class="muted">用户可以在聊天中用自然语言创建、查询、取消个人回访，或退出个人回访。页面可取消已安排的事项。</p><div id="followups" class="grid"></div></section>
   <section class="card"><h2>定时任务回执</h2><p class="muted">“已入队”只是主程序接受任务；“确认发送”才有实际发送回执。“未知”不会自动重发。仅明确发送失败可手动重试一次。</p><div id="receipts" class="grid"></div></section>
-  <section class="card"><h2>蓝莓预算</h2><div class="form"><label for="threshold">低余额提醒线</label><input id="threshold" type="number" min="0" max="1000000" step="0.01"><button class="primary" id="save-threshold">保存提醒线</button></div><div id="budget"></div></section>
   <div class="actions"><button id="refresh">刷新状态</button></div>
 </main>
 <script>
@@ -78,16 +77,8 @@
       if (row.error) add(box, 'p', row.error, 'muted');
       if (row.status === 'send_failed' && !row.retry_of) { const button = add(box, 'button', '重试一次'); button.addEventListener('click', () => run(() => call('receipt_retry', {receipt_id: row.id}))); }
     }
-    const budget = $('budget'); budget.replaceChildren();
-    $('threshold').value = data.budget?.threshold ?? '10';
-    const snapshot = data.budget?.snapshot;
-    add(budget, 'p', snapshot ? `最近查询：${snapshot.queried_at} · ${snapshot.source === 'automatic' ? '自动' : '手动'} · ${snapshot.alias}` : '暂无成功的余额查询记录。', 'muted');
-    for (const row of snapshot?.balance_infos || []) add(budget, 'p', `${row.currency}：${row.total_balance}；未过期赠金 ${row.granted_balance}；充值余额 ${row.topped_up_balance}`);
-    for (const row of data.budget?.trend || []) add(budget, 'p', `${row.currency}：与上次查询相比 ${row.change_since_previous}`, 'muted');
-    add(budget, 'p', `待提醒：${data.budget?.pending_alerts ?? 0}；差额仅表示两次记录的变化，不等于准确消耗。`, 'muted');
   }
   $('save-relationship').addEventListener('click', () => run(() => call('relationship_set', {action: $('level').value, account: $('account').value.trim()})));
-  $('save-threshold').addEventListener('click', () => run(() => call('budget_threshold', {amount: Number($('threshold').value)})));
   $('refresh').addEventListener('click', () => refresh().catch(error => status(String(error.message || error), true)));
   refresh().catch(error => status(String(error.message || error), true));
 })();

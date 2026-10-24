@@ -216,7 +216,7 @@ def test_followup_opt_out_and_manual_schedule(tmp_path):
 
 
 def test_blueberry_budget_uses_existing_snapshot_only(tmp_path):
-    plugin, _ = make_plugin(tmp_path, {"blueberry_budget": {"enabled": True}})
+    plugin, _ = make_plugin(tmp_path, {"deepseek_web": {"budget_alert_enabled": True}})
     snapshot = {
         "account_fingerprint": "acct", "source": "automatic", "alias": "蓝莓",
         "queried_at": datetime.now(UTC).isoformat(),
@@ -227,6 +227,39 @@ def test_blueberry_budget_uses_existing_snapshot_only(tmp_path):
     snapshot["balance_infos"][0]["total_balance"] = "20.00"
     plugin.blueberry_budget.on_snapshot(snapshot)
     assert "acct:CNY" not in plugin.blueberry_budget.pending
+
+
+def test_budget_settings_share_deepseek_section_and_migrate_legacy_values(tmp_path):
+    plugin, _ = make_plugin(tmp_path)
+    fields = module.SecretaryConfig.model_fields
+    assert "blueberry_budget" not in fields
+    assert {"budget_alert_enabled", "budget_low_balance_threshold", "budget_alert_cooldown_hours"} <= set(module.DeepSeekWebSettings.model_fields)
+    sections = plugin.get_webui_config_schema()["sections"]
+    assert "blueberry_budget" not in sections
+    assert {"budget_alert_enabled", "budget_low_balance_threshold", "budget_alert_cooldown_hours"} <= set(sections["deepseek_web"]["fields"])
+
+    legacy = {"plugin": {"config_version": "0.1.0"}, "blueberry_budget": {"enabled": True, "low_balance_threshold": 7.5, "alert_cooldown_hours": 12}}
+    normalized, changed = plugin.normalize_plugin_config(legacy)
+    assert changed
+    assert "blueberry_budget" not in normalized
+    assert normalized["deepseek_web"]["budget_alert_enabled"] is True
+    assert normalized["deepseek_web"]["budget_low_balance_threshold"] == 7.5
+    assert normalized["deepseek_web"]["budget_alert_cooldown_hours"] == 12
+
+    legacy["deepseek_web"] = {"budget_low_balance_threshold": 3.0}
+    normalized, _ = plugin.normalize_plugin_config(legacy)
+    assert normalized["deepseek_web"]["budget_low_balance_threshold"] == 3.0
+
+
+def test_budget_config_change_clears_chat_threshold_override(tmp_path):
+    plugin, _ = make_plugin(tmp_path, {"deepseek_web": {"budget_low_balance_threshold": 10.0}})
+    plugin.blueberry_budget.on_config_update()
+    plugin.blueberry_budget.threshold_override = 2.0
+    plugin.config.deepseek_web.budget_low_balance_threshold = 4.0
+    plugin._state_path = tmp_path / "secretary-state.json"
+    plugin.blueberry_budget.on_config_update()
+    assert plugin.blueberry_budget.threshold_override is None
+    assert str(plugin.blueberry_budget.threshold) == "4.0"
 
 
 def _debounce_message(message_id: str, text: str, *, user_id: str = "123", group_id: str = "") -> dict:
