@@ -32,7 +32,7 @@ These routes open inside an authenticated MaiBot WebUI installation. Their Markd
 | `task_receipts.py` | Separates Maisaka's queue acceptance from a matched actual send result. Records accepted, sent, failed, and unknown states. Unknown results are never automatically resent; an administrator can retry a confirmed failure once. | `secretary_task_receipts`; workbench |
 | `proactive_chat.py` | Randomly starts conversations in selected chat streams during configured time windows. Supports a target average interval plus random offset, recent context, and continuity from the last message actually sent. | `[proactive]` |
 | `virtual_life.py` | Supplies editable activities for eight time periods on each day of the week as background for proactive chat. MaiBot's own persona has priority. | `[virtual_life]` |
-| `daily_report.py`, `daily_report_renderer.py` | Summarizes one chat stream's text for the current day, either at a configured time or on an administrator's request. A text model writes the summary; local rendering places it onto the approved 9:16 Azure theme. No image generation model is required. | `secretary_generate_daily_report`; `[daily_report]` |
+| `daily_report.py`, `daily_report_renderer.py` | Summarizes one chat stream's text on schedule or on an administrator's request. Local rendering places the text on a 9:16 Azure, classical letter-paper, or custom theme; no image generation model is required. | `secretary_generate_daily_report`; `[daily_report].theme` |
 | `role_recognition.py` | Checks the real platform account and applies separate owner, familiar, or stranger prompts. The owner's identity comes from plugin admins or MaiBot plugin managers; strangers become familiar after more than 50 counted successful interactions by default. | `[role_recognition]` |
 | `relationship_management.py` | Lets an administrator mark an exact account familiar or stranger, or clear that decision. Any verified user can ask about their own relationship. An owner cannot be demoted here. | `secretary_relationship`; workbench |
 | `followups.py` | Schedules a later, context-aware question about a user's event in the current chat. Users can list, cancel, opt out, or opt back in. Optional automatic discovery of explicit tomorrow/day-after events is limited to private chats and off by default. | `secretary_followup`; `[followups]` |
@@ -72,7 +72,7 @@ The avatar above is declared as `assets/icon.png` in `_manifest.json` for MaiBot
 
 ## Install and test
 
-This plugin runs through the MaiBot SDK without changing MaiBot's source code. It was tested on MaiBot 1.3.7 and plugin SDK 2.12.0; consult `_manifest.json` for declared bounds and capabilities. The repository's manifest version is `0.20.1`.
+This plugin runs through the MaiBot SDK without changing MaiBot's source code. It was tested on MaiBot 1.3.7 and plugin SDK 2.12.0; consult `_manifest.json` for declared bounds and capabilities. The repository's manifest version is `0.21.0`.
 
 Place this repository in its own directory under MaiBot's `plugins/` directory, install `requirements.txt` in MaiBot's Python environment, then enable the plugin and configure it in MaiBot WebUI. Preserve the installation's actual `config.toml` and `data/plugins/worldcopyist.mai-secretary/` when updating. Keep API keys out of Git. The default DeepSeek web module, daily scheduled report, follow-ups, and Blueberry budget alerts are off until configured. A proactive target list left empty sends no random messages.
 
@@ -86,7 +86,7 @@ uv pip install --python .venv/Scripts/python.exe pytest ruff
 .venv/Scripts/python.exe -m ruff check .
 ```
 
-The [Chinese guide](README.md) contains the full configuration examples for QQ moderation, voice, Azure reports, virtual life, DeepSeek, and the knowledge base. The plugin manifest follows the [MaiBot plugin repository requirements](https://github.com/Mai-with-u/plugin-repo/blob/main/CONTRIBUTING.md). Submission to the official plugin center also requires a published GitHub Release whose version matches `_manifest.json`; a pushed commit alone is not that release.
+The [Chinese guide](README.md) contains the full configuration examples for QQ moderation, voice, reports, virtual life, DeepSeek, and the knowledge base. See the [custom report-theme format](docs/daily-report-themes.md) for image size, text-safe areas, and a local preview command. The plugin manifest follows the [MaiBot plugin repository requirements](https://github.com/Mai-with-u/plugin-repo/blob/main/CONTRIBUTING.md). Submission to the official plugin center also requires a published GitHub Release whose version matches `_manifest.json`; a pushed commit alone is not that release.
 
 ## References and licenses
 

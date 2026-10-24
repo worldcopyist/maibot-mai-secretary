@@ -31,7 +31,7 @@ TOOL_ROUTING_PROMPT = (
     "`secretary_followup` 接收 action=create/list/cancel/opt_out/opt_in；创建时给 topic 与带时区的 at，只安排当前用户在当前聊天的回访；"
     "`secretary_blueberry_budget` 接收 action=status/set_threshold、可选 amount，只供管理员读历史余额趋势与设置低余额提醒线；实时余额仍用 `secretary_deepseek_balance`；"
     "`secretary_generate_daily_report` 无需参数，只在已核验的插件管理员明确要求现在总结今天聊天时调用，"
-    "为当前聊天流立即生成 Azure 主题日报；工具返回开始生成不代表图片已发出；"
+    "为当前聊天流立即生成所选主题的日报；工具返回开始生成不代表图片已发出；"
     "`secretary_poke` 接收可选 target，只在轻松合适的 QQ 互动或用户明确要求时戳当前聊天的对方；"
     "`secretary_group_permission` 检查麦麦在当前已启用 QQ 群的身份与管理权限；"
     "`secretary_group_member` 接收 action、可选 target、duration_minutes、text、enable，处理禁言、解禁、踢人、群名片、头衔、管理员、全员禁言和改群名；"

@@ -22,13 +22,40 @@ def test_azure_theme_renders_all_text():
     assert dense.size == image.size
 
 
+def test_letter_and_custom_theme_validate_and_render(tmp_path):
+    from mai_secretary.daily_report_renderer import render_report
+
+    day = date(2026, 10, 24)
+    text = "今日概览：平静的一天。\n聊了什么：讨论了周末。"
+    letter = Image.open(io.BytesIO(render_report(day, text, theme="letter")))
+    assert letter.size == (936, 1664)
+
+    custom = tmp_path / "daily_report_theme.png"
+    Image.new("RGB", (936, 1664), "#fff8e9").save(custom)
+    result = Image.open(io.BytesIO(render_report(day, text, theme="custom", custom_theme_path=custom)))
+    assert result.size == (936, 1664)
+
+    custom.unlink()
+    with pytest.raises(ValueError, match="图片不存在"):
+        render_report(day, text, theme="custom", custom_theme_path=custom)
+    Image.new("RGB", (936, 1500), "white").save(custom)
+    with pytest.raises(ValueError, match="尺寸"):
+        render_report(day, text, theme="custom", custom_theme_path=custom)
+    Image.new("RGB", (1000, 1600), "white").save(custom)
+    with pytest.raises(ValueError, match="9:16"):
+        render_report(day, text, theme="custom", custom_theme_path=custom)
+    Image.new("RGBA", (936, 1664), (255, 255, 255, 0)).save(custom)
+    with pytest.raises(ValueError, match="透明背景"):
+        render_report(day, text, theme="custom", custom_theme_path=custom)
+
+
 @pytest.mark.asyncio
 async def test_daily_report_reads_whole_day_and_sends_only_once(tmp_path):
     target = "qq:private:2767263382"
     plugin, _ = make_plugin(tmp_path, {
         "daily_report": {
             "enabled": True, "target_chats": [target], "summary_time": "10:00",
-            "text_model": "mimo-v2.6-flash",
+            "text_model": "mimo-v2.6-flash", "theme": "letter",
         },
     })
     plugin.ctx.chat.streams = [{
@@ -83,7 +110,9 @@ async def test_daily_report_reads_whole_day_and_sends_only_once(tmp_path):
     assert all(call["model_name"] == "mimo-v2.6-flash" for call in prompts)
     assert all(call["max_tokens"] >= 4096 and call["rpc_timeout_ms"] == 130000 for call in prompts)
     assert all("只返回总结文字，不生成图片" in call["prompt"] for call in prompts)
+    assert any("遵循 MaiBot 当前人设" in call["prompt"] for call in prompts)
     assert plugin.daily_report.records[f"2026-10-23|{target}"]["message_count"] == 3
+    assert plugin.daily_report.records[f"2026-10-23|{target}"]["theme"] == "letter"
     await plugin.daily_report.tick(now)
     assert len(sent) == 1
 

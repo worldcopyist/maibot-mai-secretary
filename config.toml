@@ -87,6 +87,7 @@ singing_voice = "冰糖"
 enabled = false
 manual_enabled = true
 manual_cooldown_minutes = 10
+theme = "azure"
 text_model = ""
 fallback_text_model = ""
 target_chats = []

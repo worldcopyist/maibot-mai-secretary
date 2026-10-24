@@ -308,13 +308,13 @@ class GroupAdminSettings(PluginConfigBase):
 class DailyReportSettings(PluginConfigBase):
     """管理员配置的每日聊天总结。"""
 
-    __ui_label__: ClassVar[str] = "日报 · Azure 主题"
+    __ui_label__: ClassVar[str] = "日报"
 
     enabled: bool = Field(
         default=False,
         json_schema_extra={
             "label": "启用定时日报",
-            "hint": "设置目标聊天流和总结时间后开启；每天每个目标最多发一张 Azure 主题图片。即时生成另由下方开关控制。",
+            "hint": "设置目标聊天流和总结时间后开启；每天每个目标最多发一张所选主题的图片。即时生成另由下方开关控制。",
         },
     )
     manual_enabled: bool = Field(
@@ -333,11 +333,18 @@ class DailyReportSettings(PluginConfigBase):
             "hint": "避免重复发图和模型费用；0 表示不限制。同一聊天流正在生成时仍不会重复启动。",
         },
     )
+    theme: Literal["azure", "letter", "custom"] = Field(
+        default="azure",
+        json_schema_extra={
+            "label": "日报图片主题",
+            "hint": "Azure 为原主题；古风信笺为通用主题；自制主题需把符合 9:16 格式的 daily_report_theme.png 放入插件数据目录。",
+        },
+    )
     text_model: str = Field(
         default="",
         json_schema_extra={
             "label": "日报文字总结模型",
-            "hint": "填写 MaiBot 模型配置中的 name（例如 mimo-v2.6-flash），不是 model_identifier；留空使用 utils 任务。模型只写文字，插件将文字填入 Azure 图片模板。",
+            "hint": "填写 MaiBot 模型配置中的 name（例如 mimo-v2.6-flash），不是 model_identifier；留空使用 utils 任务。模型只写文字，插件将文字填入所选图片主题。",
             "placeholder": "mimo-v2.6-flash",
         },
     )
@@ -1358,7 +1365,7 @@ class MaiSecretaryPlugin(MaiBotPlugin):
         "secretary_generate_daily_report",
         description=(
             "只有插件管理员账号明确要求现在生成、总结或发送今天的聊天日报时使用，例如‘蓝天，现在给我出今日日报’。"
-            "立即总结当前聊天流从今天零点到现在的聊天记录，生成 Azure 主题图片并发回当前聊天流；"
+            "立即总结当前聊天流从今天零点到现在的聊天记录，填入已配置的日报主题并发回当前聊天流；"
             "非管理员请求不能调用；不需要等待定时日报时间，也不能指定其他聊天流。工具返回已开始只表示任务入队，"
             "图片实际发出后才算完成；不要在没有用户请求时调用，不要声称图片已经发出。"
         ),
