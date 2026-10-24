@@ -280,6 +280,12 @@ activity = "固定去湿地公园散步吹风。"
 
 主动聊天的续接记录按目标聊天流分别保存。插件只在 MaiBot 报告消息发送成功后记录文字；若主动任务排队后麦麦没有发言，就不会把它记成“做过的事”。若用户先发来消息，插件会停止认领这轮主动回复，避免把普通聊天误记为主动发言。若上一条说“我在吃饭”，下一次会请麦麦根据经过的时间说后来吃了什么、现在又在做什么；实际措辞仍由麦麦决定。为了兼容拆分发送，插件会合并首次成功发送后 15 秒内的文字。记录保存在同一个插件数据文件中，移除目标聊天流时会删除对应续接记录。
 
+#### 实验性 Focus 模式的影响
+
+在 MaiBot 1.3.7 中，如果 Focus 对目标聊天流生效，但该聊天流当时没有占用专注位置，MaiBot 可能先接受小秘书的主动任务，随后在决策循环中丢弃触发，最终不发消息。小秘书会在提交前用掉该次随机发言时机；接口返回“已入队”不代表已发送，也不会让这次随机时机自动重试。同一主动接口还用于定时任务、回访等功能，它们也可能出现已接受请求却未发送的情况。目标聊天流已获得专注位置时不受这一限制。机制见 [MaiBot 1.3.7 的决策循环](https://github.com/Mai-with-u/MaiBot/blob/1.3.7/src/maisaka/reasoning_engine.py#L953-L967)。
+
+`focus_mode=false` 时没有这项限制；即使打开 Focus，私聊在 `focus_on_private=false` 时也不受它约束。若要避免这项 Focus 拦截，请让 Focus 不作用于目标聊天流。主动任务接口只确认入队，不提供 Focus 占用状态或该任务的最终发送回执；插件只能在消息实际发出后通过发送 Hook 记录结果。盲目自动重试可能造成重复消息。
+
 自然语言工具只操作调用者所在聊天流、该用户自己的任务。单次任务使用带时区的 ISO 时间，例如 `2026-10-21T08:00:00+08:00`；每天和每周使用 `HH:MM`，每周还需星期数字（周一为 1，周日为 7）。时间含糊时应先澄清。
 
 插件发给 MaiBot 的主动聊天和定时任务执行提示词会直接列出工具名：`secretary_deepseek_search` 用于实时搜索，`secretary_deepseek_fetch` 用于读取已知网页，`secretary_deepseek_balance` 仅在已核验管理员明确询问时查询 API 余额，`secretary_create_task`、`secretary_list_tasks`、`secretary_cancel_task` 分别用于创建、查看和取消定时任务，`secretary_task_receipts` 查询送达回执，`secretary_feature_switch` 由管理员控制模块开关，`secretary_relationship` 管理关系，`secretary_followup` 管理回访，`secretary_blueberry_budget` 查看余额历史与提醒线，`secretary_generate_daily_report` 用于管理员明确要求即时生成今日日报，`secretary_poke` 用于合适的当前聊天戳一戳互动，`secretary_search_knowledge` 用于查询授权知识库，`send_emoji` 用于在合适时从表情库挑选表情。若目标工具列在 MaiBot 的延迟展示工具中，提示词要求先用 `tool_search` 发现，再按实际参数调用。到点执行的任务不会重新创建同一任务；普通主动闲聊也不会无故联网或创建任务。工具不可用时应如实说明。

@@ -58,6 +58,12 @@ The administrator list is `[plugin].admin_accounts`; when it is empty, role reco
 
 The daily report and follow-up modules submit proactive tasks to MaiBot. Queue acceptance is not proof of delivery. Task receipts only mark a scheduled task as sent after a matching host send hook reports success. A manually queried Blueberry balance is refreshed on every explicit administrator question; the next automatic refresh interval starts from that successful query. Historical values are labeled with their query time.
 
+### Experimental Focus mode
+
+On MaiBot 1.3.7, if Focus applies to a target chat but that chat does not hold the active focus slot, MaiBot may accept a proactive task and then discard its queued turn before the model runs. The plugin consumes the scheduled random-chat slot before submitting it, so a “queued” response neither proves delivery nor automatically retries that slot. Scheduled tasks and follow-ups use the same proactive interface and can also be accepted without a message being sent. A chat already holding the focus slot is not blocked this way. See the [MaiBot 1.3.7 decision loop](https://github.com/Mai-with-u/MaiBot/blob/1.3.7/src/maisaka/reasoning_engine.py#L953-L967).
+
+This restriction does not apply with `focus_mode=false`, or to private chats when `focus_on_private=false`. Exclude the target chat from Focus to avoid this specific gate. The proactive trigger API reports queue acceptance but exposes neither focus-slot status nor a final send receipt for that task; the plugin records a result through a send hook only after a message is actually sent. Blind retries could send duplicate messages.
+
 ## Architecture and persistence
 
 ```text
