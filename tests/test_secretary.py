@@ -370,6 +370,10 @@ async def test_anti_bullying_reports_only_confirmed_direct_abuse(tmp_path):
         {
             "plugin": {"admin_accounts": ["qq:123456789"]},
             "anti_bullying": {"forbidden_words": ["坏词"]},
+            "mood": {
+                "enabled": True, "bullying_wronged": 0, "bullying_sad": 0,
+                "bullying_irritable": 0, "bullying_angry": 100,
+            },
         },
     )
     plugin.anti_bullying.bot_names = ("蓝天",)
@@ -432,6 +436,8 @@ async def test_anti_bullying_reports_only_confirmed_direct_abuse(tmp_path):
     assert "测试群" in sent[0][0]
     assert "msg-1" in sent[0][0]
     assert "anti_bullying_alerts" in json.loads(plugin._state_path.read_text(encoding="utf-8"))
+    assert plugin.mood.state["mood"] == "angry"
+    assert "changed_by_bullying_at" in plugin.mood.state
     await plugin.anti_bullying.on_inbound(inbound)
     assert plugin.anti_bullying.queue.empty()
     await plugin.anti_bullying.on_inbound({**inbound, "message_id": "msg-2"})
@@ -447,6 +453,7 @@ async def test_anti_bullying_skips_unrelated_group_and_rejected_quote(tmp_path):
         {
             "plugin": {"admin_accounts": ["qq:123456789"]},
             "anti_bullying": {"forbidden_words": ["坏词"]},
+            "mood": {"enabled": True},
         },
     )
     plugin.anti_bullying.bot_names = ("蓝天",)
@@ -489,6 +496,7 @@ async def test_anti_bullying_skips_unrelated_group_and_rejected_quote(tmp_path):
     await plugin.anti_bullying._process(plugin.anti_bullying.queue.get_nowait())
     assert len(llm_calls) == 1
     assert sent == []
+    assert "changed_by_bullying_at" not in plugin.mood.state
 
 
 @pytest.mark.asyncio

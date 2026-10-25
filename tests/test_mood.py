@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 import json
 import types
-from datetime import datetime
+from datetime import UTC, datetime
 from zoneinfo import ZoneInfo
 
 import pytest
@@ -15,10 +15,34 @@ ZONE = ZoneInfo("Asia/Shanghai")
 def test_mood_probabilities_are_editable_and_must_total_100():
     settings = module.MoodSettings()
     assert sum(settings.weights().values()) == 100
+    assert sum(settings.bullying_weights().values()) == 100
     fields = module.MaiSecretaryPlugin.build_config_schema()["sections"]["mood"]["fields"]
     assert {"enabled", *settings.weights()} <= set(fields)
+    assert {"bullying_mood_enabled", *(f"bullying_{key}" for key in settings.weights())} <= set(fields)
     with pytest.raises(ValueError, match="总和必须为 100"):
         module.MoodSettings.model_validate({"happy": 99})
+    with pytest.raises(ValueError, match="反霸凌心情概率总和必须为 100"):
+        module.MoodSettings.model_validate({"bullying_wronged": 39})
+
+
+def test_confirmed_bullying_uses_independent_distribution_and_persists(tmp_path):
+    settings = {
+        "mood": {
+            "enabled": True, "bullying_wronged": 0, "bullying_sad": 0,
+            "bullying_irritable": 0, "bullying_angry": 100,
+        },
+    }
+    plugin, _ = make_plugin(tmp_path, settings)
+    at = datetime(2026, 10, 25, 13, 0, tzinfo=ZONE)
+    assert plugin.mood.react_to_bullying("stream-a", "message-a", now=at) == "angry"
+    state = dict(plugin.mood.state)
+    assert state["bullying_event_id"] == "stream-a:message-a"
+    assert plugin.mood.react_to_bullying("stream-a", "message-a", now=at) == "angry"
+    assert plugin.mood.state == state
+    restored, _ = make_plugin(tmp_path, settings)
+    restored._load_state()
+    assert restored.mood.current(at)["mood"] == "angry"
+    assert "当前心情为愤怒" in restored.mood.prompt_for("陌生人", now=at)
 
 
 def test_shared_mood_follows_life_activity_and_survives_restart(tmp_path):
@@ -201,5 +225,36 @@ async def test_group_reply_to_someone_else_does_not_change_mood(tmp_path):
         plugin.mood.on_inbound(message)
         await asyncio.wait_for(plugin.mood.queue.join(), timeout=1)
         assert calls == []
+    finally:
+        await plugin.mood.stop()
+
+
+@pytest.mark.asyncio
+async def test_confirmed_bullying_wins_over_pending_chat_analysis(tmp_path):
+    plugin, _ = make_plugin(tmp_path, {"mood": {
+        "enabled": True, "bullying_wronged": 0, "bullying_sad": 0,
+        "bullying_irritable": 0, "bullying_angry": 100,
+    }})
+    started = asyncio.Event()
+    release = asyncio.Event()
+
+    async def generate(**kwargs):
+        started.set()
+        await release.wait()
+        return {"response": '{"mood":"happy","confidence":0.99}'}
+
+    async def recent(_stream_id, *, limit):
+        return []
+
+    plugin._ctx.llm = types.SimpleNamespace(generate=generate)
+    plugin._ctx.message = types.SimpleNamespace(get_recent=recent)
+    await plugin.mood.start()
+    try:
+        plugin.mood.on_inbound(_inbound(message_id="abuse-1"))
+        await asyncio.wait_for(started.wait(), timeout=1)
+        assert plugin.mood.react_to_bullying("private-stream", "abuse-1", now=datetime.now(UTC)) == "angry"
+        release.set()
+        await asyncio.wait_for(plugin.mood.queue.join(), timeout=1)
+        assert plugin.mood.state["mood"] == "angry"
     finally:
         await plugin.mood.stop()

@@ -262,6 +262,12 @@ class AntiBullyingModule:
         verdict = self._parse_verdict(result)
         if verdict is None or verdict["confidence"] < settings.confidence_threshold:
             return
+        mood = getattr(self.plugin, "mood", None)
+        if mood is not None:
+            try:
+                mood.react_to_bullying(incoming.stream_id, incoming.message_id)
+            except Exception:  # Mood persistence must not prevent the admin alert.
+                LOG.exception("AI 反霸凌已确认辱骂，但更新共享心情失败")
         alert = self._format_alert(incoming, verdict)
         sent_any = False
         for admin in admins:

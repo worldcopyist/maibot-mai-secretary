@@ -21,6 +21,7 @@ class FeatureControlModule:
         "virtual_life": ("virtual_life", "enabled", "模拟生活", ("虚拟生活",)),
         "mood": ("mood", "enabled", "心情模块", ("心情", "情绪模块")),
         "mood_chat": ("mood", "chat_influence_enabled", "聊天影响心情", ("对话影响心情",)),
+        "mood_bullying": ("mood", "bullying_mood_enabled", "反霸凌影响心情", ("被辱骂后改变心情",)),
         "role_recognition": ("role_recognition", "enabled", "角色识别", ("身份识别",)),
         "relationships": ("relationships", "enabled", "关系管理", ("关系档案",)),
         "followups": ("followups", "enabled", "约定回访", ("回访",)),
@@ -55,6 +56,7 @@ class FeatureControlModule:
     }
     PARENTS: ClassVar[dict[str, tuple[str, ...]]] = {
         "virtual_life": ("proactive",), "mood_chat": ("mood",),
+        "mood_bullying": ("mood", "anti_bullying"),
         "relationships": ("role_recognition",),
         "followups_auto": ("followups",), "poke_reaction": ("poke",),
         "poke_bystander": ("poke",), "poke_tool": ("poke",),

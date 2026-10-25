@@ -140,6 +140,7 @@ enabled = false
 # 私聊与明确发给麦麦的群消息可在后台分析，影响所有聊天流共享的心情；每条候选消息会增加一次模型调用。
 chat_influence_enabled = true
 chat_confidence_threshold = 0.75
+bullying_mood_enabled = true
 # 基础概率总和必须为 100；当前模拟生活活动和上次心情会调整实际抽取概率。
 calm = 25
 happy = 25
@@ -150,6 +151,16 @@ sad = 6
 irritable = 6
 angry = 3
 grief = 2
+# AI 反霸凌确认辱骂后的独立概率，总和也必须为 100。
+bullying_calm = 0
+bullying_happy = 0
+bullying_satisfied = 0
+bullying_excited = 0
+bullying_wronged = 40
+bullying_sad = 30
+bullying_irritable = 20
+bullying_angry = 10
+bullying_grief = 0
 
 [virtual_life]
 enabled = false

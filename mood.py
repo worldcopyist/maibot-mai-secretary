@@ -34,6 +34,10 @@ DEFAULT_WEIGHTS = {
     "calm": 25, "happy": 25, "satisfied": 15, "excited": 10,
     "wronged": 8, "sad": 6, "irritable": 6, "angry": 3, "grief": 2,
 }
+BULLYING_DEFAULT_WEIGHTS = {
+    "calm": 0, "happy": 0, "satisfied": 0, "excited": 0,
+    "wronged": 40, "sad": 30, "irritable": 20, "angry": 10, "grief": 0,
+}
 _ACTIVITY_BIASES: tuple[tuple[re.Pattern[str], dict[str, float]], ...] = (
     (re.compile(r"吃|餐|饭|零食|饼干|烤箱|KFC|炸鸡", re.IGNORECASE),
      {"happy": 1.5, "satisfied": 2.0, "excited": 1.3}),
@@ -79,24 +83,42 @@ class MoodSettings(PluginConfigBase):
         default=0.75, ge=0.5, le=1.0,
         json_schema_extra={"label": "聊天影响把握度门槛", "hint": "只有模型判断达到这个把握度才改变共享心情；越高越谨慎。"},
     )
-    calm: int = Field(default=25, ge=0, le=100, json_schema_extra={"label": "平静 · 基础概率（%）"})
-    happy: int = Field(default=25, ge=0, le=100, json_schema_extra={"label": "开心 · 基础概率（%）"})
-    satisfied: int = Field(default=15, ge=0, le=100, json_schema_extra={"label": "满足 · 基础概率（%）"})
-    excited: int = Field(default=10, ge=0, le=100, json_schema_extra={"label": "激动 · 基础概率（%）"})
-    wronged: int = Field(default=8, ge=0, le=100, json_schema_extra={"label": "委屈 · 基础概率（%）"})
-    sad: int = Field(default=6, ge=0, le=100, json_schema_extra={"label": "伤心 · 基础概率（%）"})
-    irritable: int = Field(default=6, ge=0, le=100, json_schema_extra={"label": "烦躁 · 基础概率（%）"})
-    angry: int = Field(default=3, ge=0, le=100, json_schema_extra={"label": "愤怒 · 基础概率（%）"})
-    grief: int = Field(default=2, ge=0, le=100, json_schema_extra={"label": "悲伤 · 基础概率（%）"})
+    bullying_mood_enabled: bool = Field(
+        default=True,
+        json_schema_extra={"label": "反霸凌确认后改变心情", "hint": "AI 反霸凌确认麦麦遭辱骂后，按下列独立概率抽取共享心情；不会额外调用模型。"},
+    )
+    calm: int = Field(default=DEFAULT_WEIGHTS["calm"], ge=0, le=100, json_schema_extra={"label": "平静 · 基础概率（%）"})
+    happy: int = Field(default=DEFAULT_WEIGHTS["happy"], ge=0, le=100, json_schema_extra={"label": "开心 · 基础概率（%）"})
+    satisfied: int = Field(default=DEFAULT_WEIGHTS["satisfied"], ge=0, le=100, json_schema_extra={"label": "满足 · 基础概率（%）"})
+    excited: int = Field(default=DEFAULT_WEIGHTS["excited"], ge=0, le=100, json_schema_extra={"label": "激动 · 基础概率（%）"})
+    wronged: int = Field(default=DEFAULT_WEIGHTS["wronged"], ge=0, le=100, json_schema_extra={"label": "委屈 · 基础概率（%）"})
+    sad: int = Field(default=DEFAULT_WEIGHTS["sad"], ge=0, le=100, json_schema_extra={"label": "伤心 · 基础概率（%）"})
+    irritable: int = Field(default=DEFAULT_WEIGHTS["irritable"], ge=0, le=100, json_schema_extra={"label": "烦躁 · 基础概率（%）"})
+    angry: int = Field(default=DEFAULT_WEIGHTS["angry"], ge=0, le=100, json_schema_extra={"label": "愤怒 · 基础概率（%）"})
+    grief: int = Field(default=DEFAULT_WEIGHTS["grief"], ge=0, le=100, json_schema_extra={"label": "悲伤 · 基础概率（%）"})
+    bullying_calm: int = Field(default=BULLYING_DEFAULT_WEIGHTS["calm"], ge=0, le=100, json_schema_extra={"label": "反霸凌 · 平静概率（%）"})
+    bullying_happy: int = Field(default=BULLYING_DEFAULT_WEIGHTS["happy"], ge=0, le=100, json_schema_extra={"label": "反霸凌 · 开心概率（%）"})
+    bullying_satisfied: int = Field(default=BULLYING_DEFAULT_WEIGHTS["satisfied"], ge=0, le=100, json_schema_extra={"label": "反霸凌 · 满足概率（%）"})
+    bullying_excited: int = Field(default=BULLYING_DEFAULT_WEIGHTS["excited"], ge=0, le=100, json_schema_extra={"label": "反霸凌 · 激动概率（%）"})
+    bullying_wronged: int = Field(default=BULLYING_DEFAULT_WEIGHTS["wronged"], ge=0, le=100, json_schema_extra={"label": "反霸凌 · 委屈概率（%）"})
+    bullying_sad: int = Field(default=BULLYING_DEFAULT_WEIGHTS["sad"], ge=0, le=100, json_schema_extra={"label": "反霸凌 · 伤心概率（%）"})
+    bullying_irritable: int = Field(default=BULLYING_DEFAULT_WEIGHTS["irritable"], ge=0, le=100, json_schema_extra={"label": "反霸凌 · 烦躁概率（%）"})
+    bullying_angry: int = Field(default=BULLYING_DEFAULT_WEIGHTS["angry"], ge=0, le=100, json_schema_extra={"label": "反霸凌 · 愤怒概率（%）"})
+    bullying_grief: int = Field(default=BULLYING_DEFAULT_WEIGHTS["grief"], ge=0, le=100, json_schema_extra={"label": "反霸凌 · 悲伤概率（%）"})
 
     @model_validator(mode="after")
     def validate_probabilities(self) -> MoodSettings:
         if sum(getattr(self, key) for key in MOODS) != 100:
             raise ValueError("心情基础概率总和必须为 100%；模拟生活会进一步调整实际抽取概率")
+        if sum(getattr(self, f"bullying_{key}") for key in MOODS) != 100:
+            raise ValueError("反霸凌心情概率总和必须为 100%")
         return self
 
     def weights(self) -> dict[str, float]:
         return {key: float(getattr(self, key)) for key in MOODS}
+
+    def bullying_weights(self) -> dict[str, float]:
+        return {key: float(getattr(self, f"bullying_{key}")) for key in MOODS}
 
 
 @dataclass(frozen=True)
@@ -132,6 +154,33 @@ class MoodModule:
     def dump_state(self, payload: dict[str, Any]) -> None:
         if self.state:
             payload["mood_state"] = self.state
+
+    def react_to_bullying(
+        self, stream_id: str, message_id: str, *, now: datetime | None = None,
+    ) -> str | None:
+        settings = self.plugin.config.mood
+        if (
+            not self.plugin.config.plugin.enabled or not settings.enabled
+            or not settings.bullying_mood_enabled
+            or not self.plugin.config.anti_bullying.enabled
+        ):
+            return None
+        current_time = now or datetime.now(UTC)
+        state = self.current(current_time)
+        if state is None:
+            return None
+        event_id = f"{stream_id}:{message_id}" if stream_id and message_id else ""
+        if event_id and state.get("bullying_event_id") == event_id:
+            return str(state["mood"])
+        weights = settings.bullying_weights()
+        mood = self.rng.choices(list(weights), weights=list(weights.values()), k=1)[0]
+        state["mood"] = mood
+        state["chat_received_at"] = current_time.timestamp()
+        state["changed_by_bullying_at"] = current_time.isoformat(timespec="seconds")
+        if event_id:
+            state["bullying_event_id"] = event_id
+        self.plugin._save_state()
+        return mood
 
     def on_config_update(self) -> None:
         pass  # The config signature invalidates the current draw on the next read.
