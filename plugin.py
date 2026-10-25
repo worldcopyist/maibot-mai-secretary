@@ -893,6 +893,8 @@ class MaiSecretaryPlugin(MaiBotPlugin):
         self._state_path.parent.mkdir(parents=True, exist_ok=True)
         self.blueberry_budget.on_config_update()
         self._load_state()
+        if self.scheduled.pruned_completed:
+            self._save_state()
         self.feature_control.apply()
         await self.role_recognition.start()
         await self.deepseek_web.start()

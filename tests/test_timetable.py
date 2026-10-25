@@ -63,6 +63,11 @@ async def test_cdut_json_import_preview_commit_replaces_reminders(tmp_path):
     assert reminders[0].at == "2030-01-07T07:50+08:00"
     assert reminders[1].at == "2030-01-21T07:50+08:00"
     assert all(task.owner_user_id == "__secretary_timetable__" for task in reminders)
+    assert (await plugin.secretary_tasks_list())["tasks"] == []
+    listed = await plugin.timetable.list_profiles()
+    assert listed["profiles"][0]["reminder_count"] == 2
+    assert [item["course_name"] for item in listed["reminders"]] == ["地质学", "地质学"]
+    assert (await plugin.secretary_tasks_cancel(reminders[0].id))["error"] == "课表提醒请在课表页面管理"
 
     answer = await plugin.timetable.query(stream_id="other-stream", chat_id="other-stream", date="2030-01-07")
     assert answer["week"] == 1

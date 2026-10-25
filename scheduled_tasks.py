@@ -22,10 +22,19 @@ class ScheduledTasksModule:
     def __init__(self, plugin: Any) -> None:
         self.plugin = plugin
         self.tasks: dict[str, ScheduledTask] = {}
+        self.pruned_completed = 0
 
     def load_state(self, data: dict[str, Any]) -> None:
         tasks = [ScheduledTask.from_dict(item) for item in data.get("tasks", [])]
-        self.tasks = {task.id: task for task in tasks}
+        submitted = {
+            str(row.get("task_id")) for row in data.get("task_receipts", [])
+            if isinstance(row, dict) and row.get("status") in {"accepted", "sent", "unknown", "retried"}
+        }
+        self.tasks = {
+            task.id: task for task in tasks
+            if not (task.schedule == "once" and task.status == "completed" and task.id in submitted)
+        }
+        self.pruned_completed = len(tasks) - len(self.tasks)
 
     def dump_state(self, payload: dict[str, Any]) -> None:
         payload["tasks"] = [task.to_dict() for task in self.tasks.values()]
@@ -60,6 +69,8 @@ class ScheduledTasksModule:
                 )
                 self.plugin.task_receipts.accepted(task, result)
                 task.last_error = ""
+                if task.schedule == "once":
+                    del self.tasks[task.id]
             except Exception as exc:
                 self.plugin.task_receipts.trigger_error(task, str(exc))
                 task.last_error = str(exc)[:300]
@@ -212,6 +223,7 @@ class ScheduledTasksModule:
                 {**self._task_entry(task), "stream_id": task.stream_id,
                  "owner_user_id": task.owner_user_id}
                 for task in sorted(self.tasks.values(), key=lambda item: item.next_run)
+                if task.owner_user_id != "__secretary_timetable__"
             ]
         return {
             "tasks": entries,
@@ -223,6 +235,8 @@ class ScheduledTasksModule:
         async with self.plugin._lock:
             if task_id not in self.tasks:
                 return {"error": "任务不存在或已取消，请刷新列表"}
+            if self.tasks[task_id].owner_user_id == "__secretary_timetable__":
+                return {"error": "课表提醒请在课表页面管理"}
             del self.tasks[task_id]
             self.plugin._save_state()
             self.plugin._wake.set()

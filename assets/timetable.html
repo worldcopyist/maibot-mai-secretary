@@ -23,8 +23,8 @@
   #status { margin: 0 0 16px; padding: 10px 12px; border: 1px solid var(--maibot-border, #d0d5dd); border-radius: 6px; background: var(--maibot-soft, #f2f4f7); }
   #status[data-tone="error"] { color: var(--maibot-danger, #c2414d); border-color: var(--maibot-danger, #c2414d); }
   [hidden] { display: none !important; }
-  .course-list, .profile-list { list-style: none; margin: 0; padding: 0; }
-  .course-list li, .profile-list li { padding: 10px 0; border-top: 1px solid var(--maibot-border, #d0d5dd); line-height: 1.5; }
+  .course-list, .profile-list, .reminder-list { list-style: none; margin: 0; padding: 0; }
+  .course-list li, .profile-list li, .reminder-list li { padding: 10px 0; border-top: 1px solid var(--maibot-border, #d0d5dd); line-height: 1.5; }
   .profile-list li { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
   .profile-list li > div { min-width: 0; overflow-wrap: anywhere; }
   .profile-list li button { flex-shrink: 0; }
@@ -58,6 +58,11 @@
     <p class="muted" id="settings">正在读取设置…</p>
     <ul class="profile-list" id="profiles"><li class="muted">正在读取课表…</li></ul>
     <div class="actions"><button id="refresh" type="button">刷新</button></div>
+  </section>
+  <section class="card" aria-labelledby="reminders-heading">
+    <h2 id="reminders-heading">未来上课提醒</h2>
+    <p class="muted" id="reminder-summary">正在读取提醒…</p>
+    <ul class="reminder-list" id="reminders"><li class="muted">正在读取提醒…</li></ul>
   </section>
 </main>
 <script>
@@ -143,6 +148,16 @@
         finally { setBusy(false); }
       });
       list.append(row);
+    }
+    const reminders = data.reminders || [];
+    $('reminder-summary').textContent = `共 ${reminders.length} 次未来提醒${data.enabled ? '' : ' · 模块已关闭，提醒暂停执行'}`;
+    const reminderList = $('reminders'); reminderList.replaceChildren();
+    if (!reminders.length) add(reminderList, 'li', '暂无未来上课提醒');
+    for (const reminder of reminders) {
+      const row = document.createElement('li');
+      add(row, 'strong', `${reminder.remind_at.slice(0, 16).replace('T', ' ')} · ${reminder.course_name}`);
+      add(row, 'div', `第 ${reminder.week} 周 · 第 ${reminder.start_section}–${reminder.end_section} 节${reminder.location ? ' · ' + reminder.location : ''} · ${labels.get(reminder.stream_id) || reminder.stream_id}`);
+      reminderList.append(row);
     }
   }
   $('preview').addEventListener('click', async () => {

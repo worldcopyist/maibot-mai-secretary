@@ -405,6 +405,11 @@ class TimetableModule:
             raise ValueError("第 1 教学周的日期必须是周一")
         return first
 
+    @staticmethod
+    def _reminder_id(stream_id: str, day: date, course: Course) -> str:
+        key = f"{stream_id}|{day}|{course.name}|{course.start_section}|{course.location}"
+        return "tt" + hashlib.sha256(key.encode()).hexdigest()[:10]
+
     def _new_tasks(self, stream_id: str, profile: dict[str, Any], now: datetime) -> list[ScheduledTask]:
         zone_name = CDUT_TIMEZONE
         zone = ZoneInfo(zone_name)
@@ -420,8 +425,7 @@ class TimetableModule:
                 remind_at = starts_at - lead
                 if remind_at <= now:
                     continue
-                key = f"{stream_id}|{day}|{course.name}|{course.start_section}|{course.location}"
-                task_id = "tt" + hashlib.sha256(key.encode()).hexdigest()[:10]
+                task_id = self._reminder_id(stream_id, day, course)
                 detail = f"{course.name}将于{starts_at:%Y-%m-%d %H:%M}开始（第{course.start_section}-{course.end_section}节）"
                 if course.location:
                     detail += f"，地点：{course.location}"
@@ -486,13 +490,32 @@ class TimetableModule:
 
     async def list_profiles(self) -> dict[str, Any]:
         entries = []
+        reminders = []
+        seen: set[str] = set()
         for stream_id, profile in self.profiles.items():
-            count = sum(task.status == "active" and task.owner_user_id == self.TASK_OWNER
-                        and task.stream_id == stream_id for task in self.plugin.scheduled.tasks.values())
+            first = self._validate_start(profile["semester_start"])
+            for raw in profile["courses"]:
+                course = Course.from_mapping(raw, int(profile["total_weeks"]))
+                for week in course.weeks:
+                    day = first + timedelta(days=(week - 1) * 7 + course.day_of_week - 1)
+                    task_id = self._reminder_id(stream_id, day, course)
+                    task = self.plugin.scheduled.tasks.get(task_id)
+                    if (task is None or task.status != "active" or task.owner_user_id != self.TASK_OWNER
+                            or task.stream_id != stream_id or task_id in seen):
+                        continue
+                    seen.add(task_id)
+                    reminders.append({
+                        "id": task_id, "stream_id": stream_id, "remind_at": task.at,
+                        "course_name": course.name, "course_date": day.isoformat(),
+                        "week": week, "start_section": course.start_section,
+                        "end_section": course.end_section, "location": course.location,
+                    })
+            count = sum(item["stream_id"] == stream_id for item in reminders)
             entries.append({"stream_id": stream_id, **profile, "reminder_count": count})
         return {"profiles": entries, "enabled": self.plugin.config.timetable.enabled,
                 "remind_before_minutes": self.plugin.config.timetable.remind_before_minutes,
-                "section_starts": self.plugin.config.timetable.section_starts}
+                "section_starts": self.plugin.config.timetable.section_starts,
+                "reminders": sorted(reminders, key=lambda item: item["remind_at"])}
 
     async def delete(self, stream_id: str) -> dict[str, Any]:
         async with self.plugin._lock:

@@ -7,6 +7,8 @@ import uuid
 from datetime import datetime
 from typing import Any
 
+from .secretary_core import ScheduledTask
+
 
 class TaskReceiptModule:
     name = "task_receipts"
@@ -59,6 +61,8 @@ class TaskReceiptModule:
             "error": "" if host_id else "主程序未返回可用于匹配发送的任务编号",
             "retry_of": retry_of,
         }
+        if task.schedule == "once":
+            row["task_snapshot"] = task.to_dict()
         self.records.append(row)
         self.records = self.records[-300:]
         self.plugin._save_state()
@@ -108,7 +112,8 @@ class TaskReceiptModule:
 
     def list_rows(self, *, stream_id: str = "", owner_user_id: str = "") -> list[dict[str, Any]]:
         return [
-            dict(row) for row in reversed(self.records)
+            {key: value for key, value in row.items() if key != "task_snapshot"}
+            for row in reversed(self.records)
             if (not stream_id or row.get("stream_id") == stream_id)
             and (not owner_user_id or row.get("owner_user_id") == owner_user_id)
         ][:100]
@@ -122,7 +127,13 @@ class TaskReceiptModule:
                 return {"success": False, "error": "只有首次明确发送失败的任务可以重试一次"}
             task = self.plugin.scheduled.tasks.get(str(row["task_id"]))
             if task is None:
-                return {"success": False, "error": "原任务记录已不存在，无法安全重试"}
+                try:
+                    task = ScheduledTask.from_dict(row["task_snapshot"])
+                except (KeyError, TypeError, ValueError):
+                    return {"success": False, "error": "原任务资料不完整，无法安全重试"}
+                if (task.id != row["task_id"] or task.stream_id != row["stream_id"]
+                        or task.owner_user_id != row["owner_user_id"] or task.schedule != "once"):
+                    return {"success": False, "error": "原任务资料不匹配，无法安全重试"}
             row["status"] = "retrying"
             self.plugin._save_state()
         intent = self.plugin.scheduled.build_intent(task)

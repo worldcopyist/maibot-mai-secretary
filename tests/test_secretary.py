@@ -665,13 +665,58 @@ async def test_one_time_task_persists_and_does_not_repeat(tmp_path):
             "tool_search",
         )
     )
-    assert plugin.scheduled.tasks["abc"].status == "completed"
+    assert "abc" not in plugin.scheduled.tasks
+    assert plugin.task_receipts.records[0]["task_snapshot"]["id"] == "abc"
 
     restored, restored_proactive = make_plugin(tmp_path)
     restored._load_state()
     await restored._tick(now)
     assert restored_proactive.calls == []
-    assert restored.scheduled.tasks["abc"].status == "completed"
+    assert "abc" not in restored.scheduled.tasks
+
+
+@pytest.mark.asyncio
+async def test_one_time_receipt_can_retry_after_task_record_is_deleted(tmp_path):
+    plugin, proactive = make_plugin(tmp_path)
+    now = datetime(2026, 10, 20, 8, 0, tzinfo=UTC)
+    plugin.scheduled.tasks["once"] = core.ScheduledTask(
+        "once", "stream", "user", "提醒一件事", "once",
+        "2026-10-20T15:59:00+08:00", "Asia/Shanghai", "", now.timestamp() - 60,
+    )
+
+    async def accepted_trigger(**kwargs):
+        proactive.calls.append(kwargs)
+        return {"success": True, "task_id": "host-once"}
+
+    proactive.trigger = accepted_trigger
+    await plugin.scheduled.tick(now)
+    assert "once" not in plugin.scheduled.tasks
+    receipt = plugin.task_receipts.records[0]
+    assert receipt["status"] == "accepted"
+    assert "task_snapshot" not in plugin.task_receipts.list_rows()[0]
+    await plugin.task_receipts.observe_send(
+        {"session_id": "stream", "reply_to": "host-once"}, False,
+    )
+    assert receipt["status"] == "send_failed"
+    assert (await plugin.task_receipts.retry(receipt["id"]))["success"]
+    assert len(proactive.calls) == 2
+    assert "once" not in plugin.scheduled.tasks
+
+
+def test_legacy_submitted_one_time_task_is_pruned_on_load(tmp_path):
+    plugin, _ = make_plugin(tmp_path)
+    done = core.ScheduledTask(
+        "old-once", "stream", "user", "旧提醒", "once",
+        "2026-10-20T08:00:00+08:00", "Asia/Shanghai", "", 0,
+        status="completed",
+    )
+    plugin._state_path.write_text(json.dumps({
+        "schema_version": 1, "tasks": [done.to_dict()],
+        "task_receipts": [{"id": "receipt", "task_id": "old-once", "status": "unknown"}],
+    }), encoding="utf-8")
+    plugin._load_state()
+    assert plugin.scheduled.pruned_completed == 1
+    assert "old-once" not in plugin.scheduled.tasks
 
 
 @pytest.mark.asyncio
