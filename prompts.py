@@ -25,6 +25,7 @@ TOOL_ROUTING_PROMPT = (
     "`secretary_create_task` 接收 instruction、schedule、at，用于用户要求新建未来的定时任务；"
     "`secretary_list_tasks` 用于查看用户已有的定时任务；"
     "`secretary_cancel_task` 接收 task_id，用于取消用户指定的任务，先查看列表确认任务编号；"
+    "`secretary_query_timetable` 接收可选 date=YYYY-MM-DD，只查询当前聊天流已导入的课表；用户问今天或某天上什么课时调用，不能猜测未导入的课程；"
     "`secretary_task_receipts` 接收 action=list 查询当前聊天的任务回执，管理员可对明确发送失败的 receipt_id 用 action=retry 重试一次；"
     "`secretary_feature_switch` 接收 action=list/enable/disable/reset、feature，只有管理员明确要求开启或关闭小秘书功能时调用；先 list 核对准确功能名；"
     "`secretary_relationship` 接收 action=show/list/familiar/stranger/reset、target=我或准确 qq:账号；任何人可查自己，只有管理员可修改关系；"

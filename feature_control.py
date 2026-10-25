@@ -14,6 +14,7 @@ class FeatureControlModule:
     # Each switch is intentionally explicit. No model-provided config path is evaluated.
     SWITCHES: ClassVar[dict[str, tuple[str, str, str, tuple[str, ...]]]] = {
         "scheduled_tasks": ("scheduled_tasks", "enabled", "定时任务", ("定时提醒", "任务")),
+        "timetable": ("timetable", "enabled", "课表模块", ("上课提醒", "课表提醒")),
         "task_receipts": ("task_receipts", "enabled", "任务回执", ("发送回执", "回执中心")),
         "daily_report": ("daily_report", "enabled", "定时日报", ("日报定时发送",)),
         "manual_report": ("daily_report", "manual_enabled", "即时日报", ("手动日报",)),
@@ -55,6 +56,7 @@ class FeatureControlModule:
         "stale_reply": ("message_debounce", "suppress_stale_private_replies", "取消过时私聊回复", ("取消旧回复",)),
     }
     PARENTS: ClassVar[dict[str, tuple[str, ...]]] = {
+        "timetable": ("scheduled_tasks",),
         "virtual_life": ("proactive",), "mood_chat": ("mood",),
         "mood_bullying": ("mood", "anti_bullying"),
         "relationships": ("role_recognition",),

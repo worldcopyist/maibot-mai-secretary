@@ -6,7 +6,7 @@
 
 ## At a glance
 
-- **Companionship and plans:** shared simulated life and mood, proactive chat, scheduled tasks, daily reports, relationships, and follow-ups.
+- **Companionship and plans:** shared simulated life and mood, proactive chat, scheduled tasks, class reminders, daily reports, relationships, and follow-ups.
 - **Information and expression:** knowledge retrieval, web search, Blueberry balance, experimental voice replies, and pokes.
 - **Chat management:** QQ group management, anti-bullying, message debouncing, and natural-language feature switches for administrators.
 
@@ -19,6 +19,7 @@
 
 - [Module workbench: switches, relationships, follow-ups, and delivery receipts](/extensions/worldcopyist.mai-secretary/workbench)
 - [Task calendar and manual scheduling](/extensions/worldcopyist.mai-secretary/tasks)
+- [Timetable import and class reminders](/extensions/worldcopyist.mai-secretary/timetable)
 - [Knowledge base and QQ moderation word lists](/extensions/worldcopyist.mai-secretary/knowledge)
 
 These routes open inside an authenticated MaiBot WebUI installation. Their Markdown links may not open directly from GitHub.
@@ -29,6 +30,7 @@ These routes open inside an authenticated MaiBot WebUI installation. Their Markd
 | --- | --- | --- |
 | `feature_control.py` | Lets a verified administrator list, enable, disable, or reset module and Boolean subfeature switches in natural language. Chat-set values persist in plugin state and override the WebUI configuration until reset. | `secretary_feature_switch`; workbench |
 | `scheduled_tasks.py` | Creates one-time, daily, or weekly tasks for the current user and chat stream. At the due time, asks Maisaka to carry out the original request with current context. | `secretary_create_task`, `secretary_list_tasks`, `secretary_cancel_task`; calendar |
+| `timetable.py` | Imports CDUT student timetable HTML or CDUT-Studio course JSON, calculates actual teaching weeks from the supplied first Monday, and creates one-time reminders before future classes. The lead time and section start times are configurable. | `secretary_query_timetable`; `[timetable]`; timetable page |
 | `task_receipts.py` | Separates Maisaka's queue acceptance from a matched actual send result. Records accepted, sent, failed, and unknown states. Unknown results are never automatically resent; an administrator can retry a confirmed failure once. | `secretary_task_receipts`; workbench |
 | `proactive_chat.py` | Randomly starts conversations in selected chat streams during configured time windows. Supports a target average interval plus random offset, recent context, and continuity from the last message actually sent. | `[proactive]` |
 | `virtual_life.py` | Chooses one activity per time period and shares it across every chat stream, including after a restart. Editable random choices and fixed weekday activities remain available. MaiBot's own persona has priority. | `[virtual_life].*_choices`, `fixed_activities` |
@@ -51,6 +53,12 @@ The **DeepSeek 联网与余额** plugin configuration section contains search, b
 
 The knowledge base accepts text, Markdown, CSV/TSV, JSON/JSONL, XML/YAML, HTML, RTF, PDF with extractable text, DOCX, XLSX, PPTX, EPUB, ODT/ODS/ODP. Scanned PDFs require OCR before upload. The upload limit is 8 MiB per file. Chat retrieval is denied until `[knowledge_base].allowed_chats` contains an approved stream.
 
+### CDUT timetable import
+
+In the [timetable page](/extensions/worldcopyist.mai-secretary/timetable), select an existing chat stream, enter the **Monday of teaching week 1** and the semester length, then upload the personal timetable HTML saved from the authenticated CDUT academic site or paste the `courses` JSON returned by [CDUT-Studio](https://github.com/Nya-Angle/CDUT-Studio). Review the parsed courses and future reminder count before confirming. Each stream has its own timetable. The import replaces only that stream's previous timetable reminders. `[timetable].remind_before_minutes` defaults to 20; the 11 section start times are editable and should be checked against the current school timetable. MaiBot receives a scheduled task for each future class and answers in its existing persona. `secretary_query_timetable(date)` can only read the current stream's imported schedule.
+
+CDUT-Studio authenticates through a local desktop browser session and handles the academic site's dynamic security checks. This server-side plugin does **not** log in to CDUT or store a student number, password, or session cookie. Reimport after timetable changes. CDUT's [academic office notice](https://aao.cdut.edu.cn/__local/E/BE/F1/EC76DBD3B507867475376F2102F_4146917D_24873.pdf) says the official academic system remains authoritative.
+
 ## Natural-language examples and permissions
 
 An authenticated plugin administrator can say “列出小秘书功能”, “开启约定回访”, “关闭联网搜索”, “把 qq:123456789 设为熟人”, or “把蓝莓提醒线设为 10”. MaiBot uses the exact tools listed above. Other users can ask about their own relationship, schedule their own tasks or follow-ups in the current chat, and opt out of personal follow-ups. An administrator must explicitly request global changes, group management writes, or an immediate daily report.
@@ -72,7 +80,7 @@ MaiBot SDK → plugin.py (configuration, tools, hooks, WebUI APIs, scheduler)
                  ├── module_contract.py + independent feature modules
                  ├── secretary_core.py / stream_router.py / prompts.py
                  └── data/plugins/worldcopyist.mai-secretary/
-WebUI      → webui.json → assets/workbench.html, tasks.html, knowledge.html
+WebUI      → webui.json → assets/workbench.html, tasks.html, timetable.html, knowledge.html
 ```
 
 `plugin.py` is the only SDK entry point. Each feature owns its behavior and state fields, while the entry point registers it and forwards SDK events. New modules implement `name`, `state_keys`, `load_state`, `dump_state`, `on_config_update`, and `tick` from `module_contract.py`; `_register_module` rejects duplicate state keys. The shared `secretary-state.json` uses schema version 1 and retains unknown keys for future modules. The switch overlay lives there rather than writing back to the server's `config.toml`. Balance snapshots use `deepseek-balance.sqlite3`, and knowledge documents and indexes remain in the plugin's data directory. `prompts.py` keeps tool-routing text together and gives MaiBot's existing persona priority.

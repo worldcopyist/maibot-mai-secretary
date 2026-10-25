@@ -40,6 +40,8 @@ class ScheduledTasksModule:
         for task in sorted(self.tasks.values(), key=lambda item: item.next_run):
             if task.status != "active" or task.next_run > now.timestamp():
                 continue
+            if task.owner_user_id == "__secretary_timetable__" and not self.plugin.config.timetable.enabled:
+                continue
             late = now.timestamp() - task.next_run
             if task.schedule == "once":
                 task.status = "missed" if late > grace else "completed"

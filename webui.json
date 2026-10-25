@@ -58,6 +58,34 @@
       }
     },
     {
+      "id": "timetable",
+      "title": "麦麦小秘书 · 课表",
+      "description": "导入成都理工大学个人课表、查询课程并安排上课前提醒。",
+      "placement": "workspace",
+      "icon": "calendar",
+      "mode": "custom",
+      "entry": "assets/timetable.html",
+      "layout": "document",
+      "queries": {
+        "list": {"api": "secretary_timetable_list"},
+        "streams": {"api": "secretary_tasks_streams"}
+      },
+      "actions": {
+        "preview": {"api": "secretary_timetable_preview", "parameters": {
+          "stream_id": {"type": "string", "required": true, "max_length": 200},
+          "semester_start": {"type": "string", "required": true, "max_length": 10},
+          "total_weeks": {"type": "integer", "required": true, "minimum": 1, "maximum": 25},
+          "content": {"type": "string", "required": true, "max_length": 800000}
+        }},
+        "commit": {"api": "secretary_timetable_commit", "parameters": {
+          "preview_id": {"type": "string", "required": true, "max_length": 24}
+        }},
+        "delete": {"api": "secretary_timetable_delete", "parameters": {
+          "stream_id": {"type": "string", "required": true, "max_length": 200}
+        }, "confirmation": "确定删除这个聊天流的课表和全部未来上课提醒吗？"}
+      }
+    },
+    {
       "id": "knowledge",
       "title": "麦麦小秘书 · 知识库",
       "description": "上传资料、粘贴文本并测试检索。聊天读取权限在插件配置页设置。",

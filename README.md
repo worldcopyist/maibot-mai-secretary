@@ -6,7 +6,7 @@
 
 ## 插件概览
 
-- **陪伴与计划：**共享的模拟生活与心情、主动聊天、定时任务、日报、关系记忆和约定回访。
+- **陪伴与计划：**共享的模拟生活与心情、主动聊天、定时任务、课表提醒、日报、关系记忆和约定回访。
 - **查询与表达：**知识库、联网搜索、蓝莓余额、语音模块（实验性）和戳一戳。
 - **聊天管理：**QQ群管、反霸凌、消息防抖，以及管理员用自然语言开关功能。
 
@@ -20,6 +20,8 @@
 **[打开知识库：上传文档或粘贴文本](/extensions/worldcopyist.mai-secretary/knowledge)**
 
 **[打开定时任务：日历、任务列表与手动创建](/extensions/worldcopyist.mai-secretary/tasks)**
+
+**[打开课表：导入课程并安排上课提醒](/extensions/worldcopyist.mai-secretary/timetable)**
 
 **[打开模块管理：开关、关系、回访与任务回执](/extensions/worldcopyist.mai-secretary/workbench)**
 
@@ -38,6 +40,7 @@
 9. **语音模块：**用户要求语音、朗读或唱歌时，麦麦可在当前 QQ 聊天发送语音；默认音色提示词通用且可编辑。**此模块尚不成熟，可靠性存疑。**
 10. **QQ 群管：**在指定群处理成员、公告、入群审核和欢迎语，并核验管理员身份与麦麦的群权限。
 11. **消息防抖：**合并同一用户短时间内连续发送的内容，减少拆成多轮回复的情况。
+12. **课表：**导入成都理工大学个人课表，在上课前可配置的分钟数提醒，并让麦麦查询已导入的课程。
 
 此外还有五个独立模块：
 
@@ -48,6 +51,14 @@
 - **心情：**每种心情有可配置的基础概率；模拟生活和聊天互动都会影响全聊天流共享的心情，表达分寸随主人、熟人、陌生人身份变化；默认关闭。
 
 模块管理页可以设置功能开关、手动关系、取消回访和查看任务回执。蓝莓余额与提醒统一在插件配置页的「DeepSeek 联网与余额」中设置；余额历史仍可由管理员通过 `secretary_blueberry_budget` 查询。通过聊天调整的开关会在重启后恢复；“恢复配置”会撤销聊天覆盖值。页面需要 MaiBot WebUI 登录。
+
+### 成都理工大学课表与上课提醒
+
+在[课表页面](/extensions/worldcopyist.mai-secretary/timetable)选择麦麦已有的聊天流，填写**第 1 教学周的周一**和本学期周数，然后上传登录后从学校教务系统保存的个人课表 HTML，或粘贴 [CDUT-Studio](https://github.com/Nya-Angle/CDUT-Studio) 课表查询结果中的 `courses` JSON。页面先预览课程、周次、节次及未来提醒数量；确认后才替换该聊天流原有课表和未来提醒。每个聊天流独立保存一份课表。请只导入自己的课表，并在群聊导入前考虑课程信息会被群成员询问到。
+
+插件配置页「课表与上课提醒」提供 `remind_before_minutes`（默认提前 20 分钟）及第 1–11 节开始时间。更改后，未来的课表提醒会重新安排；课表时间固定按北京时间解释。默认节次时间参考 CDUT-Studio 的课表时段，**请按学校当期作息表核对**。课程注明的单周、双周和离散周次都会展开；未注明周次的课程按填写的整个学期处理。提醒复用 `scheduled_tasks.py` 的单次任务及回执，到点交由 MaiBot 结合原有人设发送；服务器停机超过配置的补执行期限则跳过。课表工具 `secretary_query_timetable(date)` 只读取当前聊天流已导入的课程，不会访问别人的课表。
+
+CDUT-Studio 的在线查询使用桌面浏览器完成学校统一认证及教务系统动态安全检查；小秘书运行在远程 MaiBot 服务器，当前版本**不直接登录学校系统，也不保存学号、密码或登录 Cookie**。因此课表变化后需要重新导入，提醒以最后一次确认的课表为准。[成都理工大学教务处通知](https://aao.cdut.edu.cn/__local/E/BE/F1/EC76DBD3B507867475376F2102F_4146917D_24873.pdf)提示以官方教务系统显示为准；本模块的提醒不能代替实时核对调课信息。
 
 ### 消息防抖
 
@@ -325,7 +336,7 @@ bullying_grief = 0
 
 自然语言工具只操作调用者所在聊天流、该用户自己的任务。单次任务使用带时区的 ISO 时间，例如 `2026-10-21T08:00:00+08:00`；每天和每周使用 `HH:MM`，每周还需星期数字（周一为 1，周日为 7）。时间含糊时应先澄清。
 
-插件发给 MaiBot 的主动聊天和定时任务执行提示词会直接列出工具名：`secretary_deepseek_search` 用于实时搜索，`secretary_deepseek_fetch` 用于读取已知网页，`secretary_deepseek_balance` 仅在已核验管理员明确询问时查询 API 余额，`secretary_create_task`、`secretary_list_tasks`、`secretary_cancel_task` 分别用于创建、查看和取消定时任务，`secretary_task_receipts` 查询送达回执，`secretary_feature_switch` 由管理员控制模块开关，`secretary_relationship` 管理关系，`secretary_followup` 管理回访，`secretary_blueberry_budget` 查看余额历史与提醒线，`secretary_generate_daily_report` 用于管理员明确要求即时生成今日日报，`secretary_poke` 用于合适的当前聊天戳一戳互动，`secretary_search_knowledge` 用于查询授权知识库，`send_emoji` 用于在合适时从表情库挑选表情。若目标工具列在 MaiBot 的延迟展示工具中，提示词要求先用 `tool_search` 发现，再按实际参数调用。到点执行的任务不会重新创建同一任务；普通主动闲聊也不会无故联网或创建任务。工具不可用时应如实说明。
+插件发给 MaiBot 的主动聊天和定时任务执行提示词会直接列出工具名：`secretary_deepseek_search` 用于实时搜索，`secretary_deepseek_fetch` 用于读取已知网页，`secretary_deepseek_balance` 仅在已核验管理员明确询问时查询 API 余额，`secretary_create_task`、`secretary_list_tasks`、`secretary_cancel_task` 分别用于创建、查看和取消定时任务，`secretary_query_timetable` 查询当前聊天流已导入的课表，`secretary_task_receipts` 查询送达回执，`secretary_feature_switch` 由管理员控制模块开关，`secretary_relationship` 管理关系，`secretary_followup` 管理回访，`secretary_blueberry_budget` 查看余额历史与提醒线，`secretary_generate_daily_report` 用于管理员明确要求即时生成今日日报，`secretary_poke` 用于合适的当前聊天戳一戳互动，`secretary_search_knowledge` 用于查询授权知识库，`send_emoji` 用于在合适时从表情库挑选表情。若目标工具列在 MaiBot 的延迟展示工具中，提示词要求先用 `tool_search` 发现，再按实际参数调用。到点执行的任务不会重新创建同一任务；普通主动闲聊也不会无故联网或创建任务。工具不可用时应如实说明。
 
 到点后的“成功”表示 MaiBot 接受了主动任务请求，不等于已经观察到消息发出。插件先持久化“已尝试”再触发，避免重启造成重复消息。服务中断超过 `misfire_grace_seconds`（默认 10 分钟）时会跳过过期触发；单次任务会标记为 `missed`，可通过列出任务查看。接口报错时，单次任务标记为 `failed`；周期任务保留下一次执行。
 
@@ -351,6 +362,7 @@ WebUI ──── webui.json → assets/*.html
 | 模块文件 | 功能与边界 |
 | --- | --- |
 | `scheduled_tasks.py`、`secretary_core.py` | 单次、每日、每周定时任务；时间解析、下次运行和过期处理。 |
+| `timetable.py` | 成都理工大学教务 HTML / CDUT-Studio JSON 导入、教学周计算、上课提醒与当前聊天流课表查询。 |
 | `task_receipts.py` | 记录任务入队、实际发送、明确失败与结果未知；未知不自动重发。 |
 | `daily_report.py`、`daily_report_renderer.py` | 到点或管理员手动总结当日聊天，文字模型写内容，本地渲染 9:16 Azure、古风信笺或自制主题图片。 |
 | `proactive_chat.py`、`virtual_life.py` | 指定聊天流随机主动发言、按上次实际发言续接话题；所有聊天流共享当前时段的一项模拟生活活动。 |
@@ -366,7 +378,7 @@ WebUI ──── webui.json → assets/*.html
 | `voice_synthesis.py` | 语音和唱歌工具，读取 MaiBot 已配置的 MiMo Key。 |
 | `message_debounce.py` | 同用户短消息合并及过时私聊回复取消。 |
 | `stream_router.py`、`prompts.py` | 解析真实聊天流；集中保存工具路由与人设优先提示。 |
-| `webui.json`、`assets/*.html` | 在 MaiBot WebUI 内提供定时日历、知识库和模块管理页面。 |
+| `webui.json`、`assets/*.html` | 在 MaiBot WebUI 内提供定时日历、课表、知识库和模块管理页面。 |
 
 新功能只需新增符合 `module_contract.py` 的模块、在 `plugin.py` 注册，并按需添加薄转发工具或 Hook。各模块可在配置页设置，已核验管理员也可通过 `secretary_feature_switch` 用自然语言开关模块和布尔子功能。前置开关、管理员权限、目标聊天流和 API Key 仍各自生效；开关打开不代表尚未填写的配置已经齐备。
 
@@ -393,6 +405,7 @@ uv pip install --python .venv/Scripts/python.exe pytest ruff
 | [idle_proactive_chat](https://github.com/YukiSakiko/idle_proactive_chat) | 真实聊天流解析和 Maisaka 主动任务的使用思路；本插件实现按时间窗口随机调度。 | 仓库未见根目录许可证文件；仅作设计参考。 |
 | [deepseek-web-search](https://github.com/glcoge/deepseek-web-search) | Search / Fetch 的功能与接口用途；本插件独立实现请求、缓存和余额记录。 | [GPL-3.0](https://github.com/glcoge/deepseek-web-search/blob/main/LICENSE)，不纳入本仓库代码。 |
 | [astrbot_plugin_qqadmin](https://github.com/Zhalslar/astrbot_plugin_qqadmin) | QQ 群管操作范围；本插件通过 MaiBot SDK 与适配器接口独立实现。 | [GPL-3.0](https://github.com/Zhalslar/astrbot_plugin_qqadmin/blob/main/LICENSE)，不纳入本仓库代码。 |
+| [CDUT-Studio](https://github.com/Nya-Angle/CDUT-Studio) | 成都理工大学青果教务的个人课表字段、节次时间与桌面认证流程；本插件独立实现导入和提醒。 | [AGPL-3.0](https://github.com/Nya-Angle/CDUT-Studio/blob/main/LICENSE)，不纳入本仓库代码。 |
 
 本插件自身按 [MIT 许可证](LICENSE) 发布；`_manifest.json` 的 `license` 字段也为 `MIT`，符合 [MaiBot 插件仓库文件要求](https://github.com/Mai-with-u/plugin-repo/blob/main/CONTRIBUTING.md)。随仓库分发的字体 `assets/fonts/NotoSansSC.ttf` 另按 [SIL Open Font License 1.1](assets/fonts/OFL.txt) 授权，不改为 MIT。上述 GPL 项目是功能和接口参考，不能把它们的源码直接复制进 MIT 模块。用户提供的头像和已审定的 Azure 日报底图分别位于 `assets/icon.png`、`assets/azure_theme.png`。
 

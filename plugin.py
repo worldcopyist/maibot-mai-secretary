@@ -43,6 +43,7 @@ from .relationship_management import RelationshipManagementModule
 from .role_recognition import RoleRecognitionModule
 from .scheduled_tasks import ScheduledTasksModule
 from .task_receipts import TaskReceiptModule
+from .timetable import TimetableModule, TimetableSettings
 from .virtual_life import VirtualLifeModule, VirtualLifeSettings
 from .voice_synthesis import DEFAULT_VOICE_PROMPT, VoiceSynthesisModule
 
@@ -794,6 +795,7 @@ class SecretaryConfig(PluginConfigBase):
     scheduled_tasks: ScheduledTasksSettings = Field(
         default_factory=ScheduledTasksSettings
     )
+    timetable: TimetableSettings = Field(default_factory=TimetableSettings)
     task_receipts: TaskReceiptSettings = Field(default_factory=TaskReceiptSettings)
     relationships: RelationshipManagementSettings = Field(default_factory=RelationshipManagementSettings)
     followups: FollowupSettings = Field(default_factory=FollowupSettings)
@@ -832,6 +834,7 @@ class MaiSecretaryPlugin(MaiBotPlugin):
     def __init__(self) -> None:
         super().__init__()
         self.scheduled = ScheduledTasksModule(self)
+        self.timetable = TimetableModule(self)
         self.feature_control = FeatureControlModule(self)
         self.task_receipts = TaskReceiptModule(self)
         self.relationships = RelationshipManagementModule(self)
@@ -852,6 +855,7 @@ class MaiSecretaryPlugin(MaiBotPlugin):
         self.message_debounce = MessageDebounceModule(self)
         self._modules: dict[str, SecretaryModule] = {}
         self._register_module(self.scheduled)
+        self._register_module(self.timetable)
         self._register_module(self.feature_control)
         self._register_module(self.task_receipts)
         self._register_module(self.relationships)
@@ -1406,6 +1410,17 @@ class MaiSecretaryPlugin(MaiBotPlugin):
         return await self.scheduled.cancel_task(**kwargs)
 
     @Tool(
+        "secretary_query_timetable",
+        description="用户询问当前聊天流今天或指定日期的课程时查询已导入课表。只返回当前聊天流的资料；没有导入时如实说明。",
+        parameters=[ToolParameterInfo(
+            name="date", param_type=ToolParamType.STRING,
+            description="可选，查询日期 YYYY-MM-DD；不填为插件时区的今天", required=False,
+        )],
+    )
+    async def secretary_query_timetable(self, **kwargs: Any) -> dict[str, Any]:
+        return await self.timetable.query(**kwargs)
+
+    @Tool(
         "secretary_generate_daily_report",
         description=(
             "只有插件管理员账号明确要求现在生成、总结或发送今天的聊天日报时使用，例如‘蓝天，现在给我出今日日报’。"
@@ -1654,6 +1669,38 @@ class MaiSecretaryPlugin(MaiBotPlugin):
     async def secretary_tasks_cancel(self, task_id: str, **kwargs: Any) -> dict[str, Any]:
         del kwargs
         return await self.scheduled.webui_cancel_task(task_id)
+
+    @API("secretary_timetable_list", description="WebUI 查看已导入课表和提醒设置")
+    async def secretary_timetable_list(self, **kwargs: Any) -> dict[str, Any]:
+        del kwargs
+        return await self.timetable.list_profiles()
+
+    @API("secretary_timetable_preview", description="WebUI 预览成都理工大学课表导入")
+    async def secretary_timetable_preview(
+        self, stream_id: str, semester_start: str, total_weeks: int,
+        content: str, **kwargs: Any,
+    ) -> dict[str, Any]:
+        del kwargs
+        try:
+            return await self.timetable.preview(stream_id, semester_start, total_weeks, content)
+        except (ValueError, TypeError) as exc:
+            return {"error": str(exc)}
+
+    @API("secretary_timetable_commit", description="WebUI 确认导入课表并安排上课提醒")
+    async def secretary_timetable_commit(self, preview_id: str, **kwargs: Any) -> dict[str, Any]:
+        del kwargs
+        try:
+            return await self.timetable.commit(preview_id)
+        except ValueError as exc:
+            return {"error": str(exc)}
+
+    @API("secretary_timetable_delete", description="WebUI 删除指定聊天流的课表和提醒")
+    async def secretary_timetable_delete(self, stream_id: str, **kwargs: Any) -> dict[str, Any]:
+        del kwargs
+        try:
+            return await self.timetable.delete(stream_id)
+        except ValueError as exc:
+            return {"error": str(exc)}
 
     @API("secretary_kb_list", description="WebUI 知识库文档列表")
     async def secretary_kb_list(self, **kwargs: Any) -> dict[str, Any]:

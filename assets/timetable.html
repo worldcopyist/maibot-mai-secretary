@@ -1,0 +1,142 @@
+<style>
+  :root { color-scheme: light; font-family: var(--maibot-font-body, system-ui, "Microsoft YaHei", sans-serif); color: var(--maibot-foreground, #18212f); }
+  :root.dark { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--maibot-background, #fff); }
+  .page { max-width: 1060px; margin: 0 auto; padding: 2px 0 12px; }
+  .card { margin-bottom: 16px; padding: 20px; border: 1px solid var(--maibot-border, #d0d5dd); border-radius: var(--maibot-radius, 8px); background: var(--maibot-surface, #fff); }
+  h2 { margin: 0 0 12px; font-size: 1.05rem; }
+  h3 { margin: 18px 0 8px; font-size: .94rem; }
+  p { line-height: 1.6; }
+  .muted { color: var(--maibot-muted, #667085); font-size: .875rem; }
+  .grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 16px; }
+  .wide { grid-column: 1 / -1; }
+  label { display: block; margin: 12px 0 7px; font-size: .875rem; font-weight: 600; }
+  .input { display: block; width: 100%; min-width: 0; padding: 8px 12px; border: 1px solid var(--maibot-border, #d0d5dd); border-radius: var(--maibot-radius, 6px); background: var(--maibot-soft, #fff); color: var(--maibot-foreground, #18212f); font: inherit; }
+  textarea.input { min-height: 105px; resize: vertical; }
+  .actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 16px; }
+  button { padding: 8px 16px; border: 1px solid var(--maibot-border, #d0d5dd); border-radius: var(--maibot-radius, 6px); background: var(--maibot-background, #fff); color: var(--maibot-foreground, #18212f); font: inherit; cursor: pointer; }
+  button.primary { border-color: var(--maibot-primary, #3478dd); background: var(--maibot-primary, #3478dd); color: var(--maibot-primary-foreground, #fff); }
+  button.danger { color: var(--maibot-danger, #c2414d); }
+  button:disabled { opacity: .55; cursor: not-allowed; }
+  :is(button, .input):focus-visible { outline: 2px solid var(--maibot-primary, #3478dd); outline-offset: 2px; }
+  #status { margin: 0 0 16px; padding: 10px 12px; border: 1px solid var(--maibot-border, #d0d5dd); border-radius: 6px; background: var(--maibot-soft, #f2f4f7); }
+  #status[data-tone="error"] { color: var(--maibot-danger, #c2414d); border-color: var(--maibot-danger, #c2414d); }
+  [hidden] { display: none !important; }
+  .course-list, .profile-list { list-style: none; margin: 0; padding: 0; }
+  .course-list li, .profile-list li { padding: 10px 0; border-top: 1px solid var(--maibot-border, #d0d5dd); line-height: 1.5; }
+  .profile-list li { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+  .profile-list li > div { min-width: 0; overflow-wrap: anywhere; }
+  .profile-list li button { flex-shrink: 0; }
+  .summary { padding: 10px 12px; border-radius: 6px; background: var(--maibot-soft, #f2f4f7); }
+  @media (max-width: 700px) { .grid { grid-template-columns: 1fr; } .profile-list li { flex-direction: column; } }
+</style>
+<main class="page">
+  <p class="muted">在这里导入课表后，麦麦会把未来课程的提醒安排到所选聊天流。课程内容只提供给该聊天流查询。</p>
+  <p id="status" role="status" aria-live="polite" hidden></p>
+  <section class="card" aria-labelledby="import-heading">
+    <h2 id="import-heading">导入成都理工大学课表</h2>
+    <p class="muted">支持保存自教务系统“个人课表”的完整 HTML，也支持 CDUT-Studio 查询“本学期完整课表”返回的含 <code>courses</code> 数组的 JSON 或 JSON 代码块。请不要只导入单周课表。先预览，再确认导入；不会要求你把学号、密码或登录 Cookie 交给插件。</p>
+    <div class="grid">
+      <div class="wide"><label for="stream">提醒发到哪个聊天流</label><select class="input" id="stream"><option value="">正在读取聊天流…</option></select><p class="muted">只会列出麦麦已有的聊天流。建议先选自己的私聊。</p></div>
+      <div><label for="semester-start">第 1 教学周的周一</label><input class="input" id="semester-start" type="date"><p class="muted">请按本学期校历填写；周次从这一天起计算。</p></div>
+      <div><label for="total-weeks">本学期教学周数</label><input class="input" id="total-weeks" type="number" min="1" max="25" value="20"><p class="muted">没有注明周次的课程按整个学期处理。</p></div>
+      <div class="wide"><label for="file">上传课表文件</label><input class="input" id="file" type="file" accept=".html,.htm,.json,.txt"></div>
+      <div class="wide"><label for="content">或粘贴 CDUT-Studio 的课表 JSON / 教务 HTML</label><textarea class="input" id="content" maxlength="800000" placeholder='{"courses":[{"name":"课程名称","dayOfWeek":1,"startSection":1,"endSection":2,"weekList":[1,2],"location":"教室"}]}'></textarea></div>
+    </div>
+    <div class="actions"><button class="primary" id="preview" type="button">预览课程和提醒</button></div>
+    <p class="muted">上课前提醒分钟数和第 1–11 节开始时间在插件配置页的「课表与上课提醒」中设置。当前设置见下方。</p>
+  </section>
+  <section class="card" id="preview-card" aria-labelledby="preview-heading" hidden>
+    <h2 id="preview-heading">导入预览</h2>
+    <p class="summary" id="preview-summary"></p>
+    <ul class="course-list" id="preview-courses"></ul>
+    <div class="actions"><button class="primary" id="commit" type="button">确认导入并安排提醒</button></div>
+  </section>
+  <section class="card" aria-labelledby="profiles-heading">
+    <h2 id="profiles-heading">已导入的课表</h2>
+    <p class="muted" id="settings">正在读取设置…</p>
+    <ul class="profile-list" id="profiles"><li class="muted">正在读取课表…</li></ul>
+    <div class="actions"><button id="refresh" type="button">刷新</button></div>
+  </section>
+</main>
+<script>
+(() => {
+  const $ = id => document.getElementById(id);
+  const add = (parent, tag, content) => { const node = document.createElement(tag); node.textContent = content; parent.append(node); return node; };
+  const show = (message, error = false) => { $('status').hidden = !message; $('status').textContent = message; $('status').dataset.tone = error ? 'error' : 'info'; };
+  const query = async (name, args = {}) => { const result = await maibot.query(name, args); if (result?.error) throw Error(result.error); return result; };
+  const action = async (name, args = {}) => { const result = await maibot.action(name, args); if (result?.error) throw Error(result.error); return result; };
+  const labels = new Map();
+  let previewId = '', busy = false;
+  function setBusy(value) { busy = value; for (const id of ['preview', 'commit', 'refresh']) $(id).disabled = value; }
+  async function fileText(file) {
+    if (file.size > 1600000) throw Error('课表文件过大，请只保存个人课表页面或使用 JSON');
+    const bytes = await file.arrayBuffer();
+    const head = new TextDecoder('latin1').decode(bytes.slice(0, 2048));
+    const charset = /charset\s*=\s*["']?(gb2312|gbk|gb18030)/i.test(head) ? 'gb18030' : 'utf-8';
+    return new TextDecoder(charset).decode(bytes);
+  }
+  async function refresh() {
+    const [streams, data] = await Promise.all([query('streams'), query('list')]);
+    const selected = $('stream').value;
+    $('stream').replaceChildren(); labels.clear();
+    const blank = add($('stream'), 'option', '请选择聊天流'); blank.value = '';
+    for (const entry of streams.streams || []) {
+      const option = add($('stream'), 'option', entry.label); option.value = entry.stream_id;
+      labels.set(entry.stream_id, entry.label);
+    }
+    $('stream').value = labels.has(selected) ? selected : '';
+    $('settings').textContent = `模块${data.enabled ? '已开启' : '已关闭'} · 提前 ${data.remind_before_minutes} 分钟提醒 · 第 1–11 节开始时间：${(data.section_starts || []).join('、')}`;
+    const list = $('profiles'); list.replaceChildren();
+    if (!(data.profiles || []).length) add(list, 'li', '还没有导入课表');
+    for (const profile of data.profiles || []) {
+      const row = document.createElement('li');
+      const info = document.createElement('div');
+      add(info, 'strong', labels.get(profile.stream_id) || profile.stream_id);
+      add(info, 'div', `${profile.source} · 第 1 周周一 ${profile.semester_start} · ${profile.courses.length} 门课程 · ${profile.reminder_count} 次未来提醒`);
+      row.append(info);
+      const button = add(row, 'button', '删除课表'); button.className = 'danger'; button.type = 'button';
+      button.addEventListener('click', async () => {
+        if (!window.confirm('确定删除这个聊天流的课表和全部未来上课提醒吗？')) return;
+        try { setBusy(true); await action('delete', {stream_id: profile.stream_id}); await refresh(); show('课表已删除'); }
+        catch (error) { show(String(error.message || error), true); }
+        finally { setBusy(false); }
+      });
+      list.append(row);
+    }
+  }
+  $('preview').addEventListener('click', async () => {
+    try {
+      setBusy(true); previewId = ''; $('preview-card').hidden = true;
+      const file = $('file').files[0];
+      const content = file ? await fileText(file) : $('content').value.trim();
+      const result = await action('preview', {
+        stream_id: $('stream').value, semester_start: $('semester-start').value,
+        total_weeks: Number($('total-weeks').value), content,
+      });
+      previewId = result.preview_id;
+      $('preview-summary').textContent = `${result.source} · ${result.course_count} 门课程 · ${result.reminder_count} 次未来提醒 · 提前 ${result.remind_before_minutes} 分钟`;
+      const list = $('preview-courses'); list.replaceChildren();
+      for (const course of result.courses) add(list, 'li', `周${course.day_of_week} 第${course.start_section}–${course.end_section}节 · ${course.name} · 第${course.weeks.join('、')}周${course.location ? ' · ' + course.location : ''}`);
+      $('preview-card').hidden = false;
+      show('请核对课程、周次、节次和提醒数量，然后确认导入。');
+    } catch (error) { show(String(error.message || error), true); }
+    finally { setBusy(false); }
+  });
+  $('commit').addEventListener('click', async () => {
+    if (!previewId) return;
+    try {
+      setBusy(true); const result = await action('commit', {preview_id: previewId});
+      previewId = ''; $('preview-card').hidden = true; await refresh(); show(result.content);
+    } catch (error) { show(String(error.message || error), true); }
+    finally { setBusy(false); }
+  });
+  $('refresh').addEventListener('click', async () => {
+    try { setBusy(true); await refresh(); show('课表已刷新'); }
+    catch (error) { show(String(error.message || error), true); }
+    finally { setBusy(false); }
+  });
+  refresh().catch(error => show(String(error.message || error), true));
+})();
+</script>

@@ -10,6 +10,11 @@ admin_accounts = []
 [scheduled_tasks]
 enabled = true
 
+[timetable]
+enabled = true
+remind_before_minutes = 20
+section_starts = ["08:10", "09:00", "10:15", "11:05", "14:30", "15:20", "16:25", "17:15", "19:10", "20:00", "20:50"]
+
 [task_receipts]
 enabled = true
 wait_minutes = 15
