@@ -8,37 +8,38 @@
   .card { padding: 20px; margin: 0 0 16px; border: 1px solid var(--maibot-border, #d0d5dd); border-radius: var(--maibot-radius, 8px); background: var(--maibot-surface, #fff); }
   h2 { margin: 0 0 14px; font-size: 1rem; }
   .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(245px, 1fr)); gap: 12px; }
-  .item { border: 1px solid var(--maibot-border, #d0d5dd); border-radius: 6px; padding: 12px; min-width: 0; overflow-wrap: anywhere; }
+  .item { border: 1px solid var(--maibot-border, #d0d5dd); border-radius: var(--maibot-radius, 6px); padding: 12px; min-width: 0; overflow-wrap: anywhere; }
   .item strong { display: block; margin-bottom: 5px; }
   .item p { margin: 5px 0; }
   .actions { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 10px; }
   button, input, select { font: inherit; }
-  button { cursor: pointer; padding: 7px 11px; border: 1px solid var(--maibot-border, #d0d5dd); border-radius: 6px; background: var(--maibot-background, #fff); color: var(--maibot-foreground, #18212f); }
+  button { cursor: pointer; padding: 7px 11px; border: 1px solid var(--maibot-border, #d0d5dd); border-radius: var(--maibot-radius, 6px); background: var(--maibot-background, #fff); color: var(--maibot-foreground, #18212f); }
   button:disabled { opacity: .5; cursor: not-allowed; }
   button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px solid var(--maibot-primary, #3478dd); outline-offset: 2px; }
   .primary { background: var(--maibot-primary, #3478dd); color: var(--maibot-primary-foreground, #fff); border-color: var(--maibot-primary, #3478dd); }
   .danger { color: var(--maibot-danger, #c2414d); border-color: var(--maibot-danger, #c2414d); }
-  input, select { padding: 7px 10px; border: 1px solid var(--maibot-border, #d0d5dd); border-radius: 6px; background: var(--maibot-background, #fff); color: var(--maibot-foreground, #18212f); }
+  input, select { padding: 7px 10px; border: 1px solid var(--maibot-border, #d0d5dd); border-radius: var(--maibot-radius, 6px); background: var(--maibot-background, #fff); color: var(--maibot-foreground, #18212f); }
   input[type=number] { width: 110px; }
   .form { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 14px; }
   .form label { font-size: .875rem; }
-  #status { padding: 10px 12px; margin: 0 0 16px; background: var(--maibot-soft, #f2f4f7); border: 1px solid var(--maibot-border, #d0d5dd); border-radius: 6px; }
+  #status { padding: 10px 12px; margin: 0 0 16px; background: var(--maibot-soft, #f2f4f7); border: 1px solid var(--maibot-border, #d0d5dd); border-radius: var(--maibot-radius, 6px); }
   #status[data-error=true] { color: var(--maibot-danger, #c2414d); }
   [hidden] { display: none !important; }
 </style>
 <main>
   <p class="intro">这里显示当前实际生效的模块状态。聊天中由管理员设定的开关会保存到小秘书状态文件，并覆盖配置页原值；“恢复配置”可撤销这层覆盖。MaiBot 管理页若整体关闭插件，聊天开关无法重新加载它。</p>
   <p id="status" role="status" aria-live="polite" hidden></p>
-  <section class="card"><h2>功能开关</h2><div id="switches" class="grid"></div></section>
-  <section class="card"><h2>关系管理</h2><div class="form"><label for="account">QQ 账号</label><input id="account" placeholder="qq:123456789" maxlength="50"><select id="level" aria-label="关系级别"><option value="familiar">熟人</option><option value="stranger">陌生人</option><option value="reset">恢复自动判断</option></select><button class="primary" id="save-relationship">保存关系</button></div><div id="relationships" class="grid"></div></section>
-  <section class="card"><h2>约定回访</h2><p class="muted">用户可以在聊天中用自然语言创建、查询、取消个人回访，或退出个人回访。页面可取消已安排的事项。</p><div id="followups" class="grid"></div></section>
-  <section class="card"><h2>定时任务回执</h2><p class="muted">“已入队”只是主程序接受任务；“确认发送”才有实际发送回执。“未知”不会自动重发。仅明确发送失败可手动重试一次。</p><div id="receipts" class="grid"></div></section>
-  <div class="actions"><button id="refresh">刷新状态</button></div>
+  <section class="card maibot-card"><h2>功能开关</h2><div id="switches" class="grid"></div></section>
+  <section class="card maibot-card"><h2>关系管理</h2><div class="form"><label for="account">QQ 账号</label><input class="maibot-input" id="account" placeholder="qq:123456789" maxlength="50"><select class="maibot-select" id="level" aria-label="关系级别"><option value="familiar">熟人</option><option value="stranger">陌生人</option><option value="reset">恢复自动判断</option></select><button class="primary maibot-button maibot-button-primary" id="save-relationship">保存关系</button></div><div id="relationships" class="grid"></div></section>
+  <section class="card maibot-card"><h2>约定回访</h2><p class="muted">用户可以在聊天中用自然语言创建、查询、取消个人回访，或退出个人回访。页面可取消已安排的事项。</p><div id="followups" class="grid"></div></section>
+  <section class="card maibot-card"><h2>定时任务回执</h2><p class="muted">“已入队”只是主程序接受任务；“确认发送”才有实际发送回执。“未知”不会自动重发。仅明确发送失败可手动重试一次。</p><div id="receipts" class="grid"></div></section>
+  <div class="actions"><button class="maibot-button" id="refresh">刷新状态</button></div>
 </main>
 <script>
 (() => {
+  document.body.classList.add('maibot-page');
   const $ = id => document.getElementById(id);
-  const add = (parent, tag, value, className) => { const node = document.createElement(tag); node.textContent = String(value ?? ''); if (className) node.className = className; parent.append(node); return node; };
+  const add = (parent, tag, value, className) => { const node = document.createElement(tag); node.textContent = String(value ?? ''); if (className) node.className = className; if (tag === 'button') node.classList.add('maibot-button'); parent.append(node); return node; };
   const status = (value, error=false) => { $('status').hidden = !value; $('status').textContent = value; $('status').dataset.error = String(error); };
   const call = async (name, args={}) => { const result = await maibot.action(name, args); if (result?.error || result?.success === false) throw Error(result.error || result.content || '操作失败'); return result; };
   const run = async task => { try { status('正在保存…'); await task(); await refresh(); status('已保存'); } catch (error) { status(String(error.message || error), true); } };

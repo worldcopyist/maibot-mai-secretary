@@ -58,7 +58,7 @@
     .search-form .maibot-button { align-self: flex-start; }
   }
 </style>
-<main class="maibot-page knowledge-page">
+<main class="knowledge-page">
   <p class="intro">资料保存在小秘书的知识库中。只有插件设置里授权的聊天流能让麦麦查询；允许列表为空时，聊天中无法读取资料。</p>
   <div class="grid">
     <section class="maibot-card kb-card" aria-labelledby="upload-heading">
@@ -90,7 +90,7 @@
     <div class="maibot-card-header kb-card-header"><h2 id="moderation-heading">QQ群管 · 禁言敏感词</h2><button class="maibot-button" id="mod-refresh" type="button">刷新词库</button></div>
     <p class="muted">这个区域与普通知识库分开，麦麦不会用这些词回答知识问题。先在插件「QQ群管」设置中加入群号，再在下方选择群。每行或每个表格单元格写一个词；消息命中后由麦麦判断语境，明确无害的说法不会处罚。</p>
     <p class="muted" id="mod-settings"></p>
-    <label for="mod-group">应用到哪个群</label><select class="maibot-input" id="mod-group"></select>
+    <label for="mod-group">应用到哪个群</label><select class="maibot-select" id="mod-group"></select>
     <div class="grid" style="margin-top:16px">
       <div>
         <label for="mod-file">上传词库文档</label><input class="maibot-input" id="mod-file" type="file" accept=".txt,.md,.markdown,.csv,.tsv,.xlsx,.docx,.pdf,.html,.htm,.json,.jsonl,.xml,.yaml,.yml,.rtf,.epub,.odt,.ods,.odp">
@@ -108,6 +108,7 @@
 </main>
 <script>
 (() => {
+  document.body.classList.add('maibot-page');
   const $ = id => document.getElementById(id);
   const status = (message, error = false) => { $('status').hidden = !message; $('status').textContent = message; $('status').dataset.tone = error ? 'error' : 'info'; };
   const busy = value => { for (const id of ['upload','paste','refresh','search','mod-refresh','mod-upload','mod-paste']) $(id).disabled = value; };

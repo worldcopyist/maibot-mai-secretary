@@ -24,6 +24,8 @@
 
 These routes open inside an authenticated MaiBot WebUI installation. Their Markdown links may not open directly from GitHub.
 
+All four plugin pages follow MaiBot's active light or dark mode, color palette, and dashboard style. An open page updates when the user changes the MaiBot theme. MaiBot renders the plugin configuration page in its own theme.
+
 ## Features and modules
 
 | Module | What it does | Main controls or tools |
@@ -91,7 +93,7 @@ The avatar above is declared as `assets/icon.png` in `_manifest.json` for MaiBot
 
 ## Install and test
 
-This plugin runs through the MaiBot SDK without changing MaiBot's source code. It was tested on MaiBot 1.3.7 and plugin SDK 2.12.0; consult `_manifest.json` for declared bounds and capabilities. The repository's manifest version is `0.31.0`.
+This plugin runs through the MaiBot SDK without changing MaiBot's source code. It was tested on MaiBot 1.3.7 and plugin SDK 2.12.0; consult `_manifest.json` for declared bounds and capabilities. The repository's manifest version is `0.31.1`.
 
 Place this repository in its own directory under MaiBot's `plugins/` directory, install `requirements.txt` in MaiBot's Python environment, then enable the plugin and configure it in MaiBot WebUI. Preserve the installation's actual `config.toml` and `data/plugins/worldcopyist.mai-secretary/` when updating. Keep API keys out of Git. The default DeepSeek web module, daily scheduled report, follow-ups, and Blueberry budget alerts are off until configured. A proactive target list left empty sends no random messages.
 

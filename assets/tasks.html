@@ -5,6 +5,7 @@
   body { margin: 0; background: var(--maibot-background, #fff); }
   .page { max-width: 1120px; margin: 0 auto; padding: 2px 0 12px; }
   .intro, .muted { color: var(--maibot-muted, #667085); font-size: .875rem; line-height: 1.6; }
+  a { color: var(--maibot-primary, #3478dd); }
   .intro { margin: 0 0 18px; }
   .card { padding: 20px; margin-bottom: 16px; border: 1px solid var(--maibot-border, #d0d5dd); border-radius: var(--maibot-radius, 8px); background: var(--maibot-surface, #fff); color: var(--maibot-foreground, #18212f); }
   .card-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 16px; padding-bottom: 12px; border-bottom: 1px solid var(--maibot-border, #d0d5dd); }
@@ -19,6 +20,7 @@
   .hint { margin: 6px 0 0; }
   .weekdays { display: flex; flex-wrap: wrap; gap: 8px 14px; margin-top: 8px; }
   .weekday { display: inline-flex; align-items: center; gap: 5px; margin: 0; font-weight: 400; }
+  .weekday input { accent-color: var(--maibot-primary, #3478dd); }
   .actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 16px; }
   .button { padding: 8px 16px; border: 1px solid var(--maibot-border, #d0d5dd); border-radius: var(--maibot-radius, 6px); background: var(--maibot-background, #fff); color: var(--maibot-foreground, #18212f); font: inherit; cursor: pointer; }
   .primary { border-color: var(--maibot-primary, #3478dd); background: var(--maibot-primary, #3478dd); color: var(--maibot-primary-foreground, #fff); }
@@ -41,10 +43,11 @@
   .calendar-weekdays, .calendar-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 6px; }
   .calendar-weekdays { margin-bottom: 8px; text-align: center; color: var(--maibot-muted, #667085); font-size: .8125rem; }
   .calendar-weekdays span { padding: 4px 0; }
-  .calendar-day { min-width: 0; min-height: 82px; padding: 8px; border: 1px solid var(--maibot-border, #d0d5dd); border-radius: var(--maibot-radius, 6px); background: var(--maibot-background, #fff); color: var(--maibot-foreground, #18212f); font: inherit; text-align: left; cursor: pointer; }
+  .calendar-day.maibot-button { min-width: 0; min-height: 82px; padding: 8px; border: 1px solid var(--maibot-border, #d0d5dd); border-radius: var(--maibot-radius, 6px); background: var(--maibot-background, #fff); color: var(--maibot-foreground, #18212f); font: inherit; text-align: left; cursor: pointer; display: block; }
   .calendar-day:hover { border-color: var(--maibot-primary, #3478dd); }
   .calendar-day[aria-pressed="true"] { border-color: var(--maibot-primary, #3478dd); box-shadow: inset 0 0 0 1px var(--maibot-primary, #3478dd); background: var(--maibot-soft, #f2f4f7); }
   .calendar-day.today .calendar-number { color: var(--maibot-primary, #3478dd); font-weight: 700; }
+  .calendar-day.today[aria-pressed="true"] .calendar-number { color: var(--maibot-primary-foreground, #fff); }
   .calendar-day.past { opacity: .72; }
   .calendar-number { display: block; font-size: .875rem; font-weight: 600; }
   .calendar-count { display: block; margin-top: 9px; padding: 3px 5px; border-radius: 4px; background: var(--maibot-soft, #f2f4f7); color: var(--maibot-foreground, #18212f); font-size: .75rem; line-height: 1.3; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -56,22 +59,22 @@
   @media (max-width: 720px) {
     .fields { grid-template-columns: 1fr; } .task-row, .card-header { align-items: flex-start; flex-direction: column; }
     .calendar-tools { width: 100%; } .calendar-tools .input { flex: 1; min-width: 0; }
-    .calendar-day { min-height: 58px; padding: 5px; }
+    .calendar-day.maibot-button { min-height: 58px; padding: 5px; }
     .calendar-blank { min-height: 58px; } .calendar-count { margin-top: 4px; font-size: .6875rem; }
   }
 </style>
 <main class="page">
   <p class="intro">这里显示普通定时任务，包括在聊天中创建的任务。单次任务提交提醒后会从列表移除；启用任务回执时，仍可在那里查看发送结果。每天和每周任务会保留。上课提醒请到<a href="/extensions/worldcopyist.mai-secretary/timetable">课表页面</a>查看。手动创建的任务会在所选聊天流中执行；下方时间按填写的时区计算。</p>
   <p id="status" role="status" aria-live="polite" hidden></p>
-  <section class="card" aria-labelledby="calendar-heading">
-    <div class="card-header">
+  <section class="card maibot-card" aria-labelledby="calendar-heading">
+    <div class="card-header maibot-card-header">
       <h2 id="calendar-heading">任务日历</h2>
       <div class="calendar-tools">
-        <button class="button" id="previous-month" type="button" aria-label="上个月">‹</button>
-        <select class="input" id="calendar-year" aria-label="选择年份"></select>
-        <select class="input" id="calendar-month" aria-label="选择月份"></select>
-        <button class="button" id="next-month" type="button" aria-label="下个月">›</button>
-        <button class="button" id="today" type="button">今天</button>
+        <button class="button maibot-button" id="previous-month" type="button" aria-label="上个月">‹</button>
+        <select class="input maibot-select" id="calendar-year" aria-label="选择年份"></select>
+        <select class="input maibot-select" id="calendar-month" aria-label="选择月份"></select>
+        <button class="button maibot-button" id="next-month" type="button" aria-label="下个月">›</button>
+        <button class="button maibot-button" id="today" type="button">今天</button>
       </div>
     </div>
     <p class="muted">可切换月份和年份，支持选择 2030 年及之后的日期。点击某天会选中它，并把日期填入下方的单次任务表单。日历按每项任务自己的时区标记；周期任务只显示下次执行及之后的日期。</p>
@@ -79,28 +82,29 @@
     <div class="calendar-grid" id="calendar-grid" role="group" aria-label="选择任务日期"></div>
     <div class="day-detail" id="day-detail" aria-live="polite"></div>
   </section>
-  <section class="card" aria-labelledby="create-heading">
-    <div class="card-header"><h2 id="create-heading">手动创建任务</h2></div>
+  <section class="card maibot-card" aria-labelledby="create-heading">
+    <div class="card-header maibot-card-header"><h2 id="create-heading">手动创建任务</h2></div>
     <div class="fields">
-      <div class="wide"><label for="stream">发送到哪个聊天流？</label><select class="input" id="stream"><option value="">正在读取聊天流…</option></select><p class="muted hint">只能选择麦麦已经建立的聊天流；列表为空时，先在目标聊天中发一条消息。</p></div>
-      <div class="wide"><label for="instruction">到点要麦麦做什么？</label><textarea class="input" id="instruction" maxlength="1000" placeholder="例如：告诉我今天的天气预报，并附上查询来源"></textarea></div>
-      <div><label for="schedule">执行方式</label><select class="input" id="schedule"><option value="once">仅一次</option><option value="daily">每天</option><option value="weekly">每周</option></select></div>
-      <div><label for="timezone">时区</label><input class="input" id="timezone" maxlength="80" placeholder="Asia/Shanghai" autocomplete="off"></div>
-      <div id="once-field"><label for="once-at">执行日期和时间</label><input class="input" id="once-at" type="datetime-local"></div>
-      <div id="repeat-field" hidden><label for="repeat-at">每天执行时间</label><input class="input" id="repeat-at" type="time" value="08:00"></div>
+      <div class="wide"><label for="stream">发送到哪个聊天流？</label><select class="input maibot-select" id="stream"><option value="">正在读取聊天流…</option></select><p class="muted hint">只能选择麦麦已经建立的聊天流；列表为空时，先在目标聊天中发一条消息。</p></div>
+      <div class="wide"><label for="instruction">到点要麦麦做什么？</label><textarea class="input maibot-input" id="instruction" maxlength="1000" placeholder="例如：告诉我今天的天气预报，并附上查询来源"></textarea></div>
+      <div><label for="schedule">执行方式</label><select class="input maibot-select" id="schedule"><option value="once">仅一次</option><option value="daily">每天</option><option value="weekly">每周</option></select></div>
+      <div><label for="timezone">时区</label><input class="input maibot-input" id="timezone" maxlength="80" placeholder="Asia/Shanghai" autocomplete="off"></div>
+      <div id="once-field"><label for="once-at">执行日期和时间</label><input class="input maibot-input" id="once-at" type="datetime-local"></div>
+      <div id="repeat-field" hidden><label for="repeat-at">每天执行时间</label><input class="input maibot-input" id="repeat-at" type="time" value="08:00"></div>
       <div id="weekdays-field" class="wide" hidden><label>星期几执行？</label><div class="weekdays" id="weekdays"></div></div>
     </div>
-    <div class="actions"><button class="button primary" id="create" type="button">创建定时任务</button></div>
+    <div class="actions"><button class="button primary maibot-button maibot-button-primary" id="create" type="button">创建定时任务</button></div>
   </section>
-  <section class="card" aria-labelledby="tasks-heading">
-    <div class="card-header"><h2 id="tasks-heading">已创建的任务</h2><button class="button" id="refresh" type="button">刷新</button></div>
+  <section class="card maibot-card" aria-labelledby="tasks-heading">
+    <div class="card-header maibot-card-header"><h2 id="tasks-heading">已创建的任务</h2><button class="button maibot-button" id="refresh" type="button">刷新</button></div>
     <ul id="tasks" class="task-list"><li class="muted empty">正在读取任务…</li></ul>
   </section>
 </main>
 <script>
 (() => {
+  document.body.classList.add('maibot-page');
   const $ = id => document.getElementById(id);
-  const add = (parent, tag, content, className) => { const node = document.createElement(tag); node.textContent = content; if (className) node.className = className; parent.append(node); return node; };
+  const add = (parent, tag, content, className) => { const node = document.createElement(tag); node.textContent = content; if (className) node.className = className; if (tag === 'button') { node.classList.add('maibot-button'); if (node.classList.contains('primary')) node.classList.add('maibot-button-primary'); if (node.classList.contains('danger')) node.classList.add('maibot-button-danger'); } parent.append(node); return node; };
   const showStatus = (message, error = false) => { $('status').hidden = !message; $('status').textContent = message; $('status').dataset.tone = error ? 'error' : 'info'; };
   const query = async (name, args = {}) => { const result = await maibot.query(name, args); if (result?.error) throw Error(result.error); return result; };
   const action = async (name, args = {}) => { const result = await maibot.action(name, args); if (result?.error) throw Error(result.error); return result; };
@@ -169,7 +173,7 @@
       const date = dayKey(calendarYear, calendarMonth, day);
       const matches = tasksOn(date, calendarYear, calendarMonth, day);
       const button = document.createElement('button'); button.type = 'button';
-      button.className = `calendar-day${date === today ? ' today' : ''}${date < today ? ' past' : ''}`;
+      button.className = `calendar-day maibot-button${date === today ? ' today' : ''}${date < today ? ' past' : ''}`;
       button.setAttribute('aria-pressed', String(date === selectedDay));
       button.setAttribute('aria-label', `${calendarYear}年${calendarMonth}月${day}日，${matches.length}项任务`);
       add(button, 'span', String(day), 'calendar-number');

@@ -33,31 +33,31 @@
 <main class="page">
   <p class="muted">在这里导入课表后，麦麦会把未来课程的提醒安排到所选聊天流。课程内容只提供给该聊天流查询。</p>
   <p id="status" role="status" aria-live="polite" hidden></p>
-  <section class="card" aria-labelledby="import-heading">
+  <section class="card maibot-card" aria-labelledby="import-heading">
     <h2 id="import-heading">导入课表文件</h2>
     <p class="muted"><strong>试验性功能：</strong>目前只适配开发者学校导出的「学生个人课表」.xls 文件，其他学校和文件格式尚未验证。请上传整学期课表，先核对预览中的周次和节次，再确认导入。插件不会要求学号、密码或登录 Cookie。</p>
     <div class="grid">
-      <div class="wide"><label for="stream">提醒发到哪个聊天流</label><select class="input" id="stream"><option value="">正在读取聊天流…</option></select><p class="muted">只会列出麦麦已有的聊天流。建议先选自己的私聊。</p></div>
-      <div><label for="semester-start">第 1 教学周的周一</label><input class="input" id="semester-start" type="date"><p class="muted">请按本学期校历填写；周次从这一天起计算。</p></div>
-      <div><label for="total-weeks">本学期教学周数</label><input class="input" id="total-weeks" type="number" min="1" max="25" value="20"><p class="muted">用于检查导入的课程周次是否超出学期范围。</p></div>
-      <div class="wide"><label for="file">上传 .xls 课表文件</label><input class="input" id="file" type="file" accept=".xls"><p class="muted">只支持当前适配的 .xls 导出格式，文件上限约 48 KB。</p></div>
+      <div class="wide"><label for="stream">提醒发到哪个聊天流</label><select class="input maibot-select" id="stream"><option value="">正在读取聊天流…</option></select><p class="muted">只会列出麦麦已有的聊天流。建议先选自己的私聊。</p></div>
+      <div><label for="semester-start">第 1 教学周的周一</label><input class="input maibot-input" id="semester-start" type="date"><p class="muted">请按本学期校历填写；周次从这一天起计算。</p></div>
+      <div><label for="total-weeks">本学期教学周数</label><input class="input maibot-input" id="total-weeks" type="number" min="1" max="25" value="20"><p class="muted">用于检查导入的课程周次是否超出学期范围。</p></div>
+      <div class="wide"><label for="file">上传 .xls 课表文件</label><input class="input maibot-input" id="file" type="file" accept=".xls"><p class="muted">只支持当前适配的 .xls 导出格式，文件上限约 48 KB。</p></div>
     </div>
-    <div class="actions"><button class="primary" id="preview" type="button">预览课程和提醒</button></div>
+    <div class="actions"><button class="primary maibot-button maibot-button-primary" id="preview" type="button">预览课程和提醒</button></div>
     <p class="muted">上课前提醒分钟数和第 1–11 节开始时间在插件配置页的「课表与上课提醒」中设置。当前设置见下方。</p>
   </section>
-  <section class="card" id="preview-card" aria-labelledby="preview-heading" hidden>
+  <section class="card maibot-card" id="preview-card" aria-labelledby="preview-heading" hidden>
     <h2 id="preview-heading">导入预览</h2>
     <p class="summary" id="preview-summary"></p>
     <ul class="course-list" id="preview-courses"></ul>
-    <div class="actions"><button class="primary" id="commit" type="button">确认导入并安排提醒</button></div>
+    <div class="actions"><button class="primary maibot-button maibot-button-primary" id="commit" type="button">确认导入并安排提醒</button></div>
   </section>
-  <section class="card" aria-labelledby="profiles-heading">
+  <section class="card maibot-card" aria-labelledby="profiles-heading">
     <h2 id="profiles-heading">已导入的课表</h2>
     <p class="muted" id="settings">正在读取设置…</p>
     <ul class="profile-list" id="profiles"><li class="muted">正在读取课表…</li></ul>
-    <div class="actions"><button id="refresh" type="button">刷新</button></div>
+    <div class="actions"><button class="maibot-button" id="refresh" type="button">刷新</button></div>
   </section>
-  <section class="card" aria-labelledby="reminders-heading">
+  <section class="card maibot-card" aria-labelledby="reminders-heading">
     <h2 id="reminders-heading">未来上课提醒</h2>
     <p class="muted" id="reminder-summary">正在读取提醒…</p>
     <ul class="reminder-list" id="reminders"><li class="muted">正在读取提醒…</li></ul>
@@ -65,8 +65,9 @@
 </main>
 <script>
 (() => {
+  document.body.classList.add('maibot-page');
   const $ = id => document.getElementById(id);
-  const add = (parent, tag, content) => { const node = document.createElement(tag); node.textContent = content; parent.append(node); return node; };
+  const add = (parent, tag, content) => { const node = document.createElement(tag); node.textContent = content; if (tag === 'button') node.classList.add('maibot-button'); parent.append(node); return node; };
   const show = (message, error = false) => { $('status').hidden = !message; $('status').textContent = message; $('status').dataset.tone = error ? 'error' : 'info'; };
   const query = async (name, args = {}) => { const result = await maibot.query(name, args); if (result?.error) throw Error(result.error); return result; };
   const action = async (name, args = {}) => { const result = await maibot.action(name, args); if (result?.error) throw Error(result.error); return result; };
@@ -101,7 +102,7 @@
       add(info, 'strong', labels.get(profile.stream_id) || profile.stream_id);
       add(info, 'div', `${profile.source} · 第 1 周周一 ${profile.semester_start} · ${profile.courses.length} 门课程 · ${profile.reminder_count} 次未来提醒`);
       row.append(info);
-      const button = add(row, 'button', '删除课表'); button.className = 'danger'; button.type = 'button';
+      const button = add(row, 'button', '删除课表'); button.classList.add('danger', 'maibot-button-danger'); button.type = 'button';
       button.addEventListener('click', async () => {
         if (!window.confirm('确定删除这个聊天流的课表和全部未来上课提醒吗？')) return;
         try { setBusy(true); await action('delete', {stream_id: profile.stream_id}); await refresh(); show('课表已删除'); }
