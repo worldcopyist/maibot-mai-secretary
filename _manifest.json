@@ -2,7 +2,7 @@
   "manifest_version": 2,
   "id": "worldcopyist.mai-secretary",
   "name": "麦麦小秘书",
-  "version": "0.29.0",
+  "version": "0.29.1",
   "description": "模块化的主动聊天、共享模拟生活与心情、定时任务、成都理工大学课表提醒、日报、关系管理、反霸凌、知识库、联网和 QQ 群管。",
   "display": {
     "icon": {

@@ -249,22 +249,20 @@ def _courses_from_html(content: str, total_weeks: int) -> list[Course]:
 
 
 _SECTION_MARK = re.compile(r"\[([\d\-]+)节\]")
+_XLS_SECTION_ROW = re.compile(r"(?:第\s*)?[一二三四五六七八九十零〇\d\s\-—~至、,，]+节")
 
 
-def _xls_course(block: str, day: int, row_label: str, row_number: int,
-                total_weeks: int) -> Course:
+def _xls_course(block: str, day: int, total_weeks: int) -> Course:
     lines = [line.strip() for line in block.split("\n") if line.strip()]
     marker = next((index for index, line in enumerate(lines)
-                   if _SECTION_MARK.search(line) or ("周" in line and re.search(r"\d", line))), -1)
-    if marker < 0:
-        raise ValueError(f"无法识别课程块：{block.strip()[:60]}")
+                   if _SECTION_MARK.search(line)), -1)
+    if marker < 2:
+        raise ValueError(f"课程缺少独立的周次和节次行：{block.strip()[:60]}")
     week_line = lines[marker]
     section_mark = _SECTION_MARK.search(week_line)
-    if section_mark:
-        numbers = [int(value) for value in re.findall(r"\d+", section_mark.group(1))]
-        start_section, end_section = min(numbers), max(numbers)
-    else:
-        start_section, end_section = _section_range(row_label, row_number)
+    assert section_mark is not None
+    numbers = [int(value) for value in re.findall(r"\d+", section_mark.group(1))]
+    start_section, end_section = min(numbers), max(numbers)
     weeks = parse_weeks(week_line)
     if not weeks:
         raise ValueError(f"无法识别教学周：{week_line[:80]}")
@@ -300,13 +298,16 @@ def _courses_from_xls(payload: bytes, total_weeks: int) -> list[Course]:
     courses: list[Course] = []
     for row in range(header_row + 1, sheet.nrows):
         label = str(sheet.cell_value(row, 0)).strip()
+        # 教务导出把“备注/课程说明”放在星期列下方；它不是某节课。
+        if not _XLS_SECTION_ROW.fullmatch(label):
+            continue
         for col, day in day_columns.items():
             cell = str(sheet.cell_value(row, col)).strip()
             if not cell:
                 continue
             for block in re.split(r"\n\s*\n", cell):
                 if block.strip():
-                    courses.append(_xls_course(block, day, label, row, total_weeks))
+                    courses.append(_xls_course(block, day, total_weeks))
     return courses
 
 

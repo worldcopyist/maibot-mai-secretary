@@ -150,6 +150,7 @@ def _sample_xls_base64() -> str:
     sheet.write(4, 0, "中午")
     sheet.write(5, 0, "第三四节")
     sheet.write(5, 1, "\n计算机视觉实训\n罗俊松\n2([周])[03-04节]\n(宜）综B201（计算机）\n")
+    sheet.write(6, 1, "：劳动教育 林杰 1-20周;实践训练计划 刘同;")
     buffer = io.BytesIO()
     book.save(buffer)
     return base64.b64encode(buffer.getvalue()).decode()
@@ -170,6 +171,7 @@ def test_cdut_xls_import_parses_grid_and_course_blocks():
     training = next(course for course in courses if course.name == "计算机视觉实训")
     assert (training.day_of_week, training.start_section, training.end_section) == (1, 3, 4)
     assert training.location == "综B201（计算机）"
+    assert all("：劳动教育" not in course.name for course in courses)
 
     with pytest.raises(ValueError, match="不是有效的 .xls"):
         parse_import(timetable.XLS_BASE64_PREFIX + base64.b64encode(b"not an excel").decode(), 18)
