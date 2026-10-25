@@ -3,6 +3,7 @@ from __future__ import annotations
 import importlib
 import json
 from datetime import UTC, datetime
+from pathlib import Path
 
 import pytest
 from test_secretary import make_plugin
@@ -115,3 +116,11 @@ def test_timetable_rejects_ambiguous_week_and_invalid_section():
     wrapped["json"]["week"] = 1
     with pytest.raises(ValueError, match="完整课表"):
         parse_import(json.dumps(wrapped), 20)
+
+
+def test_webui_declaration_matches_host_limits():
+    spec = json.loads((Path(__file__).resolve().parents[1] / "webui.json").read_text(encoding="utf-8"))
+    page = next(item for item in spec["pages"] if item["id"] == "timetable")
+    assert page["icon"] in {"puzzle", "chart", "settings", "database", "list"}
+    content = page["actions"]["preview"]["parameters"]["content"]
+    assert content["max_length"] == timetable.MAX_IMPORT_CHARS <= 65_536

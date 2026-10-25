@@ -42,7 +42,7 @@
       <div><label for="semester-start">第 1 教学周的周一</label><input class="input" id="semester-start" type="date"><p class="muted">请按本学期校历填写；周次从这一天起计算。</p></div>
       <div><label for="total-weeks">本学期教学周数</label><input class="input" id="total-weeks" type="number" min="1" max="25" value="20"><p class="muted">没有注明周次的课程按整个学期处理。</p></div>
       <div class="wide"><label for="file">上传课表文件</label><input class="input" id="file" type="file" accept=".html,.htm,.json,.txt"></div>
-      <div class="wide"><label for="content">或粘贴 CDUT-Studio 的课表 JSON / 教务 HTML</label><textarea class="input" id="content" maxlength="800000" placeholder='{"courses":[{"name":"课程名称","dayOfWeek":1,"startSection":1,"endSection":2,"weekList":[1,2],"location":"教室"}]}'></textarea></div>
+      <div class="wide"><label for="content">或粘贴 CDUT-Studio 的课表 JSON / 教务 HTML</label><textarea class="input" id="content" placeholder='{"courses":[{"name":"课程名称","dayOfWeek":1,"startSection":1,"endSection":2,"weekList":[1,2],"location":"教室"}]}'></textarea><p class="muted">HTML 会先在浏览器里压缩成课表表格再上传（上限 65536 字符）；较大的教务页面建议直接粘贴 CDUT-Studio 的 JSON。</p></div>
     </div>
     <div class="actions"><button class="primary" id="preview" type="button">预览课程和提醒</button></div>
     <p class="muted">上课前提醒分钟数和第 1–11 节开始时间在插件配置页的「课表与上课提醒」中设置。当前设置见下方。</p>
@@ -70,12 +70,42 @@
   const labels = new Map();
   let previewId = '', busy = false;
   function setBusy(value) { busy = value; for (const id of ['preview', 'commit', 'refresh']) $(id).disabled = value; }
+  const LIMIT = 65536; // MaiBot WebUI 字符串参数上限
   async function fileText(file) {
-    if (file.size > 1600000) throw Error('课表文件过大，请只保存个人课表页面或使用 JSON');
+    if (file.size > 4000000) throw Error('课表文件过大，请只保存个人课表页面或使用 JSON');
     const bytes = await file.arrayBuffer();
     const head = new TextDecoder('latin1').decode(bytes.slice(0, 2048));
     const charset = /charset\s*=\s*["']?(gb2312|gbk|gb18030)/i.test(head) ? 'gb18030' : 'utf-8';
     return new TextDecoder(charset).decode(bytes);
+  }
+  // 把整页教务 HTML 压缩成只含课表行的表格；“查看源代码”保存的快照先逐行还原。
+  function compactHtml(text) {
+    let doc = new DOMParser().parseFromString(text, 'text/html');
+    const sourceLines = doc.querySelectorAll('td.line-content');
+    if (sourceLines.length) {
+      doc = new DOMParser().parseFromString(
+        Array.from(sourceLines, line => line.textContent).join(''), 'text/html');
+    }
+    const rows = [];
+    const seen = new Set();
+    for (const cell of doc.querySelectorAll('.kbcontent, .kbcontent1')) {
+      const row = cell.closest('tr');
+      if (row && !seen.has(row)) { seen.add(row); rows.push(row.outerHTML); }
+    }
+    if (rows.length) return '<table>' + rows.join('') + '</table>';
+    return text.replace(/<script[\s\S]*?<\/script>/gi, '')
+      .replace(/<style[\s\S]*?<\/style>/gi, '')
+      .replace(/<!--[\s\S]*?-->/g, '');
+  }
+  function prepareContent(text) {
+    const trimmed = text.trim();
+    if (!trimmed) throw Error('请先上传课表文件或粘贴课表内容');
+    const content = trimmed.startsWith('{') || trimmed.startsWith('[')
+      ? trimmed : compactHtml(trimmed);
+    if (content.length > LIMIT) {
+      throw Error(`课表内容压缩后仍有 ${content.length} 字符，超过 ${LIMIT} 上限；请改用 CDUT-Studio 返回的 courses JSON 导入`);
+    }
+    return content;
   }
   async function refresh() {
     const [streams, data] = await Promise.all([query('streams'), query('list')]);
@@ -110,7 +140,7 @@
     try {
       setBusy(true); previewId = ''; $('preview-card').hidden = true;
       const file = $('file').files[0];
-      const content = file ? await fileText(file) : $('content').value.trim();
+      const content = prepareContent(file ? await fileText(file) : $('content').value);
       const result = await action('preview', {
         stream_id: $('stream').value, semester_start: $('semester-start').value,
         total_weeks: Number($('total-weeks').value), content,

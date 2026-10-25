@@ -24,7 +24,7 @@ DEFAULT_SECTION_STARTS = [
     "08:10", "09:00", "10:15", "11:05", "14:30", "15:20",
     "16:25", "17:15", "19:10", "20:00", "20:50",
 ]
-MAX_IMPORT_CHARS = 800_000
+MAX_IMPORT_CHARS = 65_536  # MaiBot WebUI 字符串参数上限，页面端会先压缩 HTML
 CDUT_TIMEZONE = "Asia/Shanghai"
 
 
@@ -245,7 +245,7 @@ def parse_import(content: str, total_weeks: int) -> tuple[list[Course], str]:
     if not 1 <= total_weeks <= 25:
         raise ValueError("学期周数须在 1–25 之间")
     if not content or len(content) > MAX_IMPORT_CHARS:
-        raise ValueError("课表内容为空或超过 80 万字符")
+        raise ValueError("课表内容为空或超过 65536 字符（WebUI 参数上限）")
     text = content.lstrip("\ufeff \t\r\n")
     fenced = re.search(r"```json\s*([\s\S]*?)\s*```", text, re.IGNORECASE)
     if fenced:
