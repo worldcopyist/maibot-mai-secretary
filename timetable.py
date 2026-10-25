@@ -1,11 +1,14 @@
 """Course imports and reminders for the authenticated CDUT student timetable.
 
-The official page is saved in the student's browser. This module never accepts
-school passwords or session cookies, and does not call the school login system.
+Accepted inputs: the school-exported "学生个人课表" .xls workbook (sent as
+base64), the timetable HTML page saved in the student's browser, and the
+course JSON returned by CDUT-Studio. This module never accepts school
+passwords or session cookies, and does not call the school login system.
 """
 
 from __future__ import annotations
 
+import base64
 import hashlib
 import json
 import re
@@ -25,7 +28,10 @@ DEFAULT_SECTION_STARTS = [
     "16:25", "17:15", "19:10", "20:00", "20:50",
 ]
 MAX_IMPORT_CHARS = 65_536  # MaiBot WebUI 字符串参数上限，页面端会先压缩 HTML
+XLS_BASE64_PREFIX = "XLS-BASE64:"
 CDUT_TIMEZONE = "Asia/Shanghai"
+DAY_HEADERS = {"星期一": 1, "星期二": 2, "星期三": 3, "星期四": 4,
+               "星期五": 5, "星期六": 6, "星期日": 7, "周日": 7}
 
 
 class TimetableSettings(PluginConfigBase):
@@ -96,6 +102,7 @@ def parse_weeks(value: str) -> list[int]:
     text = text.replace("（", "(").replace("）", ")").replace("－", "-")
     text = text.replace("～", "-").replace("~", "-").replace("至", "-")
     text = text.replace("(周)", "")
+    text = re.sub(r"\(\s*\)+", "", text)  # 导出格式 "3-5,7-16([周])" 去掉 [周] 后残留的空括号
     text = re.sub(r"(?:第|周次|周)", "", text)
     found: set[int] = set()
     for part in re.split(r"[,，、;；\s]+", text):
@@ -241,34 +248,110 @@ def _courses_from_html(content: str, total_weeks: int) -> list[Course]:
     return result
 
 
+_SECTION_MARK = re.compile(r"\[([\d\-]+)节\]")
+
+
+def _xls_course(block: str, day: int, row_label: str, row_number: int,
+                total_weeks: int) -> Course:
+    lines = [line.strip() for line in block.split("\n") if line.strip()]
+    marker = next((index for index, line in enumerate(lines)
+                   if _SECTION_MARK.search(line) or ("周" in line and re.search(r"\d", line))), -1)
+    if marker < 0:
+        raise ValueError(f"无法识别课程块：{block.strip()[:60]}")
+    week_line = lines[marker]
+    section_mark = _SECTION_MARK.search(week_line)
+    if section_mark:
+        numbers = [int(value) for value in re.findall(r"\d+", section_mark.group(1))]
+        start_section, end_section = min(numbers), max(numbers)
+    else:
+        start_section, end_section = _section_range(row_label, row_number)
+    weeks = parse_weeks(week_line)
+    if not weeks:
+        raise ValueError(f"无法识别教学周：{week_line[:80]}")
+    location = lines[marker + 1] if marker + 1 < len(lines) else ""
+    location = re.sub(r"^[(（]\s*宜\s*[)）]\s*", "", location)
+    return Course.from_mapping({
+        "name": lines[0], "day_of_week": day,
+        "start_section": start_section, "end_section": end_section,
+        "weeks": weeks, "location": location,
+        "teacher": lines[1] if marker > 1 else "",
+    }, total_weeks)
+
+
+def _courses_from_xls(payload: bytes, total_weeks: int) -> list[Course]:
+    try:
+        import xlrd
+    except ImportError as exc:
+        raise ValueError("服务器缺少 xlrd 依赖，无法读取 .xls 课表导出") from exc
+    try:
+        sheet = xlrd.open_workbook(file_contents=payload).sheet_by_index(0)
+    except Exception as exc:  # xlrd 的异常类型随版本变化，统一转成导入错误
+        raise ValueError(f".xls 文件无法解析：{exc}") from exc
+    day_columns: dict[int, int] = {}
+    header_row = -1
+    for row in range(sheet.nrows):
+        for col in range(1, sheet.ncols):
+            day = DAY_HEADERS.get(str(sheet.cell_value(row, col)).strip())
+            if day is not None:
+                day_columns[col] = day
+                header_row = row
+    if not day_columns:
+        raise ValueError("未找到星期表头；请上传教务系统导出的学生个人课表 .xls")
+    courses: list[Course] = []
+    for row in range(header_row + 1, sheet.nrows):
+        label = str(sheet.cell_value(row, 0)).strip()
+        for col, day in day_columns.items():
+            cell = str(sheet.cell_value(row, col)).strip()
+            if not cell:
+                continue
+            for block in re.split(r"\n\s*\n", cell):
+                if block.strip():
+                    courses.append(_xls_course(block, day, label, row, total_weeks))
+    return courses
+
+
+def _courses_from_base64_xls(encoded: str, total_weeks: int) -> list[Course]:
+    try:
+        payload = base64.b64decode(encoded.strip(), validate=True)
+    except ValueError as exc:  # binascii.Error 是 ValueError 的子类
+        raise ValueError("XLS-BASE64 数据无效") from exc
+    if not payload.startswith(b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1"):
+        raise ValueError("不是有效的 .xls 文件；请上传教务系统导出的学生个人课表 Excel")
+    return _courses_from_xls(payload, total_weeks)
+
+
 def parse_import(content: str, total_weeks: int) -> tuple[list[Course], str]:
     if not 1 <= total_weeks <= 25:
         raise ValueError("学期周数须在 1–25 之间")
     if not content or len(content) > MAX_IMPORT_CHARS:
         raise ValueError("课表内容为空或超过 65536 字符（WebUI 参数上限）")
     text = content.lstrip("\ufeff \t\r\n")
-    fenced = re.search(r"```json\s*([\s\S]*?)\s*```", text, re.IGNORECASE)
-    if fenced:
-        text = fenced.group(1).strip()
-    if text.startswith(("{", "[")):
-        payload = json.loads(text)
-        if isinstance(payload, dict):
-            if isinstance(payload.get("json"), dict):
-                payload = payload["json"]
-            if payload.get("week") is not None:
-                raise ValueError("请查询并导入本学期完整课表；单周结果缺少未来课程")
-            raw = payload.get("courses")
-        else:
-            raw = payload
-        if not isinstance(raw, list):
-            raise ValueError("JSON 中需要 courses 数组")
-        courses = [Course.from_mapping(item, total_weeks) for item in raw if isinstance(item, dict)]
-        source = "CDUT-Studio/JSON"
+    if text.startswith(XLS_BASE64_PREFIX):
+        courses = _courses_from_base64_xls(text[len(XLS_BASE64_PREFIX):], total_weeks)
+        source = "CDUT 教务 Excel"
     else:
-        if "kbcontent" not in text or "<tr" not in text.lower():
-            raise ValueError("未找到成都理工大学教务课表表格；请保存个人课表页面的完整 HTML")
-        courses = _courses_from_html(text, total_weeks)
-        source = "CDUT 教务 HTML"
+        fenced = re.search(r"```json\s*([\s\S]*?)\s*```", text, re.IGNORECASE)
+        if fenced:
+            text = fenced.group(1).strip()
+        if not text.startswith(("{", "[")):
+            if "kbcontent" not in text or "<tr" not in text.lower():
+                raise ValueError("未识别的课表格式；请上传教务导出的 .xls、保存的课表页 HTML 或 CDUT-Studio JSON")
+            courses = _courses_from_html(text, total_weeks)
+            source = "CDUT 教务 HTML"
+        else:
+            payload = json.loads(text)
+            if isinstance(payload, dict):
+                if isinstance(payload.get("json"), dict):
+                    payload = payload["json"]
+                if payload.get("week") is not None:
+                    raise ValueError("请查询并导入本学期完整课表；单周结果缺少未来课程")
+                raw = payload.get("courses")
+            else:
+                raw = payload
+            if not isinstance(raw, list):
+                raise ValueError("JSON 中需要 courses 数组")
+            courses = [Course.from_mapping(item, total_weeks) for item in raw if isinstance(item, dict)]
+            source = "CDUT-Studio/JSON"
     unique = {(
         item.name, item.day_of_week, item.start_section, item.end_section,
         item.weeks, item.location,

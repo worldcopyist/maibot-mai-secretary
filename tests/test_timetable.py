@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import base64
 import importlib
+import io
 import json
 from datetime import UTC, datetime
 from pathlib import Path
@@ -124,3 +126,50 @@ def test_webui_declaration_matches_host_limits():
     assert page["icon"] in {"puzzle", "chart", "settings", "database", "list"}
     content = page["actions"]["preview"]["parameters"]["content"]
     assert content["max_length"] == timetable.MAX_IMPORT_CHARS <= 65_536
+
+
+def test_cdut_xls_export_week_expressions():
+    assert parse_weeks("3-5,7-16([周])[01-02节]") == [3, 4, 5, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]
+    assert parse_weeks("2-5,9,11-17([周])[01-02节]") == [2, 3, 4, 5, 9, 11, 12, 13, 14, 15, 16, 17]
+    assert parse_weeks("18([周])[01-02节]") == [18]
+
+
+def _sample_xls_base64() -> str:
+    xlwt = pytest.importorskip("xlwt")
+    book = xlwt.Workbook()
+    sheet = book.add_sheet("Sheet1")
+    sheet.write(0, 0, "成都理工大学 学生个人课表")
+    sheet.write(1, 0, "学年学期：2026-2027-1        班级：2023190504")
+    for col, name in enumerate(["", "星期一", "星期二", "星期三", "星期四", "星期五", "星期六", "星期日"]):
+        if name:
+            sheet.write(2, col, name)
+    sheet.write(3, 0, "第一二节")
+    sheet.write(3, 2, "\n高等数学（B）（1）\n万会芳\n2-5,9,11-17([周])[01-02节]\n（宜）乙205\n"
+                      "\n软件工程\n林杰\n12-16([周])[01-02节]\n（宜）乙210\n")
+    sheet.write(3, 6, "\n实践训练计划\n刘同\n7-8([周])[01-02-03-04节]\n（宜）综B202（计算机）\n")
+    sheet.write(4, 0, "中午")
+    sheet.write(5, 0, "第三四节")
+    sheet.write(5, 1, "\n计算机视觉实训\n罗俊松\n2([周])[03-04节]\n(宜）综B201（计算机）\n")
+    buffer = io.BytesIO()
+    book.save(buffer)
+    return base64.b64encode(buffer.getvalue()).decode()
+
+
+def test_cdut_xls_import_parses_grid_and_course_blocks():
+    courses, source = parse_import(timetable.XLS_BASE64_PREFIX + _sample_xls_base64(), 18)
+    assert source == "CDUT 教务 Excel"
+    assert len(courses) == 4
+    math = next(course for course in courses if course.name == "高等数学（B）（1）")
+    assert (math.day_of_week, math.start_section, math.end_section) == (2, 1, 2)
+    assert math.weeks == (2, 3, 4, 5, 9, 11, 12, 13, 14, 15, 16, 17)
+    assert (math.teacher, math.location) == ("万会芳", "乙205")
+    practice = next(course for course in courses if course.name == "实践训练计划")
+    assert (practice.day_of_week, practice.start_section, practice.end_section) == (6, 1, 4)
+    assert practice.weeks == (7, 8)
+    assert practice.location == "综B202（计算机）"
+    training = next(course for course in courses if course.name == "计算机视觉实训")
+    assert (training.day_of_week, training.start_section, training.end_section) == (1, 3, 4)
+    assert training.location == "综B201（计算机）"
+
+    with pytest.raises(ValueError, match="不是有效的 .xls"):
+        parse_import(timetable.XLS_BASE64_PREFIX + base64.b64encode(b"not an excel").decode(), 18)

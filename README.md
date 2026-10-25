@@ -54,9 +54,9 @@
 
 ### 成都理工大学课表与上课提醒
 
-在[课表页面](/extensions/worldcopyist.mai-secretary/timetable)选择麦麦已有的聊天流，填写**第 1 教学周的周一**和本学期周数，然后上传登录后从学校教务系统保存的个人课表 HTML，或粘贴 [CDUT-Studio](https://github.com/Nya-Angle/CDUT-Studio) 课表查询结果中的 `courses` JSON。页面先预览课程、周次、节次及未来提醒数量；确认后才替换该聊天流原有课表和未来提醒。每个聊天流独立保存一份课表。请只导入自己的课表，并在群聊导入前考虑课程信息会被群成员询问到。
+在[课表页面](/extensions/worldcopyist.mai-secretary/timetable)选择麦麦已有的聊天流，填写**第 1 教学周的周一**和本学期周数，然后直接上传教务系统导出的「学生个人课表」`.xls` 文件（推荐，自动解析，文件不超过约 48 KB）、上传登录后从学校教务系统保存的个人课表 HTML，或粘贴 [CDUT-Studio](https://github.com/Nya-Angle/CDUT-Studio) 课表查询结果中的 `courses` JSON。页面先预览课程、周次、节次及未来提醒数量；确认后才替换该聊天流原有课表和未来提醒。每个聊天流独立保存一份课表。请只导入自己的课表，并在群聊导入前考虑课程信息会被群成员询问到。
 
-插件配置页「课表与上课提醒」提供 `remind_before_minutes`（默认提前 20 分钟）及第 1–11 节开始时间。更改后，未来的课表提醒会重新安排；课表时间固定按北京时间解释。默认节次时间参考 CDUT-Studio 的课表时段，**请按学校当期作息表核对**。课程注明的单周、双周和离散周次都会展开；未注明周次的课程按填写的整个学期处理。提醒复用 `scheduled_tasks.py` 的单次任务及回执，到点交由 MaiBot 结合原有人设发送；服务器停机超过配置的补执行期限则跳过。课表工具 `secretary_query_timetable(date)` 只读取当前聊天流已导入的课程，不会访问别人的课表。
+插件配置页「课表与上课提醒」提供 `remind_before_minutes`（默认提前 20 分钟）及第 1–11 节开始时间。更改后，未来的课表提醒会重新安排；课表时间固定按北京时间解释。默认节次时间参考 CDUT-Studio 的课表时段，**请按学校当期作息表核对**。课程注明的单周、双周和离散周次（含 `.xls` 导出中的 `3-5,7-16([周])` 写法）都会展开；未注明周次的课程按填写的整个学期处理。提醒复用 `scheduled_tasks.py` 的单次任务及回执，到点交由 MaiBot 结合原有人设发送；服务器停机超过配置的补执行期限则跳过。课表工具 `secretary_query_timetable(date)` 只读取当前聊天流已导入的课程，不会访问别人的课表。
 
 CDUT-Studio 的在线查询使用桌面浏览器完成学校统一认证及教务系统动态安全检查；小秘书运行在远程 MaiBot 服务器，当前版本**不直接登录学校系统，也不保存学号、密码或登录 Cookie**。因此课表变化后需要重新导入，提醒以最后一次确认的课表为准。[成都理工大学教务处通知](https://aao.cdut.edu.cn/__local/E/BE/F1/EC76DBD3B507867475376F2102F_4146917D_24873.pdf)提示以官方教务系统显示为准；本模块的提醒不能代替实时核对调课信息。
 
@@ -362,7 +362,7 @@ WebUI ──── webui.json → assets/*.html
 | 模块文件 | 功能与边界 |
 | --- | --- |
 | `scheduled_tasks.py`、`secretary_core.py` | 单次、每日、每周定时任务；时间解析、下次运行和过期处理。 |
-| `timetable.py` | 成都理工大学教务 HTML / CDUT-Studio JSON 导入、教学周计算、上课提醒与当前聊天流课表查询。 |
+| `timetable.py` | 成都理工大学教务 `.xls` 导出 / 教务 HTML / CDUT-Studio JSON 导入、教学周计算、上课提醒与当前聊天流课表查询；读取 `.xls` 依赖 `xlrd`。 |
 | `task_receipts.py` | 记录任务入队、实际发送、明确失败与结果未知；未知不自动重发。 |
 | `daily_report.py`、`daily_report_renderer.py` | 到点或管理员手动总结当日聊天，文字模型写内容，本地渲染 9:16 Azure、古风信笺或自制主题图片。 |
 | `proactive_chat.py`、`virtual_life.py` | 指定聊天流随机主动发言、按上次实际发言续接话题；所有聊天流共享当前时段的一项模拟生活活动。 |
