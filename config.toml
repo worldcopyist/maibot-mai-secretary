@@ -137,6 +137,9 @@ fetch_qps = 5.0
 
 [mood]
 enabled = false
+# 私聊与明确发给麦麦的群消息可在后台分析，影响所有聊天流共享的心情；每条候选消息会增加一次模型调用。
+chat_influence_enabled = true
+chat_confidence_threshold = 0.75
 # 基础概率总和必须为 100；当前模拟生活活动和上次心情会调整实际抽取概率。
 calm = 25
 happy = 25

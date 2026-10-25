@@ -20,6 +20,7 @@ class FeatureControlModule:
         "proactive": ("proactive", "enabled", "主动发言", ("随机发言", "主动聊天")),
         "virtual_life": ("virtual_life", "enabled", "模拟生活", ("虚拟生活",)),
         "mood": ("mood", "enabled", "心情模块", ("心情", "情绪模块")),
+        "mood_chat": ("mood", "chat_influence_enabled", "聊天影响心情", ("对话影响心情",)),
         "role_recognition": ("role_recognition", "enabled", "角色识别", ("身份识别",)),
         "relationships": ("relationships", "enabled", "关系管理", ("关系档案",)),
         "followups": ("followups", "enabled", "约定回访", ("回访",)),
@@ -53,7 +54,8 @@ class FeatureControlModule:
         "stale_reply": ("message_debounce", "suppress_stale_private_replies", "取消过时私聊回复", ("取消旧回复",)),
     }
     PARENTS: ClassVar[dict[str, tuple[str, ...]]] = {
-        "virtual_life": ("proactive",), "relationships": ("role_recognition",),
+        "virtual_life": ("proactive",), "mood_chat": ("mood",),
+        "relationships": ("role_recognition",),
         "followups_auto": ("followups",), "poke_reaction": ("poke",),
         "poke_bystander": ("poke",), "poke_tool": ("poke",),
         "poke_group": ("poke",), "poke_private": ("poke",),

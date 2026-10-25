@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import asyncio
+import json
+import types
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
@@ -90,3 +93,113 @@ async def test_mood_injects_without_role_recognition_using_stranger_style(tmp_pa
     rendered = str(result["modified_kwargs"]["items"])
     assert "当前关系级别为陌生人" in rendered
     assert "MaiBot 人设" in rendered
+
+
+def _inbound(*, message_id: str, stream: str = "private-stream", group: str = "", addressed: bool = False):
+    return {
+        "message_id": message_id, "session_id": stream, "account_id": "bot",
+        "platform": "qq", "processed_plain_text": "谢谢你陪我聊天，你真可爱！",
+        "is_mentioned": addressed,
+        "message_info": {"user_info": {"user_id": "user"}, "group_info": {"group_id": group}},
+    }
+
+
+@pytest.mark.asyncio
+async def test_chat_updates_shared_mood_without_blocking_current_reply(tmp_path):
+    plugin, _ = make_plugin(tmp_path, {"mood": {"enabled": True}})
+    release = asyncio.Event()
+    started = asyncio.Event()
+    calls = []
+
+    async def generate(**kwargs):
+        calls.append(kwargs)
+        started.set()
+        await release.wait()
+        return {"success": True, "response": '{"mood":"happy","confidence":0.95}'}
+
+    async def recent(_stream_id, *, limit):
+        assert limit == 4
+        return []
+
+    plugin._ctx.llm = types.SimpleNamespace(generate=generate)
+    plugin._ctx.message = types.SimpleNamespace(get_recent=recent)
+    await plugin.mood.start()
+    try:
+        await plugin.capture_mood_inbound(_inbound(message_id="msg-1"))
+        await asyncio.wait_for(started.wait(), timeout=1)
+        assert not release.is_set()
+        release.set()
+        await asyncio.wait_for(plugin.mood.queue.join(), timeout=1)
+        assert plugin.mood.state["mood"] == "happy"
+        assert "当前心情为开心" in plugin.mood.prompt_for("陌生人")
+        assert "当前心情为开心" in plugin.mood.prompt_for("主人")
+        saved = json.loads(plugin._state_path.read_text(encoding="utf-8"))
+        assert "谢谢你" not in json.dumps(saved, ensure_ascii=False)
+        assert len(calls) == 1
+    finally:
+        await plugin.mood.stop()
+
+
+@pytest.mark.asyncio
+async def test_chat_mood_filters_unaddressed_groups_and_duplicate_messages(tmp_path):
+    plugin, _ = make_plugin(tmp_path, {"mood": {"enabled": True}})
+    calls = []
+
+    async def generate(**kwargs):
+        calls.append(kwargs)
+        return {"response": '{"mood":"wronged","confidence":0.9}'}
+
+    async def recent(_stream_id, *, limit):
+        return []
+
+    plugin._ctx.llm = types.SimpleNamespace(generate=generate)
+    plugin._ctx.message = types.SimpleNamespace(get_recent=recent)
+    await plugin.mood.start()
+    try:
+        plugin.mood.on_inbound(_inbound(message_id="off-topic", stream="group-stream", group="123"))
+        assert plugin.mood.queue.empty()
+        addressed = _inbound(message_id="direct", stream="group-stream", group="123", addressed=True)
+        plugin.mood.on_inbound(addressed)
+        plugin.mood.on_inbound(addressed)
+        await asyncio.wait_for(plugin.mood.queue.join(), timeout=1)
+        assert len(calls) == 1
+        assert plugin.mood.state["mood"] == "wronged"
+    finally:
+        await plugin.mood.stop()
+
+
+def test_chat_verdict_requires_allowed_mood_and_confidence():
+    parse = module.MoodModule._parse_verdict
+    assert parse({"response": '{"mood":"none","confidence":1}'}) is None
+    assert parse({"response": '{"mood":"angry","confidence":0.8}'}) == ("angry", 0.8)
+    assert parse({"response": '{"mood":"angry","confidence":1.5}'}) is None
+    assert parse({"response": '{"mood":["angry"],"confidence":0.9}'}) is None
+    assert parse({"response": "not json"}) is None
+
+
+@pytest.mark.asyncio
+async def test_group_reply_to_someone_else_does_not_change_mood(tmp_path):
+    plugin, _ = make_plugin(tmp_path, {"mood": {"enabled": True}})
+    calls = []
+
+    async def generate(**kwargs):
+        calls.append(kwargs)
+        return {"response": '{"mood":"happy","confidence":0.99}'}
+
+    async def recent(_stream_id, *, limit):
+        return [{
+            "message_id": "other-message", "message_info": {"user_info": {"user_id": "other"}},
+            "processed_plain_text": "你好",
+        }]
+
+    plugin._ctx.llm = types.SimpleNamespace(generate=generate)
+    plugin._ctx.message = types.SimpleNamespace(get_recent=recent)
+    message = _inbound(message_id="reply", stream="group-stream", group="123")
+    message["reply_to"] = "other-message"
+    await plugin.mood.start()
+    try:
+        plugin.mood.on_inbound(message)
+        await asyncio.wait_for(plugin.mood.queue.join(), timeout=1)
+        assert calls == []
+    finally:
+        await plugin.mood.stop()

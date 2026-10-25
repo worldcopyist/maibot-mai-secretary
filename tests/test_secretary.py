@@ -110,6 +110,7 @@ def test_sdk_exposes_secretary_tools_apis_and_hooks(tmp_path):
         ("HOOK_HANDLER", "secretary_role_count_interaction"),
         ("HOOK_HANDLER", "secretary_anti_bullying_inspect"),
         ("HOOK_HANDLER", "secretary_role_remember_speaker"),
+        ("HOOK_HANDLER", "secretary_mood_inbound"),
         ("HOOK_HANDLER", "secretary_role_planner_prompt"),
         ("HOOK_HANDLER", "secretary_role_replyer_prompt"),
         ("HOOK_HANDLER", "secretary_poke_notice"),

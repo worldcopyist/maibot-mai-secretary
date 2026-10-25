@@ -895,6 +895,7 @@ class MaiSecretaryPlugin(MaiBotPlugin):
         await self.knowledge_base.start()
         await self.group_moderation.start()
         await self.anti_bullying.start()
+        await self.mood.start()
         self._runner = asyncio.create_task(self._run(), name="mai-secretary-scheduler")
         self.ctx.logger.info(
             "麦麦小秘书已加载：%s 个定时任务", len(self.scheduled.tasks)
@@ -905,6 +906,7 @@ class MaiSecretaryPlugin(MaiBotPlugin):
         await self.poke.stop()
         await self.daily_report.stop()
         await self.anti_bullying.stop()
+        await self.mood.stop()
         await self.group_moderation.stop()
         await self.knowledge_base.stop()
         await self.deepseek_web.stop()
@@ -1030,6 +1032,20 @@ class MaiSecretaryPlugin(MaiBotPlugin):
     ) -> None:
         del kwargs
         self.role_recognition.remember(message)
+
+    @HookHandler(
+        "chat.receive.before_process",
+        name="secretary_mood_inbound",
+        mode=HookMode.BLOCKING,
+        order=HookOrder.NORMAL,
+        error_policy=ErrorPolicy.SKIP,
+        description="把与麦麦的聊天交给后台分析，更新全部聊天流共享的心情",
+    )
+    async def capture_mood_inbound(
+        self, message: dict[str, Any] | None = None, **kwargs: Any,
+    ) -> None:
+        del kwargs
+        self.mood.on_inbound(message)
 
     @HookHandler(
         "chat.receive.before_process",

@@ -13,7 +13,7 @@
 ## Token usage and cost
 
 > [!IMPORTANT]
-> **Token usage:** Most features exposed to MaiBot send tool results or extra context back to the LLM (language model) for a decision or reply, increasing input token use and potentially increasing cost when the model charges per token. Daily summaries and AI group moderation may also make separate model calls. Actual usage depends on how often features run and how much text they return.
+> **Token usage:** Most features exposed to MaiBot send tool results or extra context back to the LLM (language model) for a decision or reply, increasing input token use and potentially increasing cost when the model charges per token. Daily summaries, AI group moderation, and chat-driven mood changes may also make separate model calls. Actual usage depends on how often features run and how much text they return.
 
 ## Open the plugin pages
 
@@ -32,7 +32,7 @@ These routes open inside an authenticated MaiBot WebUI installation. Their Markd
 | `task_receipts.py` | Separates Maisaka's queue acceptance from a matched actual send result. Records accepted, sent, failed, and unknown states. Unknown results are never automatically resent; an administrator can retry a confirmed failure once. | `secretary_task_receipts`; workbench |
 | `proactive_chat.py` | Randomly starts conversations in selected chat streams during configured time windows. Supports a target average interval plus random offset, recent context, and continuity from the last message actually sent. | `[proactive]` |
 | `virtual_life.py` | Chooses one activity per time period and shares it across every chat stream, including after a restart. Editable random choices and fixed weekday activities remain available. MaiBot's own persona has priority. | `[virtual_life].*_choices`, `fixed_activities` |
-| `mood.py` | Draws one shared mood per time period, influenced by the current activity and previous mood. Nine base probabilities are editable and must total 100%. Ordinary and proactive chats inherit the mood; owner, familiar, and stranger tiers express it with different intensity. Off by default. | `[mood]`; `secretary_feature_switch` |
+| `mood.py` | Draws one shared mood per time period, influenced by activity and previous mood. Addressed chats can change it through a background model judgment. Nine base probabilities must total 100%. Owner, familiar, and stranger tiers express it with different intensity. Off by default. | `[mood]`; `secretary_feature_switch` |
 | `daily_report.py`, `daily_report_renderer.py` | Summarizes one chat stream's text on schedule or on an administrator's request. Local rendering places the text on a 9:16 Azure, classical letter-paper, or custom theme; no image generation model is required. | `secretary_generate_daily_report`; `[daily_report].theme` |
 | `role_recognition.py` | Checks the real platform account and applies separate owner, familiar, or stranger prompts. The owner's identity comes from plugin admins or MaiBot plugin managers; strangers become familiar after more than 50 counted successful interactions by default. | `[role_recognition]` |
 | `relationship_management.py` | Lets an administrator mark an exact account familiar or stranger, or clear that decision. Any verified user can ask about their own relationship. An owner cannot be demoted here. | `secretary_relationship`; workbench |
@@ -47,7 +47,7 @@ These routes open inside an authenticated MaiBot WebUI installation. Their Markd
 | `voice_synthesis.py` (Voice module) | Experimental; reliability remains uncertain. Sends speech or singing when explicitly requested. The editable default VoiceDesign prompt avoids a fixed character, age, or gender and uses MaiBot's existing MiMo API key. | `secretary_speak`; `[voice_synthesis]` |
 | `message_debounce.py` | Merges closely spaced messages from the same real sender and optionally suppresses a stale private reply after a newer message arrives. | `[message_debounce]` |
 
-The **DeepSeek 联网与余额** plugin configuration section contains search, balance, and low-balance alert settings together. The old standalone Blueberry budget card was removed from the workbench; existing budget tools and saved balance history remain available. Set a mood's base probability to zero to exclude it. The active simulated activity and previous mood adjust the remaining draw weights, so effective probabilities can differ from the configured base values. Mood prompts add input tokens but require no separate model call; MaiBot's own persona and the current conversation take priority.
+The **DeepSeek 联网与余额** plugin configuration section contains search, balance, and low-balance alert settings together. The old standalone Blueberry budget card was removed from the workbench; existing budget tools and saved balance history remain available. Set a mood's base probability to zero to exclude it from random draws; a sufficiently clear chat interaction can still cause that mood. Activity and previous mood adjust the remaining draw weights. When enabled, chat influence analyzes private messages and group messages addressed to MaiBot in the background. Each analyzed message makes one short model call, without holding up the current reply. The shared state stores the resulting mood, never the message text or another stream's conversation. MaiBot's persona and current conversation take priority.
 
 The knowledge base accepts text, Markdown, CSV/TSV, JSON/JSONL, XML/YAML, HTML, RTF, PDF with extractable text, DOCX, XLSX, PPTX, EPUB, ODT/ODS/ODP. Scanned PDFs require OCR before upload. The upload limit is 8 MiB per file. Chat retrieval is denied until `[knowledge_base].allowed_chats` contains an approved stream.
 
@@ -81,7 +81,7 @@ The avatar above is declared as `assets/icon.png` in `_manifest.json` for MaiBot
 
 ## Install and test
 
-This plugin runs through the MaiBot SDK without changing MaiBot's source code. It was tested on MaiBot 1.3.7 and plugin SDK 2.12.0; consult `_manifest.json` for declared bounds and capabilities. The repository's manifest version is `0.25.0`.
+This plugin runs through the MaiBot SDK without changing MaiBot's source code. It was tested on MaiBot 1.3.7 and plugin SDK 2.12.0; consult `_manifest.json` for declared bounds and capabilities. The repository's manifest version is `0.26.0`.
 
 Place this repository in its own directory under MaiBot's `plugins/` directory, install `requirements.txt` in MaiBot's Python environment, then enable the plugin and configure it in MaiBot WebUI. Preserve the installation's actual `config.toml` and `data/plugins/worldcopyist.mai-secretary/` when updating. Keep API keys out of Git. The default DeepSeek web module, daily scheduled report, follow-ups, and Blueberry budget alerts are off until configured. A proactive target list left empty sends no random messages.
 
