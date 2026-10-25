@@ -30,7 +30,7 @@ These routes open inside an authenticated MaiBot WebUI installation. Their Markd
 | --- | --- | --- |
 | `feature_control.py` | Lets a verified administrator list, enable, disable, or reset module and Boolean subfeature switches in natural language. Chat-set values persist in plugin state and override the WebUI configuration until reset. | `secretary_feature_switch`; workbench |
 | `scheduled_tasks.py` | Creates one-time, daily, or weekly tasks for the current user and chat stream. At the due time, asks Maisaka to carry out the original request with current context. | `secretary_create_task`, `secretary_list_tasks`, `secretary_cancel_task`; calendar |
-| `timetable.py` | Imports the CDUT-exported student timetable .xls (via the xlrd dependency), timetable HTML, or CDUT-Studio course JSON, calculates actual teaching weeks from the supplied first Monday, and creates one-time reminders before future classes. The lead time and section start times are configurable. | `secretary_query_timetable`; `[timetable]`; timetable page |
+| `timetable.py` | Experimental .xls timetable import (via xlrd), teaching-week calculation, and one-time reminders before future classes. The current parser only supports the developer's school export format. The lead time and section start times are configurable. | `secretary_query_timetable`; `[timetable]`; timetable page |
 | `task_receipts.py` | Separates Maisaka's queue acceptance from a matched actual send result. Records accepted, sent, failed, and unknown states. Unknown results are never automatically resent; an administrator can retry a confirmed failure once. | `secretary_task_receipts`; workbench |
 | `proactive_chat.py` | Randomly starts conversations in selected chat streams during configured time windows. Supports a target average interval plus random offset, recent context, and continuity from the last message actually sent. | `[proactive]` |
 | `virtual_life.py` | Chooses one activity per time period and shares it across every chat stream, including after a restart. Editable random choices and fixed weekday activities remain available. MaiBot's own persona has priority. | `[virtual_life].*_choices`, `fixed_activities` |
@@ -53,13 +53,13 @@ The **DeepSeek 联网与余额** plugin configuration section contains search, b
 
 The knowledge base accepts text, Markdown, CSV/TSV, JSON/JSONL, XML/YAML, HTML, RTF, PDF with extractable text, DOCX, XLSX, PPTX, EPUB, ODT/ODS/ODP. Scanned PDFs require OCR before upload. The upload limit is 8 MiB per file. Chat retrieval is denied until `[knowledge_base].allowed_chats` contains an approved stream.
 
-### CDUT timetable import
+### Timetable import (experimental)
 
-In the [timetable page](/extensions/worldcopyist.mai-secretary/timetable), select an existing chat stream, enter the **Monday of teaching week 1** and the semester length, then upload the school-exported 学生个人课表 .xls workbook (parsed automatically, up to about 48 KB), upload the personal timetable HTML saved from the authenticated CDUT academic site, or paste the `courses` JSON returned by [CDUT-Studio](https://github.com/Nya-Angle/CDUT-Studio). Review the parsed courses and future reminder count before confirming. Each stream has its own timetable. The import replaces only that stream's previous timetable reminders. `[timetable].remind_before_minutes` defaults to 20; the 11 section start times are editable and should be checked against the current school timetable. MaiBot receives a scheduled task for each future class and answers in its existing persona. `secretary_query_timetable(date)` can only read the current stream's imported schedule.
+**This module is immature and currently supports only the developer's school.** In the [timetable page](/extensions/worldcopyist.mai-secretary/timetable), select an existing chat stream, enter the **Monday of teaching week 1** and the semester length, then upload that school's full-semester “student personal timetable” `.xls` export (up to about 48 KB). HTML, JSON, and other schools' exports are not supported. Review every parsed course, teaching week, section, and future reminder before confirming. Each stream has its own timetable, and a confirmed import replaces only that stream's previous timetable reminders. `[timetable].remind_before_minutes` defaults to 20; check the editable section start times against the current school timetable. `secretary_query_timetable(date)` can only read the current stream's imported schedule.
 
 Upcoming class reminders have their own list on the timetable page and are excluded from the ordinary task list and calendar. A one-time reminder is removed from scheduled task records after MaiBot accepts its trigger; enabled delivery receipts remain available separately. Daily and weekly tasks stay scheduled. Failed or missed one-time tasks remain visible for review.
 
-CDUT-Studio authenticates through a local desktop browser session and handles the academic site's dynamic security checks. This server-side plugin does **not** log in to CDUT or store a student number, password, or session cookie. Reimport after timetable changes. CDUT's [academic office notice](https://aao.cdut.edu.cn/__local/E/BE/F1/EC76DBD3B507867475376F2102F_4146917D_24873.pdf) says the official academic system remains authoritative.
+The plugin does **not** log in to a school system or store a student number, password, or session cookie. Reimport the file after timetable changes, and verify changes against the school's official schedule. Previously imported courses and reminders remain available after upgrading; only their displayed source label becomes generic. New imports accept `.xls` files only.
 
 ## Natural-language examples and permissions
 
@@ -91,7 +91,7 @@ The avatar above is declared as `assets/icon.png` in `_manifest.json` for MaiBot
 
 ## Install and test
 
-This plugin runs through the MaiBot SDK without changing MaiBot's source code. It was tested on MaiBot 1.3.7 and plugin SDK 2.12.0; consult `_manifest.json` for declared bounds and capabilities. The repository's manifest version is `0.30.0`.
+This plugin runs through the MaiBot SDK without changing MaiBot's source code. It was tested on MaiBot 1.3.7 and plugin SDK 2.12.0; consult `_manifest.json` for declared bounds and capabilities. The repository's manifest version is `0.31.0`.
 
 Place this repository in its own directory under MaiBot's `plugins/` directory, install `requirements.txt` in MaiBot's Python environment, then enable the plugin and configure it in MaiBot WebUI. Preserve the installation's actual `config.toml` and `data/plugins/worldcopyist.mai-secretary/` when updating. Keep API keys out of Git. The default DeepSeek web module, daily scheduled report, follow-ups, and Blueberry budget alerts are off until configured. A proactive target list left empty sends no random messages.
 

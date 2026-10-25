@@ -1,20 +1,16 @@
-"""Course imports and reminders for the authenticated CDUT student timetable.
+"""Import a timetable workbook and schedule reminders for its teaching weeks.
 
-Accepted inputs: the school-exported "学生个人课表" .xls workbook (sent as
-base64), the timetable HTML page saved in the student's browser, and the
-course JSON returned by CDUT-Studio. This module never accepts school
-passwords or session cookies, and does not call the school login system.
+Only the developer school's current .xls export layout is supported. The module
+does not log in to a school system or accept credentials and session cookies.
 """
 
 from __future__ import annotations
 
 import base64
 import hashlib
-import json
 import re
 from dataclasses import asdict, dataclass
 from datetime import UTC, date, datetime, timedelta
-from html.parser import HTMLParser
 from typing import Any, ClassVar
 from zoneinfo import ZoneInfo
 
@@ -27,9 +23,10 @@ DEFAULT_SECTION_STARTS = [
     "08:10", "09:00", "10:15", "11:05", "14:30", "15:20",
     "16:25", "17:15", "19:10", "20:00", "20:50",
 ]
-MAX_IMPORT_CHARS = 65_536  # MaiBot WebUI 字符串参数上限，页面端会先压缩 HTML
+MAX_IMPORT_CHARS = 65_536  # MaiBot WebUI 字符串参数上限
 XLS_BASE64_PREFIX = "XLS-BASE64:"
-CDUT_TIMEZONE = "Asia/Shanghai"
+IMPORT_SOURCE = "课表 Excel 文件"
+TIMETABLE_TIMEZONE = "Asia/Shanghai"
 DAY_HEADERS = {"星期一": 1, "星期二": 2, "星期三": 3, "星期四": 4,
                "星期五": 5, "星期六": 6, "星期日": 7, "周日": 7}
 
@@ -69,21 +66,19 @@ class Course:
 
     @classmethod
     def from_mapping(cls, raw: dict[str, Any], total_weeks: int) -> Course:
-        name = str(raw.get("name") or raw.get("course_name") or "").strip()
-        day = int(raw.get("dayOfWeek", raw.get("day_of_week", 0)))
-        start = int(raw.get("startSection", raw.get("start_section", 0)))
-        end = int(raw.get("endSection", raw.get("end_section", start)))
+        name = str(raw.get("name") or "").strip()
+        day = int(raw.get("day_of_week", 0))
+        start = int(raw.get("start_section", 0))
+        end = int(raw.get("end_section", start))
         if not name or len(name) > 120 or not 1 <= day <= 7 or not 1 <= start <= end <= 11:
             raise ValueError("课程名称、星期或节次无效；节次必须在 1–11 之间")
-        raw_weeks = raw.get("weekList", raw.get("weeks", []))
+        raw_weeks = raw.get("weeks", [])
         if isinstance(raw_weeks, list):
             weeks = sorted({int(value) for value in raw_weeks})
-        elif isinstance(raw_weeks, str):
-            weeks = parse_weeks(raw_weeks)
         else:
             raise TypeError("课程周次格式无效")
         if not weeks:
-            weeks = list(range(1, total_weeks + 1))
+            raise ValueError(f"课程 {name} 缺少明确的教学周")
         if any(week < 1 or week > total_weeks for week in weeks):
             raise ValueError(f"课程 {name} 的周次超出第 1–{total_weeks} 周")
         location = str(raw.get("location") or "").strip()[:120]
@@ -97,7 +92,7 @@ class Course:
 
 
 def parse_weeks(value: str) -> list[int]:
-    """Parse the week expressions shown by CDUT's Qingguo timetable."""
+    """Parse teaching-week expressions in the currently supported workbook."""
     text = re.sub(r"[\[【][^\]】]*[\]】]", "", value)
     text = text.replace("（", "(").replace("）", ")").replace("－", "-")
     text = text.replace("～", "-").replace("~", "-").replace("至", "-")
@@ -121,131 +116,6 @@ def parse_weeks(value: str) -> list[int]:
     if not found and re.search(r"\d", text):
         raise ValueError(f"无法识别教学周：{value[:80]}")
     return sorted(found)
-
-
-class _CDUTPageParser(HTMLParser):
-    """Collect only timetable cells and their semantic font fields."""
-
-    def __init__(self) -> None:
-        super().__init__(convert_charrefs=True)
-        self.rows: list[dict[str, Any]] = []
-        self.row: dict[str, Any] | None = None
-        self.cell_index = -1
-        self.cell_text: list[str] = []
-        self.block: dict[str, Any] | None = None
-        self.block_depth = 0
-        self.font: dict[str, Any] | None = None
-
-    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
-        attributes = dict(attrs)
-        if tag == "tr":
-            self.row = {"label": "", "blocks": []}
-            self.cell_index = -1
-        elif tag in {"td", "th"} and self.row is not None:
-            self.cell_index += 1
-            self.cell_text = []
-        elif self.row is not None and self.cell_index >= 0:
-            classes = set(str(attributes.get("class") or "").split())
-            if self.block is None and classes & {"kbcontent", "kbcontent1"}:
-                self.block = {"day": self.cell_index, "fields": [], "text": []}
-                self.block_depth = 1
-            elif self.block is not None:
-                if tag not in {"br", "img", "input", "meta"}:
-                    self.block_depth += 1
-                if tag == "font":
-                    self.font = {"title": attributes.get("title") or "",
-                                 "name": attributes.get("name") or "", "text": []}
-                if tag == "br":
-                    self.block["text"].append("\n")
-
-    def handle_data(self, data: str) -> None:
-        if self.row is not None and self.cell_index >= 0:
-            self.cell_text.append(data)
-        if self.block is not None:
-            self.block["text"].append(data)
-            if re.search(r"-{5,}", data):
-                self.block["fields"].append({"separator": True})
-        if self.font is not None:
-            self.font["text"].append(data)
-
-    def handle_endtag(self, tag: str) -> None:
-        if tag == "font" and self.font is not None and self.block is not None:
-            self.font["text"] = " ".join("".join(self.font["text"]).split())
-            self.block["fields"].append(self.font)
-            self.font = None
-        if self.block is not None and tag not in {"br", "img", "input", "meta"}:
-            self.block_depth -= 1
-            if self.block_depth <= 0:
-                if self.row is not None:
-                    self.row["blocks"].append(self.block)
-                self.block = None
-        if tag in {"td", "th"} and self.row is not None and self.cell_index == 0:
-            self.row["label"] = " ".join("".join(self.cell_text).split())
-        if tag == "tr" and self.row is not None:
-            if self.row["blocks"]:
-                self.rows.append(self.row)
-            self.row = None
-            self.cell_index = -1
-
-
-def _section_range(text: str, fallback: int) -> tuple[int, int]:
-    match = re.search(r"(\d{1,2})\s*[-—~至]\s*(\d{1,2})\s*节", text)
-    if match:
-        return int(match.group(1)), int(match.group(2))
-    match = re.search(r"(?:第\s*)?(\d{1,2})\s*节", text)
-    if match:
-        number = int(match.group(1))
-        return number, number
-    normalized = re.sub(r"[\s第节（）()]", "", text)
-    known = {
-        "一二": (1, 2), "三四": (3, 4), "五六": (5, 6),
-        "七八": (7, 8), "九十": (9, 10), "九十十一": (9, 11),
-        "十一": (11, 11),
-    }
-    if normalized in known:
-        return known[normalized]
-    start = min(fallback * 2 + 1, 11)
-    return start, min(start + 1, 11)
-
-
-def _courses_from_html(content: str, total_weeks: int) -> list[Course]:
-    parser = _CDUTPageParser()
-    parser.feed(content)
-    result: list[Course] = []
-    for row_number, row in enumerate(parser.rows):
-        for block in row["blocks"]:
-            current: dict[str, Any] = {}
-            items: list[dict[str, Any]] = []
-            for field in block["fields"]:
-                if field.get("separator"):
-                    if current.get("name"):
-                        items.append(current)
-                    current = {}
-                    continue
-                value = field["text"]
-                title = str(field["title"])
-                if not value or field["name"] == "ktmcstr":
-                    continue
-                if "周次" in title:
-                    current["weeks"] = value
-                elif title in {"教师", "老师"}:
-                    current["teacher"] = value
-                elif title in {"教室", "教学地点"}:
-                    current["location"] = value
-                elif not title and not re.match(r"^(备注|通知单编号)", value):
-                    if current.get("name"):
-                        items.append(current)
-                        current = {}
-                    current["name"] = value
-            if current.get("name"):
-                items.append(current)
-            for item in items:
-                start, end = _section_range(str(item.get("weeks") or ""), row_number)
-                if "weeks" not in item or "[" not in str(item["weeks"]):
-                    start, end = _section_range(row["label"], row_number)
-                item.update(day_of_week=block["day"], start_section=start, end_section=end)
-                result.append(Course.from_mapping(item, total_weeks))
-    return result
 
 
 _SECTION_MARK = re.compile(r"\[([\d\-]+)节\]")
@@ -294,7 +164,7 @@ def _courses_from_xls(payload: bytes, total_weeks: int) -> list[Course]:
                 day_columns[col] = day
                 header_row = row
     if not day_columns:
-        raise ValueError("未找到星期表头；请上传教务系统导出的学生个人课表 .xls")
+        raise ValueError("未找到星期表头；目前仅支持按星期分列的 .xls 课表文件")
     courses: list[Course] = []
     for row in range(header_row + 1, sheet.nrows):
         label = str(sheet.cell_value(row, 0)).strip()
@@ -317,7 +187,7 @@ def _courses_from_base64_xls(encoded: str, total_weeks: int) -> list[Course]:
     except ValueError as exc:  # binascii.Error 是 ValueError 的子类
         raise ValueError("XLS-BASE64 数据无效") from exc
     if not payload.startswith(b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1"):
-        raise ValueError("不是有效的 .xls 文件；请上传教务系统导出的学生个人课表 Excel")
+        raise ValueError("不是有效的 .xls 文件；请上传课表 Excel 文件")
     return _courses_from_xls(payload, total_weeks)
 
 
@@ -327,32 +197,9 @@ def parse_import(content: str, total_weeks: int) -> tuple[list[Course], str]:
     if not content or len(content) > MAX_IMPORT_CHARS:
         raise ValueError("课表内容为空或超过 65536 字符（WebUI 参数上限）")
     text = content.lstrip("\ufeff \t\r\n")
-    if text.startswith(XLS_BASE64_PREFIX):
-        courses = _courses_from_base64_xls(text[len(XLS_BASE64_PREFIX):], total_weeks)
-        source = "CDUT 教务 Excel"
-    else:
-        fenced = re.search(r"```json\s*([\s\S]*?)\s*```", text, re.IGNORECASE)
-        if fenced:
-            text = fenced.group(1).strip()
-        if not text.startswith(("{", "[")):
-            if "kbcontent" not in text or "<tr" not in text.lower():
-                raise ValueError("未识别的课表格式；请上传教务导出的 .xls、保存的课表页 HTML 或 CDUT-Studio JSON")
-            courses = _courses_from_html(text, total_weeks)
-            source = "CDUT 教务 HTML"
-        else:
-            payload = json.loads(text)
-            if isinstance(payload, dict):
-                if isinstance(payload.get("json"), dict):
-                    payload = payload["json"]
-                if payload.get("week") is not None:
-                    raise ValueError("请查询并导入本学期完整课表；单周结果缺少未来课程")
-                raw = payload.get("courses")
-            else:
-                raw = payload
-            if not isinstance(raw, list):
-                raise ValueError("JSON 中需要 courses 数组")
-            courses = [Course.from_mapping(item, total_weeks) for item in raw if isinstance(item, dict)]
-            source = "CDUT-Studio/JSON"
+    if not text.startswith(XLS_BASE64_PREFIX):
+        raise ValueError("目前只支持上传开发者学校导出的 .xls 课表文件")
+    courses = _courses_from_base64_xls(text[len(XLS_BASE64_PREFIX):], total_weeks)
     unique = {(
         item.name, item.day_of_week, item.start_section, item.end_section,
         item.weeks, item.location,
@@ -360,7 +207,7 @@ def parse_import(content: str, total_weeks: int) -> tuple[list[Course], str]:
     courses = sorted(unique.values(), key=lambda item: (item.day_of_week, item.start_section, item.name))
     if not courses or len(courses) > 200:
         raise ValueError("未识别到课程，或课程超过 200 门；请检查导入文件")
-    return courses, source
+    return courses, IMPORT_SOURCE
 
 
 class TimetableModule:
@@ -373,12 +220,22 @@ class TimetableModule:
         self.profiles: dict[str, dict[str, Any]] = {}
         self.pending: dict[str, dict[str, Any]] = {}
         self.needs_rebuild = False
+        self.source_migrated = False
 
     def load_state(self, data: dict[str, Any]) -> None:
         raw = data.get("timetables", {})
         if not isinstance(raw, dict):
             raise TypeError("课表状态格式错误")
         self.profiles = raw
+        self.source_migrated = False
+        for profile in self.profiles.values():
+            if not isinstance(profile, dict):
+                raise TypeError("课表状态格式错误")
+            previous = str(profile.get("source") or "")
+            normalized = IMPORT_SOURCE if "Excel" in previous else "旧版课表数据"
+            if previous != normalized:
+                profile["source"] = normalized
+                self.source_migrated = True
 
     def dump_state(self, payload: dict[str, Any]) -> None:
         if self.profiles:
@@ -411,7 +268,7 @@ class TimetableModule:
         return "tt" + hashlib.sha256(key.encode()).hexdigest()[:10]
 
     def _new_tasks(self, stream_id: str, profile: dict[str, Any], now: datetime) -> list[ScheduledTask]:
-        zone_name = CDUT_TIMEZONE
+        zone_name = TIMETABLE_TIMEZONE
         zone = ZoneInfo(zone_name)
         first = self._validate_start(profile["semester_start"])
         lead = timedelta(minutes=self.plugin.config.timetable.remind_before_minutes)
@@ -535,7 +392,7 @@ class TimetableModule:
             return {"success": False, "error": "当前聊天流尚未导入课表"}
         try:
             requested = str(kwargs.get("date") or "").strip()
-            target = date.fromisoformat(requested) if requested else datetime.now(ZoneInfo(CDUT_TIMEZONE)).date()
+            target = date.fromisoformat(requested) if requested else datetime.now(ZoneInfo(TIMETABLE_TIMEZONE)).date()
             first = self._validate_start(profile["semester_start"])
         except ValueError:
             return {"success": False, "error": "日期须为 YYYY-MM-DD"}

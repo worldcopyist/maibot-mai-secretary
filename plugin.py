@@ -893,7 +893,7 @@ class MaiSecretaryPlugin(MaiBotPlugin):
         self._state_path.parent.mkdir(parents=True, exist_ok=True)
         self.blueberry_budget.on_config_update()
         self._load_state()
-        if self.scheduled.pruned_completed:
+        if self.scheduled.pruned_completed or self.timetable.source_migrated:
             self._save_state()
         self.feature_control.apply()
         await self.role_recognition.start()
@@ -1677,7 +1677,7 @@ class MaiSecretaryPlugin(MaiBotPlugin):
         del kwargs
         return await self.timetable.list_profiles()
 
-    @API("secretary_timetable_preview", description="WebUI 预览成都理工大学课表导入")
+    @API("secretary_timetable_preview", description="WebUI 预览课表 Excel 文件导入")
     async def secretary_timetable_preview(
         self, stream_id: str, semester_start: str, total_weeks: int,
         content: str, **kwargs: Any,

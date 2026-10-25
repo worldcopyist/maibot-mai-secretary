@@ -60,7 +60,7 @@
     {
       "id": "timetable",
       "title": "麦麦小秘书 · 课表",
-      "description": "导入成都理工大学个人课表、查询课程并安排上课前提醒。",
+      "description": "试验性课表模块：仅支持导入开发者学校的 .xls 文件，安排上课提醒。",
       "placement": "workspace",
       "icon": "chart",
       "mode": "custom",

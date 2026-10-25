@@ -8,10 +8,6 @@ under its MIT license. The original copyright and complete license text follow.
 Bundled font: `assets/fonts/NotoSansSC.ttf` is licensed separately under
 SIL Open Font License 1.1; see `assets/fonts/OFL.txt` for its copyright and terms.
 
-CDUT-Studio (https://github.com/Nya-Angle/CDUT-Studio) is an AGPL-3.0
-reference for CDUT timetable field names and authentication behavior. No
-CDUT-Studio source code is included in this MIT-licensed plugin.
-
 MIT License
 
 Copyright (c) 2026 BlackBee114514

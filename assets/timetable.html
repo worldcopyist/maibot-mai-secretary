@@ -13,7 +13,6 @@
   .wide { grid-column: 1 / -1; }
   label { display: block; margin: 12px 0 7px; font-size: .875rem; font-weight: 600; }
   .input { display: block; width: 100%; min-width: 0; padding: 8px 12px; border: 1px solid var(--maibot-border, #d0d5dd); border-radius: var(--maibot-radius, 6px); background: var(--maibot-soft, #fff); color: var(--maibot-foreground, #18212f); font: inherit; }
-  textarea.input { min-height: 105px; resize: vertical; }
   .actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 16px; }
   button { padding: 8px 16px; border: 1px solid var(--maibot-border, #d0d5dd); border-radius: var(--maibot-radius, 6px); background: var(--maibot-background, #fff); color: var(--maibot-foreground, #18212f); font: inherit; cursor: pointer; }
   button.primary { border-color: var(--maibot-primary, #3478dd); background: var(--maibot-primary, #3478dd); color: var(--maibot-primary-foreground, #fff); }
@@ -35,14 +34,13 @@
   <p class="muted">在这里导入课表后，麦麦会把未来课程的提醒安排到所选聊天流。课程内容只提供给该聊天流查询。</p>
   <p id="status" role="status" aria-live="polite" hidden></p>
   <section class="card" aria-labelledby="import-heading">
-    <h2 id="import-heading">导入成都理工大学课表</h2>
-    <p class="muted">支持三种导入：教务系统导出的「学生个人课表」<strong>.xls 文件</strong>（直接上传，自动解析）、登录后保存的“个人课表”页面 HTML、CDUT-Studio 查询“本学期完整课表”返回的含 <code>courses</code> 数组的 JSON。请不要只导入单周课表。先预览，再确认导入；不会要求你把学号、密码或登录 Cookie 交给插件。</p>
+    <h2 id="import-heading">导入课表文件</h2>
+    <p class="muted"><strong>试验性功能：</strong>目前只适配开发者学校导出的「学生个人课表」.xls 文件，其他学校和文件格式尚未验证。请上传整学期课表，先核对预览中的周次和节次，再确认导入。插件不会要求学号、密码或登录 Cookie。</p>
     <div class="grid">
       <div class="wide"><label for="stream">提醒发到哪个聊天流</label><select class="input" id="stream"><option value="">正在读取聊天流…</option></select><p class="muted">只会列出麦麦已有的聊天流。建议先选自己的私聊。</p></div>
       <div><label for="semester-start">第 1 教学周的周一</label><input class="input" id="semester-start" type="date"><p class="muted">请按本学期校历填写；周次从这一天起计算。</p></div>
-      <div><label for="total-weeks">本学期教学周数</label><input class="input" id="total-weeks" type="number" min="1" max="25" value="20"><p class="muted">没有注明周次的课程按整个学期处理。</p></div>
-      <div class="wide"><label for="file">上传课表文件</label><input class="input" id="file" type="file" accept=".xls,.html,.htm,.json,.txt"><p class="muted">推荐教务系统导出的 .xls（上限约 48 KB）；HTML 会先在浏览器里压缩成课表表格再上传。</p></div>
-      <div class="wide"><label for="content">或粘贴 CDUT-Studio 的课表 JSON / 教务 HTML</label><textarea class="input" id="content" placeholder='{"courses":[{"name":"课程名称","dayOfWeek":1,"startSection":1,"endSection":2,"weekList":[1,2],"location":"教室"}]}'></textarea><p class="muted">HTML 会先在浏览器里压缩成课表表格再上传（上限 65536 字符）；较大的教务页面建议直接粘贴 CDUT-Studio 的 JSON。</p></div>
+      <div><label for="total-weeks">本学期教学周数</label><input class="input" id="total-weeks" type="number" min="1" max="25" value="20"><p class="muted">用于检查导入的课程周次是否超出学期范围。</p></div>
+      <div class="wide"><label for="file">上传 .xls 课表文件</label><input class="input" id="file" type="file" accept=".xls"><p class="muted">只支持当前适配的 .xls 导出格式，文件上限约 48 KB。</p></div>
     </div>
     <div class="actions"><button class="primary" id="preview" type="button">预览课程和提醒</button></div>
     <p class="muted">上课前提醒分钟数和第 1–11 节开始时间在插件配置页的「课表与上课提醒」中设置。当前设置见下方。</p>
@@ -75,51 +73,14 @@
   const labels = new Map();
   let previewId = '', busy = false;
   function setBusy(value) { busy = value; for (const id of ['preview', 'commit', 'refresh']) $(id).disabled = value; }
-  const LIMIT = 65536; // MaiBot WebUI 字符串参数上限
-  async function fileText(file) {
-    if (file.size > 4000000) throw Error('课表文件过大，请只保存个人课表页面或使用 JSON');
-    const bytes = await file.arrayBuffer();
-    const head = new TextDecoder('latin1').decode(bytes.slice(0, 2048));
-    const charset = /charset\s*=\s*["']?(gb2312|gbk|gb18030)/i.test(head) ? 'gb18030' : 'utf-8';
-    return new TextDecoder(charset).decode(bytes);
-  }
   async function xlsImport(file) {
-    if (file.size > 48000) throw Error('.xls 文件超过约 48 KB 上限；请改用 CDUT-Studio 的 courses JSON 导入');
+    if (file.size > 48000) throw Error('.xls 文件超过约 48 KB 上限，暂时无法导入');
     const bytes = new Uint8Array(await file.arrayBuffer());
     let binary = '';
     for (let index = 0; index < bytes.length; index += 8192) {
       binary += String.fromCharCode(...bytes.subarray(index, index + 8192));
     }
     return 'XLS-BASE64:' + btoa(binary);
-  }
-  // 把整页教务 HTML 压缩成只含课表行的表格；“查看源代码”保存的快照先逐行还原。
-  function compactHtml(text) {
-    let doc = new DOMParser().parseFromString(text, 'text/html');
-    const sourceLines = doc.querySelectorAll('td.line-content');
-    if (sourceLines.length) {
-      doc = new DOMParser().parseFromString(
-        Array.from(sourceLines, line => line.textContent).join(''), 'text/html');
-    }
-    const rows = [];
-    const seen = new Set();
-    for (const cell of doc.querySelectorAll('.kbcontent, .kbcontent1')) {
-      const row = cell.closest('tr');
-      if (row && !seen.has(row)) { seen.add(row); rows.push(row.outerHTML); }
-    }
-    if (rows.length) return '<table>' + rows.join('') + '</table>';
-    return text.replace(/<script[\s\S]*?<\/script>/gi, '')
-      .replace(/<style[\s\S]*?<\/style>/gi, '')
-      .replace(/<!--[\s\S]*?-->/g, '');
-  }
-  function prepareContent(text) {
-    const trimmed = text.trim();
-    if (!trimmed) throw Error('请先上传课表文件或粘贴课表内容');
-    const content = trimmed.startsWith('{') || trimmed.startsWith('[')
-      ? trimmed : compactHtml(trimmed);
-    if (content.length > LIMIT) {
-      throw Error(`课表内容压缩后仍有 ${content.length} 字符，超过 ${LIMIT} 上限；请改用 CDUT-Studio 返回的 courses JSON 导入`);
-    }
-    return content;
   }
   async function refresh() {
     const [streams, data] = await Promise.all([query('streams'), query('list')]);
@@ -164,9 +125,9 @@
     try {
       setBusy(true); previewId = ''; $('preview-card').hidden = true;
       const file = $('file').files[0];
-      const content = file
-        ? (file.name.toLowerCase().endsWith('.xls') ? await xlsImport(file) : prepareContent(await fileText(file)))
-        : prepareContent($('content').value);
+      if (!file) throw Error('请先选择 .xls 课表文件');
+      if (!file.name.toLowerCase().endsWith('.xls')) throw Error('目前只支持 .xls 课表文件');
+      const content = await xlsImport(file);
       const result = await action('preview', {
         stream_id: $('stream').value, semester_start: $('semester-start').value,
         total_weeks: Number($('total-weeks').value), content,

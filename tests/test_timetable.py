@@ -14,46 +14,17 @@ timetable = importlib.import_module("mai_secretary.timetable")
 parse_import = timetable.parse_import
 parse_weeks = timetable.parse_weeks
 
-def test_cdut_week_expressions_and_html_semantic_fields():
+def test_week_expressions_in_supported_xls():
     assert parse_weeks("1-4,6-8(周)[01-02节]") == [1, 2, 3, 4, 6, 7, 8]
     assert parse_weeks("1-7(单)") == [1, 3, 5, 7]
     assert parse_weeks("2-8(双)") == [2, 4, 6, 8]
-    html = """<html><table><tr><th>节次</th><th>星期一</th></tr>
-      <tr><td>第1-2节</td><td><div class="kbcontent">
-      <font>高等数学</font><font title="教师">张老师</font>
-      <font title="周次(节次)">1-3(单)[01-02节]</font>
-      <font title="教室">A101</font></div></td></tr>
-      <tr><td>第九十十一节</td><td><div class="kbcontent1">
-      <font title="周次(节次)">2-4(双)</font><font>实验设计</font>
-      </div></td></tr></table></html>"""
-    courses, source = parse_import(html, 4)
-    assert source == "CDUT 教务 HTML"
-    assert len(courses) == 2
-    assert courses[0].name == "高等数学"
-    assert courses[0].weeks == (1, 3)
-    assert (courses[0].day_of_week, courses[0].start_section, courses[0].end_section) == (1, 1, 2)
-    assert (courses[0].teacher, courses[0].location) == ("张老师", "A101")
-    assert courses[1].weeks == (2, 4)
-    assert (courses[1].start_section, courses[1].end_section) == (9, 11)
-
-    overlapping = """<table><tr><td>第一二节</td><td><div class="kbcontent">
-      <font title="周次(节次)">1-2(周)</font><font>课程甲</font>----------
-      <font title="周次(节次)">3-4(周)</font><font>课程乙</font>
-      </div></td></tr></table>"""
-    courses, _ = parse_import(overlapping, 4)
-    assert {course.name: course.weeks for course in courses} == {
-        "课程甲": (1, 2), "课程乙": (3, 4),
-    }
 
 
 @pytest.mark.asyncio
-async def test_cdut_json_import_preview_commit_replaces_reminders(tmp_path):
+async def test_xls_import_preview_commit_replaces_reminders(tmp_path):
     plugin, _ = make_plugin(tmp_path)
-    payload = {"courses": [{
-        "name": "地质学", "dayOfWeek": 1, "startSection": 1, "endSection": 2,
-        "weekList": [1, 3], "location": "A101", "teacher": "李老师",
-    }]}
-    preview = await plugin.timetable.preview("other-stream", "2030-01-07", 3, json.dumps(payload))
+    preview = await plugin.timetable.preview("other-stream", "2030-01-07", 3,
+                                             _one_course_xls_base64("地质学"))
     assert preview["course_count"] == 1
     assert preview["reminder_count"] == 2
     assert not plugin.scheduled.tasks
@@ -74,8 +45,8 @@ async def test_cdut_json_import_preview_commit_replaces_reminders(tmp_path):
     assert "地质学" in answer["content"]
     assert not (await plugin.timetable.query(stream_id="other-stream", chat_id="another"))["success"]
 
-    payload["courses"][0]["name"] = "岩石学"
-    replacement = await plugin.timetable.preview("other-stream", "2030-01-07", 3, json.dumps(payload))
+    replacement = await plugin.timetable.preview("other-stream", "2030-01-07", 3,
+                                                 _one_course_xls_base64("岩石学"))
     await plugin.timetable.commit(replacement["preview_id"])
     assert len(plugin.scheduled.tasks) == 2
     assert all("岩石学" in task.instruction for task in plugin.scheduled.tasks.values())
@@ -87,9 +58,8 @@ async def test_cdut_json_import_preview_commit_replaces_reminders(tmp_path):
 @pytest.mark.asyncio
 async def test_timetable_config_rebuild_and_disable(tmp_path):
     plugin, proactive = make_plugin(tmp_path)
-    payload = {"courses": [{"name": "写作", "dayOfWeek": 1,
-                            "startSection": 3, "endSection": 4, "weekList": [1]}]}
-    preview = await plugin.timetable.preview("other-stream", "2030-01-07", 2, json.dumps(payload))
+    preview = await plugin.timetable.preview("other-stream", "2030-01-07", 2,
+                                             _one_course_xls_base64("写作", weeks="1", sections="03-04"))
     await plugin.timetable.commit(preview["preview_id"])
     task = next(iter(plugin.scheduled.tasks.values()))
     assert task.at == "2030-01-07T09:55+08:00"
@@ -106,23 +76,32 @@ async def test_timetable_config_rebuild_and_disable(tmp_path):
     assert not plugin.scheduled.tasks
 
 
-def test_timetable_rejects_ambiguous_week_and_invalid_section():
+def test_timetable_rejects_other_imports_and_invalid_sections():
     with pytest.raises(ValueError, match="教学周"):
         parse_weeks("1-30(周)")
     with pytest.raises(ValueError, match="节次"):
-        parse_import(json.dumps({"courses": [{"name": "坏课程", "dayOfWeek": 1,
-                                               "startSection": 12, "endSection": 12,
-                                               "weekList": [1]}]}), 20)
+        parse_import(_one_course_xls_base64("坏课程", sections="12-13"), 20)
+    for content in ('{"courses": []}', '<table><tr><td>课程</td></tr></table>'):
+        with pytest.raises(ValueError, match="只支持上传"):
+            parse_import(content, 20)
+    with pytest.raises(ValueError, match="缺少明确的教学周"):
+        timetable.Course.from_mapping({"name": "坏课程", "day_of_week": 1,
+                                       "start_section": 1, "end_section": 2,
+                                       "weeks": []}, 20)
 
-    course = {"name": "地理", "dayOfWeek": 2, "startSection": 1,
-              "endSection": 2, "weekList": [1]}
-    wrapped = {"success": True, "json": {"courses": [course], "week": None}}
-    assert parse_import(json.dumps(wrapped), 20)[0][0].name == "地理"
-    fenced = "课表如下\n```json\n" + json.dumps(wrapped) + "\n```"
-    assert parse_import(fenced, 20)[0][0].name == "地理"
-    wrapped["json"]["week"] = 1
-    with pytest.raises(ValueError, match="完整课表"):
-        parse_import(json.dumps(wrapped), 20)
+
+def test_legacy_profile_source_is_normalized_without_changing_courses(tmp_path):
+    plugin, _ = make_plugin(tmp_path)
+    course = {"name": "旧课程", "day_of_week": 1, "start_section": 1,
+              "end_section": 2, "weeks": [1], "location": "", "teacher": ""}
+    plugin.timetable.load_state({"timetables": {
+        "first": {"source": "旧版 Excel 标签", "courses": [course]},
+        "second": {"source": "旧版网页标签", "courses": [course]},
+    }})
+    assert plugin.timetable.source_migrated
+    assert plugin.timetable.profiles["first"]["source"] == timetable.IMPORT_SOURCE
+    assert plugin.timetable.profiles["second"]["source"] == "旧版课表数据"
+    assert plugin.timetable.profiles["first"]["courses"] == [course]
 
 
 def test_webui_declaration_matches_host_limits():
@@ -133,7 +112,7 @@ def test_webui_declaration_matches_host_limits():
     assert content["max_length"] == timetable.MAX_IMPORT_CHARS <= 65_536
 
 
-def test_cdut_xls_export_week_expressions():
+def test_xls_export_week_expressions():
     assert parse_weeks("3-5,7-16([周])[01-02节]") == [3, 4, 5, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]
     assert parse_weeks("2-5,9,11-17([周])[01-02节]") == [2, 3, 4, 5, 9, 11, 12, 13, 14, 15, 16, 17]
     assert parse_weeks("18([周])[01-02节]") == [18]
@@ -143,8 +122,8 @@ def _sample_xls_base64() -> str:
     xlwt = pytest.importorskip("xlwt")
     book = xlwt.Workbook()
     sheet = book.add_sheet("Sheet1")
-    sheet.write(0, 0, "成都理工大学 学生个人课表")
-    sheet.write(1, 0, "学年学期：2026-2027-1        班级：2023190504")
+    sheet.write(0, 0, "学生个人课表")
+    sheet.write(1, 0, "学年学期：2026-2027-1        班级：示例班")
     for col, name in enumerate(["", "星期一", "星期二", "星期三", "星期四", "星期五", "星期六", "星期日"]):
         if name:
             sheet.write(2, col, name)
@@ -161,9 +140,22 @@ def _sample_xls_base64() -> str:
     return base64.b64encode(buffer.getvalue()).decode()
 
 
-def test_cdut_xls_import_parses_grid_and_course_blocks():
+def _one_course_xls_base64(name: str, *, weeks: str = "1,3", sections: str = "01-02") -> str:
+    xlwt = pytest.importorskip("xlwt")
+    book = xlwt.Workbook()
+    sheet = book.add_sheet("Sheet1")
+    sheet.write(0, 0, "学生个人课表")
+    sheet.write(1, 1, "星期一")
+    sheet.write(2, 0, "第一二节")
+    sheet.write(2, 1, f"\n{name}\n示例老师\n{weeks}([周])[{sections}节]\nA101\n")
+    buffer = io.BytesIO()
+    book.save(buffer)
+    return timetable.XLS_BASE64_PREFIX + base64.b64encode(buffer.getvalue()).decode()
+
+
+def test_xls_import_parses_grid_and_course_blocks():
     courses, source = parse_import(timetable.XLS_BASE64_PREFIX + _sample_xls_base64(), 18)
-    assert source == "CDUT 教务 Excel"
+    assert source == timetable.IMPORT_SOURCE
     assert len(courses) == 4
     math = next(course for course in courses if course.name == "高等数学（B）（1）")
     assert (math.day_of_week, math.start_section, math.end_section) == (2, 1, 2)
