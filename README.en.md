@@ -26,7 +26,7 @@ These routes open inside an authenticated MaiBot WebUI installation. Their Markd
 
 All four plugin pages follow MaiBot's active light or dark mode, color palette, and dashboard style. An open page updates when the user changes the MaiBot theme. MaiBot renders the plugin configuration page in its own theme.
 
-The four plugin pages also switch immediately with MaiBot's interface language: Simplified Chinese, English, Japanese, and Korean. This covers page text, dynamic statuses, and action confirmations. Translations live in `assets/i18n/`; run `python scripts/build_webui_i18n.py` after editing a page or its translations. The plugin makes no runtime translation requests. MaiBot's native plugin navigation titles and configuration field labels currently accept fixed strings only, so they remain in Chinese. Chat messages, uploaded documents, and model replies retain their original language.
+The four plugin pages also switch immediately with MaiBot's interface language: Simplified Chinese, English, Japanese, and Korean. This covers page text, dynamic statuses, and action confirmations. Translations live in `assets/i18n/`; run `python scripts/build_webui_i18n.py` after editing a page or its translations. The plugin makes no runtime translation requests. MaiBot's native plugin navigation titles and configuration fields currently accept fixed strings only; **the GitHub release uses English for those fixed strings**. Chat messages, uploaded documents, and model replies retain their original language.
 
 ## Features and modules
 
@@ -95,7 +95,7 @@ The avatar above is declared as `assets/icon.png` in `_manifest.json` for MaiBot
 
 ## Install and test
 
-This plugin runs through the MaiBot SDK without changing MaiBot's source code. It was tested on MaiBot 1.3.7 and plugin SDK 2.12.0; consult `_manifest.json` for declared bounds and capabilities. The repository's manifest version is `0.32.0`.
+This plugin runs through the MaiBot SDK without changing MaiBot's source code. It was tested on MaiBot 1.3.7 and plugin SDK 2.12.0; consult `_manifest.json` for declared bounds and capabilities. The repository's manifest version is `0.32.1`.
 
 Place this repository in its own directory under MaiBot's `plugins/` directory, install `requirements.txt` in MaiBot's Python environment, then enable the plugin and configure it in MaiBot WebUI. Preserve the installation's actual `config.toml` and `data/plugins/worldcopyist.mai-secretary/` when updating. Keep API keys out of Git. The default DeepSeek web module, daily scheduled report, follow-ups, and Blueberry budget alerts are off until configured. A proactive target list left empty sends no random messages.
 

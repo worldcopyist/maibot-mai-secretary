@@ -109,12 +109,12 @@ def _legacy_slot_keys(value: str) -> list[str]:
 class FixedActivity(PluginConfigBase):
     """One fixed weekly override rendered as two selects and a text input."""
 
-    day: DayLabel = Field(default="周一", json_schema_extra={"label": "星期"})
-    period: PeriodLabel = Field(default="下午", json_schema_extra={"label": "时间段"})
+    day: DayLabel = Field(default="周一", json_schema_extra={"label": "Week"})
+    period: PeriodLabel = Field(default="下午", json_schema_extra={"label": "Time period"})
     activity: str = Field(
         default="",
         max_length=200,
-        json_schema_extra={"label": "固定做什么", "placeholder": "填写麦麦在这个时段做的事"},
+        json_schema_extra={"label": "Fixed activity", "placeholder": "What MaiBot is doing in this time slot"},
     )
 
     @field_validator("activity")
@@ -137,23 +137,23 @@ def _default_fixed_activities() -> list[FixedActivity]:
 class VirtualLifeSettings(PluginConfigBase):
     """Editable period pools with optional day-and-period fixed overrides."""
 
-    __ui_label__: ClassVar[str] = "模拟生活"
+    __ui_label__: ClassVar[str] = "Simulated Life"
 
-    enabled: bool = Field(default=False, json_schema_extra={"label": "主动发言时启用模拟生活", "hint": "按插件时区读取当前星期和时段；只影响随机主动发言。"})
-    morning_choices: str = Field(default="\n".join(DEFAULT_CHOICES["morning"]), max_length=4000, json_schema_extra={"label": "早晨随机活动 · 07:00–08:59", "hint": "每行一个可能正在做的事；仅在早晨随机选一行。", "x-widget": "textarea", "rows": 5})
-    late_morning_choices: str = Field(default="\n".join(DEFAULT_CHOICES["late_morning"]), max_length=4000, json_schema_extra={"label": "上午随机活动 · 09:00–11:29", "hint": "每行一个可能正在做的事；仅在上午随机选一行。", "x-widget": "textarea", "rows": 7})
-    noon_choices: str = Field(default="\n".join(DEFAULT_CHOICES["noon"]), max_length=4000, json_schema_extra={"label": "中午随机活动 · 11:30–13:29", "hint": "每行一个可能正在做的事；仅在中午随机选一行。", "x-widget": "textarea", "rows": 5})
-    afternoon_choices: str = Field(default="\n".join(DEFAULT_CHOICES["afternoon"]), max_length=4000, json_schema_extra={"label": "下午随机活动 · 13:30–17:29", "hint": "每行一个可能正在做的事；仅在下午随机选一行。", "x-widget": "textarea", "rows": 9})
-    dusk_choices: str = Field(default="\n".join(DEFAULT_CHOICES["dusk"]), max_length=4000, json_schema_extra={"label": "傍晚随机活动 · 17:30–19:29", "hint": "每行一个可能正在做的事；仅在傍晚随机选一行。", "x-widget": "textarea", "rows": 5})
-    night_choices: str = Field(default="\n".join(DEFAULT_CHOICES["night"]), max_length=4000, json_schema_extra={"label": "夜晚随机活动 · 19:30–22:29", "hint": "每行一个可能正在做的事；仅在夜晚随机选一行。", "x-widget": "textarea", "rows": 7})
-    late_night_choices: str = Field(default="\n".join(DEFAULT_CHOICES["late_night"]), max_length=4000, json_schema_extra={"label": "深夜随机活动 · 22:30–23:59", "hint": "每行一个睡前活动，仍保持 00:00 睡觉。", "x-widget": "textarea", "rows": 4})
-    predawn_choices: str = Field(default="\n".join(DEFAULT_CHOICES["predawn"]), max_length=4000, json_schema_extra={"label": "凌晨随机活动 · 00:00–06:59", "hint": "默认睡觉到 07:00；若主动发言窗口覆盖凌晨，也会按这里的内容生成背景。", "x-widget": "textarea", "rows": 3})
+    enabled: bool = Field(default=False, json_schema_extra={"label": "Enable simulated life when speaking proactively", "hint": "Uses the plugin time zone to select the current weekday and time slot. Affects only random proactive chat."})
+    morning_choices: str = Field(default="\n".join(DEFAULT_CHOICES["morning"]), max_length=4000, json_schema_extra={"label": "Morning activities · 07:00–08:59", "hint": "One per line for what you might be doing; pick a random line only in the morning.", "x-widget": "textarea", "rows": 5})
+    late_morning_choices: str = Field(default="\n".join(DEFAULT_CHOICES["late_morning"]), max_length=4000, json_schema_extra={"label": "Late-morning activities · 09:00–11:29", "hint": "One per line for what you may be doing; randomly select one line in the morning only.", "x-widget": "textarea", "rows": 7})
+    noon_choices: str = Field(default="\n".join(DEFAULT_CHOICES["noon"]), max_length=4000, json_schema_extra={"label": "Noon activities · 11:30–13:29", "hint": "One per line for what you might be doing; pick a random line only at noon.", "x-widget": "textarea", "rows": 5})
+    afternoon_choices: str = Field(default="\n".join(DEFAULT_CHOICES["afternoon"]), max_length=4000, json_schema_extra={"label": "Afternoon activities · 13:30–17:29", "hint": "One per line for what you might be doing; pick one randomly in the afternoon only.", "x-widget": "textarea", "rows": 9})
+    dusk_choices: str = Field(default="\n".join(DEFAULT_CHOICES["dusk"]), max_length=4000, json_schema_extra={"label": "Dusk activities · 17:30–19:29", "hint": "One per line for what you might be doing; pick one randomly in the evening only.", "x-widget": "textarea", "rows": 5})
+    night_choices: str = Field(default="\n".join(DEFAULT_CHOICES["night"]), max_length=4000, json_schema_extra={"label": "Evening activities · 19:30–22:29", "hint": "One per line for what you might be doing; pick a random line only for the night.", "x-widget": "textarea", "rows": 7})
+    late_night_choices: str = Field(default="\n".join(DEFAULT_CHOICES["late_night"]), max_length=4000, json_schema_extra={"label": "Late-night activities · 22:30–23:59", "hint": "One bedtime activity per row, still staying asleep at 00:00.", "x-widget": "textarea", "rows": 4})
+    predawn_choices: str = Field(default="\n".join(DEFAULT_CHOICES["predawn"]), max_length=4000, json_schema_extra={"label": "Overnight activities · 00:00–06:59", "hint": "By default, you will sleep until 07:00; if the active window covers the early morning, the background will also be generated according to the contents here.", "x-widget": "textarea", "rows": 3})
     fixed_activities: list[FixedActivity] = Field(
         default_factory=_default_fixed_activities,
         max_length=56,
         json_schema_extra={
-            "label": "每周固定活动",
-            "hint": "点击添加，分别选择星期和时间段，再填写活动；固定活动优先于该时段的随机候选。可删除或拖动排序。",
+            "label": "Fixed weekly activities",
+            "hint": "Add a weekday and time slot, then enter an activity. Fixed activities override random choices for that slot. Rules can be deleted or reordered by dragging.",
             "max_items": 56,
         },
     )

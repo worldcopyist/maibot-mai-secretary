@@ -69,42 +69,42 @@ _RELATION_STYLE = {
 class MoodSettings(PluginConfigBase):
     """Editable base percentages; life activity and continuity bias the draw."""
 
-    __ui_label__: ClassVar[str] = "心情模块"
+    __ui_label__: ClassVar[str] = "Mood Module"
 
     enabled: bool = Field(
         default=False,
-        json_schema_extra={"label": "启用心情模块", "hint": "所有聊天流共享当前心情；普通聊天也会继承，表现强弱由角色识别决定。"},
+        json_schema_extra={"label": "Enable mood module", "hint": "All chat streams share the current mood, including ordinary conversations. Role recognition controls how strongly it is expressed."},
     )
     chat_influence_enabled: bool = Field(
         default=True,
-        json_schema_extra={"label": "聊天影响心情", "hint": "后台判断私聊及群里明确发给麦麦的消息；不阻塞当前回复，但会增加模型调用与 token 消耗。"},
+        json_schema_extra={"label": "Chat affects mood", "hint": "A background model reviews private messages and group messages clearly addressed to MaiBot. It does not delay the current reply, but adds model calls and token use."},
     )
     chat_confidence_threshold: float = Field(
         default=0.75, ge=0.5, le=1.0,
-        json_schema_extra={"label": "聊天影响把握度门槛", "hint": "只有模型判断达到这个把握度才改变共享心情；越高越谨慎。"},
+        json_schema_extra={"label": "Chat influence confidence threshold", "hint": "Change the shared mood only when the model meets this confidence threshold. Higher values are more cautious."},
     )
     bullying_mood_enabled: bool = Field(
         default=True,
-        json_schema_extra={"label": "反霸凌确认后改变心情", "hint": "AI 反霸凌确认麦麦遭辱骂后，按下列独立概率抽取共享心情；不会额外调用模型。"},
+        json_schema_extra={"label": "Changing mood after anti-bullying confirmation", "hint": "When AI anti-bullying confirms abuse directed at MaiBot, draw the shared mood from the probabilities below. This adds no model call."},
     )
-    calm: int = Field(default=DEFAULT_WEIGHTS["calm"], ge=0, le=100, json_schema_extra={"label": "平静 · 基础概率（%）"})
-    happy: int = Field(default=DEFAULT_WEIGHTS["happy"], ge=0, le=100, json_schema_extra={"label": "开心 · 基础概率（%）"})
-    satisfied: int = Field(default=DEFAULT_WEIGHTS["satisfied"], ge=0, le=100, json_schema_extra={"label": "满足 · 基础概率（%）"})
-    excited: int = Field(default=DEFAULT_WEIGHTS["excited"], ge=0, le=100, json_schema_extra={"label": "激动 · 基础概率（%）"})
-    wronged: int = Field(default=DEFAULT_WEIGHTS["wronged"], ge=0, le=100, json_schema_extra={"label": "委屈 · 基础概率（%）"})
-    sad: int = Field(default=DEFAULT_WEIGHTS["sad"], ge=0, le=100, json_schema_extra={"label": "伤心 · 基础概率（%）"})
-    irritable: int = Field(default=DEFAULT_WEIGHTS["irritable"], ge=0, le=100, json_schema_extra={"label": "烦躁 · 基础概率（%）"})
-    angry: int = Field(default=DEFAULT_WEIGHTS["angry"], ge=0, le=100, json_schema_extra={"label": "愤怒 · 基础概率（%）"})
-    grief: int = Field(default=DEFAULT_WEIGHTS["grief"], ge=0, le=100, json_schema_extra={"label": "悲伤 · 基础概率（%）"})
-    bullying_calm: int = Field(default=BULLYING_DEFAULT_WEIGHTS["calm"], ge=0, le=100, json_schema_extra={"label": "反霸凌 · 平静概率（%）"})
-    bullying_happy: int = Field(default=BULLYING_DEFAULT_WEIGHTS["happy"], ge=0, le=100, json_schema_extra={"label": "反霸凌 · 开心概率（%）"})
-    bullying_satisfied: int = Field(default=BULLYING_DEFAULT_WEIGHTS["satisfied"], ge=0, le=100, json_schema_extra={"label": "反霸凌 · 满足概率（%）"})
-    bullying_excited: int = Field(default=BULLYING_DEFAULT_WEIGHTS["excited"], ge=0, le=100, json_schema_extra={"label": "反霸凌 · 激动概率（%）"})
-    bullying_wronged: int = Field(default=BULLYING_DEFAULT_WEIGHTS["wronged"], ge=0, le=100, json_schema_extra={"label": "反霸凌 · 委屈概率（%）"})
-    bullying_sad: int = Field(default=BULLYING_DEFAULT_WEIGHTS["sad"], ge=0, le=100, json_schema_extra={"label": "反霸凌 · 伤心概率（%）"})
-    bullying_irritable: int = Field(default=BULLYING_DEFAULT_WEIGHTS["irritable"], ge=0, le=100, json_schema_extra={"label": "反霸凌 · 烦躁概率（%）"})
-    bullying_angry: int = Field(default=BULLYING_DEFAULT_WEIGHTS["angry"], ge=0, le=100, json_schema_extra={"label": "反霸凌 · 愤怒概率（%）"})
-    bullying_grief: int = Field(default=BULLYING_DEFAULT_WEIGHTS["grief"], ge=0, le=100, json_schema_extra={"label": "反霸凌 · 悲伤概率（%）"})
+    calm: int = Field(default=DEFAULT_WEIGHTS["calm"], ge=0, le=100, json_schema_extra={"label": "Calm · Base Probability (%)"})
+    happy: int = Field(default=DEFAULT_WEIGHTS["happy"], ge=0, le=100, json_schema_extra={"label": "Happy · Base Probability (%)"})
+    satisfied: int = Field(default=DEFAULT_WEIGHTS["satisfied"], ge=0, le=100, json_schema_extra={"label": "Satisfied · Base Probability (%)"})
+    excited: int = Field(default=DEFAULT_WEIGHTS["excited"], ge=0, le=100, json_schema_extra={"label": "Excited · Base Probability (%)"})
+    wronged: int = Field(default=DEFAULT_WEIGHTS["wronged"], ge=0, le=100, json_schema_extra={"label": "Wronged · Base Probability (%)"})
+    sad: int = Field(default=DEFAULT_WEIGHTS["sad"], ge=0, le=100, json_schema_extra={"label": "Sad · Base Probability (%)"})
+    irritable: int = Field(default=DEFAULT_WEIGHTS["irritable"], ge=0, le=100, json_schema_extra={"label": "Irritability · Base Probability (%)"})
+    angry: int = Field(default=DEFAULT_WEIGHTS["angry"], ge=0, le=100, json_schema_extra={"label": "Anger · Base Probability (%)"})
+    grief: int = Field(default=DEFAULT_WEIGHTS["grief"], ge=0, le=100, json_schema_extra={"label": "Grief · Base Probability (%)"})
+    bullying_calm: int = Field(default=BULLYING_DEFAULT_WEIGHTS["calm"], ge=0, le=100, json_schema_extra={"label": "Anti-Bullying · Calm Probability (%)"})
+    bullying_happy: int = Field(default=BULLYING_DEFAULT_WEIGHTS["happy"], ge=0, le=100, json_schema_extra={"label": "Anti-Bullying · Happy Probability (%)"})
+    bullying_satisfied: int = Field(default=BULLYING_DEFAULT_WEIGHTS["satisfied"], ge=0, le=100, json_schema_extra={"label": "Anti-Bullying · Satisfied Probability (%)"})
+    bullying_excited: int = Field(default=BULLYING_DEFAULT_WEIGHTS["excited"], ge=0, le=100, json_schema_extra={"label": "Anti-Bullying · Excited Probability (%)"})
+    bullying_wronged: int = Field(default=BULLYING_DEFAULT_WEIGHTS["wronged"], ge=0, le=100, json_schema_extra={"label": "Anti-Bullying · Wronged Probability (%)"})
+    bullying_sad: int = Field(default=BULLYING_DEFAULT_WEIGHTS["sad"], ge=0, le=100, json_schema_extra={"label": "Anti-Bullying · Sad Probability (%)"})
+    bullying_irritable: int = Field(default=BULLYING_DEFAULT_WEIGHTS["irritable"], ge=0, le=100, json_schema_extra={"label": "Anti-Bullying · Irritability Probability (%)"})
+    bullying_angry: int = Field(default=BULLYING_DEFAULT_WEIGHTS["angry"], ge=0, le=100, json_schema_extra={"label": "Anti-Bullying · Angry Probability (%)"})
+    bullying_grief: int = Field(default=BULLYING_DEFAULT_WEIGHTS["grief"], ge=0, le=100, json_schema_extra={"label": "Anti-Bullying · Grief Probability (%)"})
 
     @model_validator(mode="after")
     def validate_probabilities(self) -> MoodSettings:

@@ -1,12 +1,12 @@
 {
   "schema_version": 2,
   "required_capabilities": ["custom_pages"],
-  "workspace_title": "麦麦小秘书",
+  "workspace_title": "Mai Secretary",
   "pages": [
     {
       "id": "workbench",
-      "title": "麦麦小秘书 · 模块管理",
-      "description": "管理功能开关、关系、回访和任务回执；余额提醒请在 DeepSeek 联网与余额配置中设置。",
+      "title": "Mai Secretary · Module Workbench",
+      "description": "Manage feature switches, relationships, follow-ups, and task delivery receipts. Set balance alerts in DeepSeek Web and Balance settings.",
       "placement": "workspace",
       "icon": "settings",
       "mode": "custom",
@@ -32,8 +32,8 @@
     },
     {
       "id": "tasks",
-      "title": "麦麦小秘书 · 定时任务",
-      "description": "查看已创建的任务，并为现有聊天流手动安排单次或周期任务。",
+      "title": "Mai Secretary · Scheduled Tasks",
+      "description": "View existing tasks and schedule one-time or recurring tasks for established chats.",
       "placement": "workspace",
       "icon": "list",
       "mode": "custom",
@@ -59,8 +59,8 @@
     },
     {
       "id": "timetable",
-      "title": "麦麦小秘书 · 课表",
-      "description": "试验性课表模块：仅支持导入开发者学校的 .xls 文件，安排上课提醒。",
+      "title": "Mai Secretary · Timetable",
+      "description": "Experimental timetable import: supports only the developer's school's .xls export and schedules class reminders.",
       "placement": "workspace",
       "icon": "chart",
       "mode": "custom",
@@ -87,8 +87,8 @@
     },
     {
       "id": "knowledge",
-      "title": "麦麦小秘书 · 知识库",
-      "description": "上传资料、粘贴文本并测试检索。聊天读取权限在插件配置页设置。",
+      "title": "Mai Secretary · Knowledge Base",
+      "description": "Upload documents, paste text, and test retrieval. Configure chat access in the plugin settings.",
       "placement": "workspace",
       "icon": "database",
       "mode": "custom",

@@ -51,67 +51,67 @@ LOG = logging.getLogger(__name__)
 
 
 class PluginSettings(PluginConfigBase):
-    """控制小秘书运行和管理员账号的通用设置。"""
+    "General settings for Mai Secretary and administrator accounts."
 
-    __ui_label__: ClassVar[str] = "插件设置"
+    __ui_label__: ClassVar[str] = "Plugin Settings"
 
     config_version: str = Field(
         default="0.1.0",
-        description="配置结构版本",
+        description="Configuration schema version",
         json_schema_extra={"hidden": True},
     )
     enabled: bool = Field(
         default=True,
-        description="启用麦麦小秘书",
+        description="Enable Mai Secretary",
         json_schema_extra={
-            "label": "启用麦麦小秘书",
-            "hint": "关闭后不会主动发言、戳一戳、执行定时任务或检查辱骂；已有任务仍可查看和取消。",
+            "label": "Enable Mai Secretary",
+            "hint": "When disabled, proactive chat, pokes, scheduled tasks, and abuse checks stop. Existing tasks can still be viewed and canceled.",
         },
     )
     timezone: str = Field(
         default="Asia/Shanghai",
-        description="默认时区，如 Asia/Shanghai",
+        description="Default timezone e.g. Asia/Shanghai",
         json_schema_extra={
-            "label": "默认时区",
-            "hint": "用于主动发言时间窗口和定时任务；北京时间填写 Asia/Shanghai。",
+            "label": "Default timezone",
+            "hint": "Used for proactive chat windows and scheduled tasks. Use Asia/Shanghai for Beijing time.",
         },
     )
     check_interval_seconds: int = Field(
         default=30,
         ge=5,
         le=300,
-        description="调度检查间隔",
+        description="Scheduling check interval",
         json_schema_extra={
-            "label": "任务检查间隔（秒）",
-            "hint": "每隔多少秒检查一次是否有任务到点，范围为 5–300 秒。",
+            "label": "Task Check Interval (sec)",
+            "hint": "How often to check for due tasks, from 5 to 300 seconds.",
         },
     )
     misfire_grace_seconds: int = Field(
         default=600,
         ge=0,
         le=3600,
-        description="停机后补执行的最长延迟",
+        description="Maximum delay in remedial execution after shutdown",
         json_schema_extra={
-            "label": "错过任务的补执行期限（秒）",
-            "hint": "服务恢复后，超过这个期限的过期任务会跳过；0 表示不补执行。",
+            "label": "Missed-task grace period (seconds)",
+            "hint": "After a restart, tasks overdue by more than this period are skipped. Set 0 to skip all missed tasks.",
         },
     )
     max_tasks_per_user: int = Field(
         default=30,
         ge=1,
         le=200,
-        description="每人最多保留的活动任务",
+        description="Maximum retained active tasks per person",
         json_schema_extra={
-            "label": "每人活动任务上限",
-            "hint": "限制同一用户在同一聊天流中可同时保留的定时任务数量。",
+            "label": "Max active tasks per person",
+            "hint": "Limit the number of scheduled tasks that the same user can keep in the same chat stream at the same time.",
         },
     )
     admin_accounts: list[str] = Field(
         default_factory=list,
-        description="接收 AI 反霸凌提醒的管理员账号，格式为 平台:用户号",
+        description="Admin account that receives AI anti-bullying alerts, formatted as Platform: User ID",
         json_schema_extra={
-            "label": "管理员账号",
-            "hint": "每行一个账号，例如 qq:123456789。也是角色识别的主人名单；留空时角色识别继承 MaiBot 插件管理权限，反霸凌仍不会告状。",
+            "label": "Admin account",
+            "hint": "One account per line, such as qq:123456789. These are also the owners for role recognition. If empty, role recognition inherits MaiBot's plugin administrators, while anti-bullying alerts remain disabled.",
             "placeholder": "qq:123456789",
         },
     )
@@ -125,89 +125,89 @@ class PluginSettings(PluginConfigBase):
 
 
 class ScheduledTasksSettings(PluginConfigBase):
-    """定时任务模块的独立开关。"""
+    "Independent switch for scheduled tasks."
 
-    __ui_label__: ClassVar[str] = "定时任务"
+    __ui_label__: ClassVar[str] = "Scheduled Tasks"
 
     enabled: bool = Field(
         default=True,
-        description="启用定时任务",
+        description="Enable Scheduled Tasks",
         json_schema_extra={
-            "label": "启用定时任务",
-            "hint": "关闭后不再创建或执行任务；已有任务仍可查看和取消。",
+            "label": "Enable Scheduled Tasks",
+            "hint": "Closed no longer creates or executes tasks; existing tasks can still be viewed and canceled.",
         },
     )
 
 
 class TaskReceiptSettings(PluginConfigBase):
-    __ui_label__: ClassVar[str] = "任务回执"
-    enabled: bool = Field(default=True, json_schema_extra={"label": "启用任务发送回执", "hint": "将定时任务的入队和实际发送分开记录；发送结果不明时不会自动重发。"})
-    wait_minutes: int = Field(default=15, ge=1, le=120, json_schema_extra={"label": "等待发送回执（分钟）", "hint": "超过时间仍未匹配到发送结果时标记为未知，不冒称已经送达。"})
+    __ui_label__: ClassVar[str] = "Task Receipt"
+    enabled: bool = Field(default=True, json_schema_extra={"label": "Enable task delivery receipts", "hint": "Record task queueing separately from actual delivery. Unknown delivery results are never retried automatically."})
+    wait_minutes: int = Field(default=15, ge=1, le=120, json_schema_extra={"label": "Delivery receipt timeout (minutes)", "hint": "Mark a task as unknown if no delivery result arrives within this time; do not claim it was delivered."})
 
 
 class RelationshipManagementSettings(PluginConfigBase):
-    __ui_label__: ClassVar[str] = "关系管理"
-    enabled: bool = Field(default=True, json_schema_extra={"label": "允许自然语言管理关系", "hint": "管理员可用准确平台账号设置熟人、陌生人或清除关系记录；普通用户只能看自己的关系。"})
+    __ui_label__: ClassVar[str] = "Relationship Management"
+    enabled: bool = Field(default=True, json_schema_extra={"label": "Allow natural language to manage relationships", "hint": "Admins can set up acquaintances, strangers, or clear relationship history with an accurate platform account; regular users can only see their relationships."})
 
 
 class FollowupSettings(PluginConfigBase):
-    __ui_label__: ClassVar[str] = "约定回访"
-    enabled: bool = Field(default=False, json_schema_extra={"label": "启用约定回访", "hint": "用户可请麦麦在未来回访一个话题；默认关闭以免突然打扰。"})
-    auto_capture: bool = Field(default=False, json_schema_extra={"label": "自动发现次日回访", "hint": "仅在私聊中识别明确的‘我明天/后天有比赛、考试、面试’等事件，事件次日晚上回访；默认关闭。"})
-    max_active_per_user: int = Field(default=10, ge=1, le=50, json_schema_extra={"label": "每人最多待回访数量"})
+    __ui_label__: ClassVar[str] = "Follow-ups"
+    enabled: bool = Field(default=False, json_schema_extra={"label": "Enable follow-ups", "hint": "Users can ask MaiBot to revisit a topic later. Disabled by default to avoid unexpected interruptions."})
+    auto_capture: bool = Field(default=False, json_schema_extra={"label": "Automatically detect next-day follow-ups", "hint": "Only detects explicit private-chat events such as an exam or interview tomorrow or the day after. Follows up the next evening. Disabled by default."})
+    max_active_per_user: int = Field(default=10, ge=1, le=50, json_schema_extra={"label": "Maximum pending follow-ups per user"})
 
 
 class VoiceSynthesisSettings(PluginConfigBase):
     """MiMo speech and an editable voice description."""
 
-    __ui_label__: ClassVar[str] = "语音模块"
+    __ui_label__: ClassVar[str] = "Voice Module"
     enabled: bool = Field(
         default=True,
-        json_schema_extra={"label": "启用语音模块", "hint": "实验性功能，尚不成熟，语音生成与 QQ 发送的可靠性存疑。使用麦麦模型配置中已有的 MiMo API Key；只响应当前 QQ 聊天中的明确语音请求。"},
+        json_schema_extra={"label": "Enable Voice Module", "hint": "Experimental and not yet reliable. Uses the existing MiMo API key in MaiBot's model settings and responds only to explicit voice requests in the current QQ chat."},
     )
     voice_prompt: str = Field(
         default=DEFAULT_VOICE_PROMPT,
         min_length=10,
         max_length=1000,
-        json_schema_extra={"label": "默认音色提示词", "hint": "发给 MiMo VoiceDesign 的声音描述；可按所用角色修改音色、音高和语速，不会改动 MaiBot 的人设。", "x-widget": "textarea", "rows": 6},
+        json_schema_extra={"label": "Default voice prompt", "hint": "Sound description sent to MiMo VoiceDesign; tone, pitch, and speed can be modified according to the character used, without altering MaiBot's persona.", "x-widget": "textarea", "rows": 6},
     )
     max_text_chars: int = Field(
         default=600, ge=20, le=2500,
-        json_schema_extra={"label": "单条语音最多字数", "hint": "限制单次语音长度和模型消耗。"},
+        json_schema_extra={"label": "Maximum characters per voice reply", "hint": "Limit single speech length and model consumption."},
     )
     cooldown_seconds: int = Field(
         default=30, ge=0, le=3600,
-        json_schema_extra={"label": "同一聊天流语音间隔（秒）", "hint": "防止一条请求重复合成语音；0 表示不限制。"},
+        json_schema_extra={"label": "Same Chat Stream Voice Interval (sec)", "hint": "Prevents duplicate speech synthesis for one request; 0 means no limit."},
     )
     timeout_seconds: float = Field(
         default=90.0, ge=10.0, le=180.0,
-        json_schema_extra={"label": "MiMo 请求超时（秒）"},
+        json_schema_extra={"label": "MiMo Request Timeout (sec)"},
     )
     singing_enabled: bool = Field(
         default=True,
-        json_schema_extra={"label": "允许唱歌", "hint": "MiMo VoiceDesign 不支持唱歌；唱歌改用同系列预置音色模型，音色可能不同。"},
+        json_schema_extra={"label": "Allow singing", "hint": "MiMo VoiceDesign does not support singing; singing uses the same series of preset tone models, and the tone may be different."},
     )
     singing_voice: Literal["冰糖", "茉莉", "苏打", "白桦", "Mia", "Chloe", "Milo", "Dean"] = Field(
         default="冰糖",
-        json_schema_extra={"label": "唱歌预置音色", "hint": "仅唱歌时使用；普通语音仍使用上方配置的 VoiceDesign 音色。"},
+        json_schema_extra={"label": "Preset voice for singing", "hint": "Used only when singing; normal voice still uses the VoiceDesign tone configured above."},
     )
 
 
 class PokeSettings(PluginConfigBase):
-    """戳一戳模块的独立设置。"""
+    "Standalone settings for the poke module."
 
-    __ui_label__: ClassVar[str] = "戳一戳互动"
+    __ui_label__: ClassVar[str] = "Poke Interaction"
 
-    enabled: bool = Field(default=True, json_schema_extra={"label": "启用戳一戳模块"})
+    enabled: bool = Field(default=True, json_schema_extra={"label": "Enable Poke Module"})
     respond_to_poke: bool = Field(
         default=True,
-        json_schema_extra={"label": "被戳后回应", "hint": "让麦麦按现有人设回复，或调用 send_emoji 发表情包。"},
+        json_schema_extra={"label": "Reply after being poked", "hint": "Let MaiBot reply in its existing personaa or call send_emoji to send an emoji."},
     )
     received_action_description: str = Field(
         default="戳一戳", min_length=1, max_length=80,
         json_schema_extra={
-            "label": "收到戳一戳后告诉麦麦的动作",
-            "hint": "例如填“摸摸头”。麦麦会把这次 QQ 戳一戳理解为对方摸摸头，并按现有人设回应；这里只描述动作，不是固定回复台词。",
+            "label": "How MaiBot should interpret a received poke",
+            "hint": "For example, enter 'pat on the head'. MaiBot will treat the QQ poke as that action and respond in character. Describe the action, not a fixed reply.",
         },
     )
 
@@ -221,75 +221,75 @@ class PokeSettings(PluginConfigBase):
 
     reaction_probability: float = Field(
         default=0.85, ge=0.0, le=1.0,
-        json_schema_extra={"label": "被戳后作出反应的概率", "hint": "0 表示只记录被戳事件；1 表示每次通过限频检查后都会反应。"},
+        json_schema_extra={"label": "Probability of responding to a poke", "hint": "0 records the poke without responding; 1 responds whenever the rate limit allows."},
     )
     back_poke_probability: float = Field(
         default=0.6, ge=0.0, le=1.0,
-        json_schema_extra={"label": "反应时回戳的概率", "hint": "未回戳时会按人设回复或发表情；回戳失败也会改为回复。"},
+        json_schema_extra={"label": "Probability of poking back", "hint": "If MaiBot does not poke back, it replies in character or sends an emoji. If poking back fails, it replies instead."},
     )
     reply_after_back_poke_probability: float = Field(
         default=0.3, ge=0.0, le=1.0,
-        json_schema_extra={"label": "回戳后追加回复的概率", "hint": "追加回复由麦麦按现有人设在短文字和 send_emoji 表情包之间选择。"},
+        json_schema_extra={"label": "Probability of replying after poking back", "hint": "MaiBot chooses a short reply or a send_emoji image in its existing personaa."},
     )
-    bystander_enabled: bool = Field(default=True, json_schema_extra={"label": "允许跟风戳人"})
+    bystander_enabled: bool = Field(default=True, json_schema_extra={"label": "Allow joining in on pokes"})
     bystander_probability: float = Field(
         default=0.35, ge=0.0, le=1.0,
-        json_schema_extra={"label": "看到别人互戳时跟风的概率"},
+        json_schema_extra={"label": "Probability of joining others' pokes"},
     )
     bystander_target: Literal["victim", "actor"] = Field(
         default="victim",
-        json_schema_extra={"label": "跟风戳谁", "hint": "victim 戳被戳的人；actor 戳发起戳一戳的人。"},
+        json_schema_extra={"label": "Whom to poke when joining in", "hint": "victim targets the person who was poked; actor targets the person who initiated the poke."},
     )
     allow_model_poke: bool = Field(
         default=True,
-        json_schema_extra={"label": "允许麦麦主动戳人", "hint": "开放 secretary_poke 工具；只允许戳当前 QQ 聊天里的对方或本群成员。"},
+        json_schema_extra={"label": "Allow MaiBot to poke proactively", "hint": "Open the secretary_poke tool; only the other party or members of this group in the current QQ chat are allowed to be poked."},
     )
-    group_enabled: bool = Field(default=True, json_schema_extra={"label": "在群聊启用"})
-    private_enabled: bool = Field(default=True, json_schema_extra={"label": "在私聊启用"})
+    group_enabled: bool = Field(default=True, json_schema_extra={"label": "Enable in group chat"})
+    private_enabled: bool = Field(default=True, json_schema_extra={"label": "Enable in Private Chat"})
     reaction_mode: Literal["auto", "text", "emoji"] = Field(
         default="auto",
-        json_schema_extra={"label": "被戳时回应方式", "hint": "auto 由麦麦选择短回复或表情包；text 只回文字；emoji 优先发一张表情包。"},
+        json_schema_extra={"label": "Reply mode after being poked", "hint": "auto lets MaiBot choose a short text reply or emoji; text uses text only; emoji prefers an emoji."},
     )
     reaction_cooldown_seconds: int = Field(
         default=12, ge=1, le=3600,
-        json_schema_extra={"label": "同一人被戳回应间隔（秒）"},
+        json_schema_extra={"label": "Response interval for the same person to be poked (seconds)"},
     )
     max_reactions_per_minute: int = Field(
         default=6, ge=1, le=60,
-        json_schema_extra={"label": "每个聊天流每分钟最多回应次数"},
+        json_schema_extra={"label": "Max Responses per Minute per Chat Stream"},
     )
     poke_cooldown_seconds: int = Field(
         default=60, ge=1, le=3600,
-        json_schema_extra={"label": "连续戳同一人的间隔（秒）"},
+        json_schema_extra={"label": "Interval between consecutive poking of the same person (seconds)"},
     )
     max_pokes_per_hour: int = Field(
         default=6, ge=1, le=60,
-        json_schema_extra={"label": "每个聊天流每小时最多主动戳次数"},
+        json_schema_extra={"label": "Maximum proactive pokes per chat per hour"},
     )
     adapter_plugin_id: str = Field(
         default="",
-        json_schema_extra={"label": "QQ 适配器插件 ID", "hint": "留空自动查找公开接口；有多个兼容适配器时填写确切插件 ID。"},
+        json_schema_extra={"label": "QQ Adapter Plugin ID", "hint": "Leave blank to automatically find public interfaces; fill in the exact plugin ID when there are multiple compatible adapters."},
     )
 
 
 class GroupAdminSettings(PluginConfigBase):
     """QQ group management, restricted to explicitly listed groups."""
 
-    __ui_label__: ClassVar[str] = "QQ群管"
-    enabled: bool = Field(default=False, json_schema_extra={"label": "启用QQ群管模块", "hint": "只有下方群号列表中的群会启用。"})
-    managed_group_ids: list[str] = Field(default_factory=list, json_schema_extra={"label": "启用的QQ群号", "hint": "每行一个QQ群号；留空时任何群都不能使用群管工具。"})
-    welcome_enabled: bool = Field(default=False, json_schema_extra={"label": "新成员入群时发送欢迎语"})
-    welcome_template: str = Field(default="欢迎 {name} 来到群里！", min_length=1, max_length=500, json_schema_extra={"label": "入群欢迎语", "hint": "可使用 {name} 昵称、{qq} QQ号、{group} 群号。"})
-    review_mode: Literal["manual", "keyword"] = Field(default="manual", json_schema_extra={"label": "进群审核方式", "hint": "manual 只列出申请并由管理员确认；keyword 根据下方词语自动通过或拒绝，未命中保持待审。"})
-    review_accept_words: list[str] = Field(default_factory=list, json_schema_extra={"label": "自动通过关键词", "hint": "仅 keyword 模式使用；申请答案包含任一词时通过。"})
-    review_reject_words: list[str] = Field(default_factory=list, json_schema_extra={"label": "自动拒绝关键词", "hint": "仅 keyword 模式使用；拒绝词优先于通过词。"})
-    review_reject_reason: str = Field(default="申请信息不符合本群要求", max_length=200, json_schema_extra={"label": "自动拒绝理由"})
-    moderation_enabled: bool = Field(default=False, json_schema_extra={"label": "启用群消息 AI 禁言审核", "hint": "只检查已启用群中上传的敏感词。默认关闭；请先在小秘书知识库页面上传词库并确认撤回、禁言设置。"})
-    moderation_recall: bool = Field(default=True, json_schema_extra={"label": "确认违规后自动撤回", "hint": "仅撤回命中并经麦麦 AI 判断为违规的那一条 QQ 群消息。"})
-    moderation_mute: bool = Field(default=True, json_schema_extra={"label": "确认违规后自动禁言", "hint": "麦麦需要有群管理员权限；不会自动禁言群主或群管理员。"})
-    moderation_mute_minutes: int = Field(default=10, ge=1, le=43200, json_schema_extra={"label": "自动禁言时长（分钟）", "hint": "仅开启自动禁言时使用，范围 1–43200 分钟。"})
-    moderation_sensitivity: int = Field(default=50, ge=0, le=100, json_schema_extra={"label": "审核敏感程度（0–100）", "hint": "越高越容易判定含糊的违规用法；正常询问亲属等明确无害语境始终不应处罚。建议先从 50 测试。"})
-    adapter_plugin_id: str = Field(default="", json_schema_extra={"label": "QQ 适配器插件 ID", "hint": "留空自动调用已注册的 NapCat 公开接口。"})
+    __ui_label__: ClassVar[str] = "QQ Group Management"
+    enabled: bool = Field(default=False, json_schema_extra={"label": "Enable QQ Group Management Module", "hint": "Only groups in the group number list below will be enabled."})
+    managed_group_ids: list[str] = Field(default_factory=list, json_schema_extra={"label": "Enabled QQ Group Numbers", "hint": "One QQ group number per line; no group can use the group management tool when left blank."})
+    welcome_enabled: bool = Field(default=False, json_schema_extra={"label": "Send a welcome message when a new member joins the group"})
+    welcome_template: str = Field(default="欢迎 {name} 来到群里！", min_length=1, max_length=500, json_schema_extra={"label": "Group welcome", "hint": "You can use {name} nickname, {qq} QQ number, {group} group number."})
+    review_mode: Literal["manual", "keyword"] = Field(default="manual", json_schema_extra={"label": "Join request review mode", "hint": "manual Only the application is listed and confirmed by the administrator; keyword automatically passes or rejects according to the words below, and misses remain pending."})
+    review_accept_words: list[str] = Field(default_factory=list, json_schema_extra={"label": "Auto-approve keywords", "hint": "Use only in keyword mode; pass when the application answer contains any word."})
+    review_reject_words: list[str] = Field(default_factory=list, json_schema_extra={"label": "Auto-reject keywords", "hint": "Use only in keyword mode; rejection takes precedence over passing words."})
+    review_reject_reason: str = Field(default="申请信息不符合本群要求", max_length=200, json_schema_extra={"label": "Automatic Rejection Reason"})
+    moderation_enabled: bool = Field(default=False, json_schema_extra={"label": "Enable AI review for group muting", "hint": "Only checks blocked words uploaded for enabled groups. Disabled by default. Upload a word list in the knowledge base and confirm recall and mute settings first."})
+    moderation_recall: bool = Field(default=True, json_schema_extra={"label": "Auto-recall confirmed violations", "hint": "Only the QQ group message that is hit and judged to be in violation by MaiBot AI is withdrawn."})
+    moderation_mute: bool = Field(default=True, json_schema_extra={"label": "Auto-mute confirmed violations", "hint": "MaiBot needs to have group administrator privileges; group owners or group administrators will not be automatically banned."})
+    moderation_mute_minutes: int = Field(default=10, ge=1, le=43200, json_schema_extra={"label": "Auto-Mute Duration (min)", "hint": "Used only when auto mute is on, range 1–43200 minutes."})
+    moderation_sensitivity: int = Field(default=50, ge=0, le=100, json_schema_extra={"label": "Audit sensitivity (0–100)", "hint": "The higher the level, the easier it is to determine ambiguous illegal usage; clear harmless contexts such as normal questioning of relatives should never be punished.It is recommended to test from 50 first."})
+    adapter_plugin_id: str = Field(default="", json_schema_extra={"label": "QQ Adapter Plugin ID", "hint": "Leave blank to automatically call the registered NapCat exposed interface."})
 
     @field_validator("managed_group_ids")
     @classmethod
@@ -301,22 +301,22 @@ class GroupAdminSettings(PluginConfigBase):
 
 
 class DailyReportSettings(PluginConfigBase):
-    """管理员配置的每日聊天总结。"""
+    "Admin configured daily chat summary."
 
-    __ui_label__: ClassVar[str] = "日报"
+    __ui_label__: ClassVar[str] = "Daily Report"
 
     enabled: bool = Field(
         default=False,
         json_schema_extra={
-            "label": "启用定时日报",
-            "hint": "设置目标聊天流和总结时间后开启；每天每个目标最多发一张所选主题的图片。即时生成另由下方开关控制。",
+            "label": "Enable Scheduled Daily Report",
+            "hint": "Set target chat streams and a summary time first. Sends at most one image per target per day. Instant reports have a separate switch below.",
         },
     )
     manual_enabled: bool = Field(
         default=True,
         json_schema_extra={
-            "label": "允许管理员在聊天中即时生成日报",
-            "hint": "只有插件管理员账号可请麦麦调用 secretary_generate_daily_report，为当前聊天流立即生成图片；管理员名单留空时继承 MaiBot 插件管理权限。不需要开启定时日报。",
+            "label": "Allow admins to generate daily reports instantly in chat",
+            "hint": "Only plugin administrators can ask MaiBot to call secretary_generate_daily_report for the current chat. If the administrator list is empty, MaiBot plugin management permissions apply. Scheduled reports need not be enabled.",
         },
     )
     manual_cooldown_minutes: int = Field(
@@ -324,46 +324,46 @@ class DailyReportSettings(PluginConfigBase):
         ge=0,
         le=1440,
         json_schema_extra={
-            "label": "同一聊天流即时日报间隔（分钟）",
-            "hint": "避免重复发图和模型费用；0 表示不限制。同一聊天流正在生成时仍不会重复启动。",
+            "label": "Instant report cooldown per chat (minutes)",
+            "hint": "Prevents repeated image rendering and model costs. Set 0 for no cooldown. A report already generating for the same chat cannot start again.",
         },
     )
     theme: Literal["azure", "letter", "custom"] = Field(
         default="azure",
         json_schema_extra={
-            "label": "日报图片主题",
-            "hint": "Azure 为原主题；古风信笺为通用主题；自制主题需把符合 9:16 格式的 daily_report_theme.png 放入插件数据目录。",
+            "label": "Daily report image theme",
+            "hint": "Azure is the original theme; vintage stationery is the general theme. For a custom theme, place a 9:16 daily_report_theme.png in the plugin data directory.",
         },
     )
     text_model: str = Field(
         default="",
         json_schema_extra={
-            "label": "日报文字总结模型",
-            "hint": "填写 MaiBot 模型配置中的 name（例如 mimo-v2.6-flash），不是 model_identifier；留空使用 utils 任务。模型只写文字，插件将文字填入所选图片主题。",
+            "label": "Daily report text summary model",
+            "hint": "Enter the model name from MaiBot's model settings (for example, mimo-v2.6-flash), not model_identifier. Leave blank to use the utils task. The model generates text only; the plugin places it on the selected image theme.",
             "placeholder": "mimo-v2.6-flash",
         },
     )
     fallback_text_model: str = Field(
         default="",
         json_schema_extra={
-            "label": "日报备用文字模型",
-            "hint": "主模型输出截断或超时时，改用此模型完成本次和后续分段总结；留空则不切换。填写 MaiBot 模型配置中的 name。",
+            "label": "Daily Alternate Text Model",
+            "hint": "If the primary model times out or truncates its output, use this model for the remaining summary segments. Leave blank to disable fallback. Enter the model name from MaiBot's settings.",
             "placeholder": "mimo-v2.6-flash",
         },
     )
     target_chats: list[str] = Field(
         default_factory=list,
         json_schema_extra={
-            "label": "日报聊天流",
-            "hint": "每行一个目标，例如 qq:private:123456 或 qq:group:123456。仅这些聊天流的记录会用于各自的日报。",
+            "label": "Daily report chat streams",
+            "hint": "One target per line, such as qq:private:123456 or qq:group:123456. Each report uses only that chat's history.",
             "placeholder": "qq:private:123456",
         },
     )
     summary_time: str = Field(
         default="21:00",
         json_schema_extra={
-            "label": "每日总结时间",
-            "hint": "24 小时制 HH:MM；使用插件设置中的默认时区。总结当天零点到这个时间的聊天记录。",
+            "label": "Daily report time",
+            "hint": "Use 24-hour HH:MM in the plugin's default time zone. Summarizes that day's chat from midnight until this time.",
             "placeholder": "21:00",
         },
     )
@@ -394,42 +394,42 @@ class DailyReportSettings(PluginConfigBase):
 
 
 class ProactiveSettings(PluginConfigBase):
-    """设置随机主动发言的聊天目标、时间窗口和频率。"""
+    "Set target chats, time windows, and frequency for proactive messages."
 
-    __ui_label__: ClassVar[str] = "随机主动发言"
+    __ui_label__: ClassVar[str] = "Random Proactive Chat"
 
     enabled: bool = Field(
         default=True,
-        description="启用随机主动聊天",
+        description="Enable Random Active Chat",
         json_schema_extra={
-            "label": "启用随机主动发言",
-            "hint": "只影响随机主动聊天，不影响定时任务。",
+            "label": "Enable Random Proactive Chat",
+            "hint": "Affects only random active chats, does not affect scheduled tasks.",
         },
     )
     target_chats: list[str] = Field(
         default_factory=list,
-        description='目标，例如 ["qq:group:123456", "qq:private:123456"]',
+        description="Target, e.g. [\"qq:group:123456\", \"qq:private:123456\"]",
         json_schema_extra={
-            "label": "目标聊天流",
-            "hint": "每行添加一个目标，例如 qq:group:123456 或 qq:private:123456。留空则不主动发言。",
+            "label": "Target Chat Stream",
+            "hint": "Add one chat per line, such as qq:group:123456 or qq:private:123456. Leave empty to disable proactive messages.",
             "placeholder": "qq:private:123456",
         },
     )
     window_start: str = Field(
         default="09:00",
-        description="每天窗口开始时间 HH:MM",
+        description="Daily window start time HH:MM",
         json_schema_extra={
-            "label": "每天开始时间",
-            "hint": "使用 24 小时制，例如 09:00。",
+            "label": "Daily start time",
+            "hint": "Use a 24-hour clock, such as 09:00.",
             "placeholder": "09:00",
         },
     )
     window_end: str = Field(
         default="21:00",
-        description="每天窗口结束时间 HH:MM，可跨午夜",
+        description="Daily window end time HH:MM, across midnight",
         json_schema_extra={
-            "label": "每天结束时间",
-            "hint": "可跨午夜，例如开始 10:00、结束 02:00 表示到次日凌晨两点。",
+            "label": "Daily end time",
+            "hint": "The window may cross midnight; 10:00–02:00 ends at 02:00 the next day.",
             "placeholder": "21:00",
         },
     )
@@ -437,38 +437,38 @@ class ProactiveSettings(PluginConfigBase):
         default=1,
         ge=1,
         le=5,
-        description="每个聊天流每个窗口随机触发次数",
+        description="Random number of triggers per window per chat stream",
         json_schema_extra={
-            "label": "每个时间窗口的发言次数",
-            "hint": "仅“按次数”模式生效；每个目标每个窗口随机发言 1–5 次。",
+            "label": "Messages per time window",
+            "hint": "Only applies in count mode. Sends 1–5 randomly timed messages per target per window.",
         },
     )
     scheduling_mode: Literal["count", "interval"] = Field(
         default="count",
-        description="count 按窗口次数；interval 按平均间隔",
+        description="count by number of windows; interval by average interval",
         json_schema_extra={
-            "label": "发言频率模式",
-            "hint": "count 表示按窗口次数；interval 表示按平均间隔。选项中的英文是配置值。",
+            "label": "Speaking Frequency Mode",
+            "hint": "count schedules a fixed number of messages per window; interval uses the average time between messages. These option values are stored in the configuration.",
         },
     )
     average_interval_hours: float = Field(
         default=2.0,
         ge=0.25,
         le=24,
-        description="interval 模式下平均每隔多少小时发言",
+        description="average number of hours to speak in interval mode",
         json_schema_extra={
-            "label": "平均发言间隔（小时）",
-            "hint": "仅“按平均间隔”模式生效，范围为 0.25–24 小时。",
+            "label": "Average message interval (hours)",
+            "hint": "Valid only in the \"by average interval\" mode, ranging from 0.25 –24 hours.",
         },
     )
     offset_minutes: int = Field(
         default=15,
         ge=0,
         le=720,
-        description="interval 模式下每次间隔的随机偏移，正负分钟",
+        description="random offset per interval in interval mode, plus or minus minutes",
         json_schema_extra={
-            "label": "随机偏移（分钟）",
-            "hint": "每次间隔在平均值的基础上随机提前或推迟，偏移必须小于平均间隔。",
+            "label": "Random offset (minutes)",
+            "hint": "Each interval is randomly advanced or postponed based on the average, and the offset must be less than the average interval.",
         },
     )
     intent: str = Field(
@@ -477,10 +477,10 @@ class ProactiveSettings(PluginConfigBase):
             "在当前聊天流发出一条自然的消息。避免复述最近说过的话；上下文较少时可聊轻松的日常话题。"
             "不要提及插件或定时器。"
         ),
-        description="交给麦麦主动任务的发言意图",
+        description="Instruction for proactive messages",
         json_schema_extra={
-            "label": "主动发言的引导文字",
-            "hint": "麦麦会结合当前聊天和上次实际发出的内容自行选话题。",
+            "label": "Proactive message guidance",
+            "hint": "MaiBot chooses a topic from the current chat and its previous proactive message.",
             "x-widget": "textarea",
             "rows": 4,
         },
@@ -488,19 +488,19 @@ class ProactiveSettings(PluginConfigBase):
 
 
 class RoleRecognitionSettings(PluginConfigBase):
-    """按真实发送账号为当前对话者选择独立的角色提示词。"""
+    "Select role prompts from the sender's verified account."
 
-    __ui_label__: ClassVar[str] = "角色识别"
+    __ui_label__: ClassVar[str] = "Role Recognition"
 
     enabled: bool = Field(
         default=True,
-        json_schema_extra={"label": "启用角色识别", "hint": "在规划和回复时补充账号关系；MaiBot 原本人设优先。"},
+        json_schema_extra={"label": "Enable Role Identification", "hint": "Add relationship context during planning and replies; MaiBot's existing personaa takes priority."},
     )
     familiar_accounts: list[str] = Field(
         default_factory=list,
         json_schema_extra={
-            "label": "熟人账号",
-            "hint": "每行一个 平台:账号，例如 qq:123456789。手动熟人立即生效；主人优先于熟人。",
+            "label": "Acquaintance account",
+            "hint": "One platform account per line, such as qq:123456789. Manually marked familiar users take effect immediately; owners take precedence.",
             "placeholder": "qq:123456789",
         },
     )
@@ -509,21 +509,21 @@ class RoleRecognitionSettings(PluginConfigBase):
         ge=1,
         le=10000,
         json_schema_extra={
-            "label": "自动升级熟人所需互动次数",
-            "hint": "陌生人收到麦麦成功回复的次数超过此值后自动成为熟人；设为 50 时第 51 次升级。按平台账号跨聊天流累计。",
+            "label": "Interactions required to become familiar",
+            "hint": "A stranger becomes familiar after more than this many successful interactions with MaiBot. At 50, the upgrade happens on interaction 51. Counts are shared across chats by platform account.",
         },
     )
     owner_prompt: str = Field(
         default="当前说话者是已核验的插件管理员，也是主人。可以亲近、撒娇，称呼他‘主人’；回应他正在说的事，不把每句话变成工作汇报。",
-        json_schema_extra={"label": "主人专属提示词", "hint": "仅补充主人关系与称呼，不覆盖 MaiBot 人设。", "x-widget": "textarea", "rows": 4},
+        json_schema_extra={"label": "Owner-specific prompt", "hint": "Adds the owner relationship and form of address without overriding MaiBot's persona.", "x-widget": "textarea", "rows": 4},
     )
     familiar_prompt: str = Field(
         default="当前说话者是熟人。称呼‘老大’，可以自然、亲切地闲聊和打趣；不能称主人。",
-        json_schema_extra={"label": "熟人专属提示词", "hint": "仅补充熟人关系与称呼，不覆盖 MaiBot 人设。", "x-widget": "textarea", "rows": 4},
+        json_schema_extra={"label": "Familiar-user prompt", "hint": "Adds the familiar relationship and form of address without overriding MaiBot's persona.", "x-widget": "textarea", "rows": 4},
     )
     stranger_prompt: str = Field(
         default="当前说话者是陌生人。称呼‘老大’，保持友好、有分寸的猫娘语气；不能称主人。",
-        json_schema_extra={"label": "陌生人专属提示词", "hint": "适用于其他账号，仅补充关系与称呼，不覆盖 MaiBot 人设。", "x-widget": "textarea", "rows": 4},
+        json_schema_extra={"label": "Stranger prompt", "hint": "Applies to other accounts. Adds relationship and form of address without overriding MaiBot's persona.", "x-widget": "textarea", "rows": 4},
     )
 
     @field_validator("familiar_accounts")
@@ -543,45 +543,45 @@ class RoleRecognitionSettings(PluginConfigBase):
 
 
 class AntiBullyingSettings(PluginConfigBase):
-    """独立控制 AI 反霸凌的识别与提醒。"""
+    "Independently control the identification and reminder of AI anti-bullying."
 
-    __ui_label__: ClassVar[str] = "AI 反霸凌"
+    __ui_label__: ClassVar[str] = "AI Anti-Bullying"
 
     enabled: bool = Field(
         default=True,
-        description="启用 AI 反霸凌",
+        description="Enable AI Anti-Bullying",
         json_schema_extra={
-            "label": "启用 AI 反霸凌",
-            "hint": "管理员账号留空时不检查消息，也不发送提醒。",
+            "label": "Enable AI Anti-Bullying",
+            "hint": "Leave administrator accounts empty to disable abuse checks and alerts.",
         },
     )
     forbidden_words: list[str] = Field(
         default_factory=list,
-        description="帮助 AI 识别针对麦麦的辱骂的违禁词",
+        description="Help AI identify abuse directed at MaiBot",
         json_schema_extra={
-            "label": "违禁词",
-            "hint": "每行一个词；命中后仍由 AI 判断是否真的在辱骂麦麦，避免把引用或讨论误报。",
-            "placeholder": "填写要留意的词语",
+            "label": "Blocked words",
+            "hint": "One term per line. An AI check still decides whether a match is abuse directed at MaiBot; quotations and discussions should not trigger false alerts.",
+            "placeholder": "Fill in the words to watch out for",
         },
     )
     confidence_threshold: float = Field(
         default=0.8,
         ge=0.5,
         le=1.0,
-        description="AI 把握度达到该值才提醒管理员",
+        description="Alert the administrator only above this AI confidence threshold",
         json_schema_extra={
-            "label": "提醒把握度",
-            "hint": "范围 0.5–1.0；越高越谨慎，默认 0.8。",
+            "label": "Alert confidence threshold",
+            "hint": "Range 0.5–1.0; higher is more cautious, default 0.8.",
         },
     )
     alert_cooldown_minutes: int = Field(
         default=10,
         ge=0,
         le=1440,
-        description="同一人同一聊天流两次提醒的最短间隔",
+        description="Minimum interval between two reminders in the same chat stream for the same person",
         json_schema_extra={
-            "label": "同一人提醒间隔（分钟）",
-            "hint": "避免短时间重复告状；0 表示不限制。",
+            "label": "Reminder interval for the same person (minutes)",
+            "hint": "Prevents repeated alerts in a short period. Set 0 for no limit.",
         },
     )
 
@@ -597,44 +597,44 @@ class AntiBullyingSettings(PluginConfigBase):
 
 
 class KnowledgeBaseSettings(PluginConfigBase):
-    """独立知识库和聊天流读取权限。"""
+    "Standalone knowledge base and chat stream read access."
 
-    __ui_label__: ClassVar[str] = "知识库"
+    __ui_label__: ClassVar[str] = "Knowledge Base"
 
     enabled: bool = Field(
         default=True,
-        description="启用知识库模块",
+        description="Enable Knowledge Base Module",
         json_schema_extra={
-            "label": "启用知识库",
-            "hint": "关闭后暂停导入和聊天检索，资料仍保留。上传入口在本插件的「详情」页。",
+            "label": "Enable Knowledge Base",
+            "hint": "Disabling this module pauses imports and chat retrieval while preserving stored data. Upload documents from the plugin's Details page.",
         },
     )
     allowed_chats: list[str] = Field(
         default_factory=list,
-        description="允许读取知识库的聊天流 ID 或平台目标",
+        description="Allows to read knowledge base chat stream IDs or platform targets",
         json_schema_extra={
-            "label": "允许查询的聊天流",
-            "hint": "每行一个 MaiBot 实际聊天流 ID，或 qq:private:用户号 / qq:group:群号；留空时任何聊天都不能检索。",
+            "label": "Chats allowed to search",
+            "hint": "One MaiBot chat stream ID per line, or qq:private:USER_ID / qq:group:GROUP_ID. Leave empty to deny chat access.",
         },
     )
     chunk_chars: int = Field(
         default=800,
         ge=300,
         le=2000,
-        description="每段最大字符数",
-        json_schema_extra={"label": "分段大小（字符）", "hint": "修改后只影响新上传文档。"},
+        description="Maximum characters per segment",
+        json_schema_extra={"label": "Segment size (characters)", "hint": "Changes will only affect newly uploaded documents."},
     )
     overlap_chars: int = Field(
         default=120,
         ge=0,
         le=500,
-        description="相邻分段重复字符数",
-        json_schema_extra={"label": "分段重叠（字符）", "hint": "帮助跨段问题保留上下文；必须小于分段大小的一半。"},
+        description="Number of repeating characters in adjacent segments",
+        json_schema_extra={"label": "Segment overlap (characters)", "hint": "Helps preserve context for cross-segment problems; must be less than half the segment size."},
     )
     semantic_search: bool = Field(
         default=True,
-        description="用 MaiBot embedding 模型建立语义向量",
-        json_schema_extra={"label": "语义检索", "hint": "与关键词检索合并；模型不可用时仍可使用关键词检索。"},
+        description="Building semantic vectors with the MaiBot embedding model",
+        json_schema_extra={"label": "Semantic Retrieval", "hint": "Merge with keyword retrieval; keyword retrieval is still possible when the model is not available."},
     )
 
     @field_validator("allowed_chats")
@@ -655,62 +655,62 @@ class KnowledgeBaseSettings(PluginConfigBase):
 
 
 class DeepSeekWebSettings(PluginConfigBase):
-    """独立的 DeepSeek 搜索、抓取与账号余额模块。"""
+    "Separate DeepSeek search, crawl, and account balance modules."
 
-    __ui_label__: ClassVar[str] = "DeepSeek 联网与余额"
+    __ui_label__: ClassVar[str] = "DeepSeek Networking and Balance"
 
     enabled: bool = Field(
         default=False,
-        description="启用小秘书自带的 DeepSeek Search / Fetch 与余额查询工具",
-        json_schema_extra={"label": "启用 DeepSeek 模块", "hint": "填写 API Key 并开启后，麦麦可搜索、读取网页；已核验的管理员还可查询该 Key 所属账号的余额。"},
+        description="Enable DeepSeek Search/Fetch and Balance Query Tool included with Mai Secretary",
+        json_schema_extra={"label": "Enable DeepSeek web and balance", "hint": "Once an API key is set and this module is enabled, MaiBot can search and read web pages. Verified administrators can also check that key's account balance."},
     )
-    search_enabled: bool = Field(default=True, json_schema_extra={"label": "允许联网搜索与抓取", "hint": "自然语言开关可单独控制，不影响余额查询。"})
-    balance_enabled: bool = Field(default=True, json_schema_extra={"label": "允许查询 API 余额", "hint": "自然语言开关可单独控制，不影响联网搜索。"})
+    search_enabled: bool = Field(default=True, json_schema_extra={"label": "Allow networked search and crawl", "hint": "The natural language switch can be controlled individually without affecting the balance query."})
+    balance_enabled: bool = Field(default=True, json_schema_extra={"label": "Allow querying API balances", "hint": "The natural language switch is individually controlled and does not affect online searches."})
     api_key: str = Field(
         default="",
         description="DeepSeek Search / Fetch API Key",
-        json_schema_extra={"label": "DeepSeek API Key", "hint": "仅保存在本机插件配置文件中，不写进仓库或聊天提示词。", "x-widget": "password"},
+        json_schema_extra={"label": "DeepSeek API Key", "hint": "Save only in the native plugin configuration file and do not write to the repository or chat prompts.", "x-widget": "password"},
     )
     balance_alias: str = Field(
         default="",
         max_length=20,
         json_schema_extra={
-            "label": "API 余额的别称",
-            "hint": "例如填“蓝莓”：主人说蓝莓就指 API 余额，也可作为蓝天最爱的食物来表达；管理员每次询问余额都会实时查询。",
+            "label": "API balance nickname",
+            "hint": "For example, use 'blueberries' as a nickname for the API balance. Explicit balance questions by administrators trigger a fresh query.",
         },
     )
     auto_balance_enabled: bool = Field(
         default=False,
         json_schema_extra={
-            "label": "自动更新余额",
-            "hint": "开启后首次查询，并按设定间隔更新；成功结果逐次保存在本机。",
+            "label": "Automatically update balances",
+            "hint": "After the first query, refresh the balance at the configured interval and save successful results locally.",
         },
     )
     balance_context_all_chats: bool = Field(
         default=False,
         json_schema_extra={
-            "label": "所有聊天流可谈论余额",
-            "hint": "开启后麦麦在所有群聊和私聊都能看到最近保存的余额，普通群成员也可能听到具体金额。",
+            "label": "All chat streams can talk about balances",
+            "hint": "When turned on, MaiBot can see the recently saved balance in all group chats and private chats, and ordinary group members may also hear the specific amount.",
         },
     )
     auto_balance_interval_hours: float = Field(
         default=6.0, ge=1.0, le=24.0,
         json_schema_extra={
-            "label": "自动查询间隔（小时）",
-            "hint": "默认 6 小时；管理员手动查询成功后从该次查询重新计时；自动查询失败后至少等待 30 分钟再试。",
+            "label": "Automatic query interval (hours)",
+            "hint": "Defaults to 6 hours. A successful manual query resets the timer. After an automatic query fails, wait at least 30 minutes before retrying.",
         },
     )
     budget_alert_enabled: bool = Field(
         default=False,
-        json_schema_extra={"label": "启用低余额提醒", "hint": "使用已有的 DeepSeek 余额记录；只向管理员私聊提醒，不额外产生查询请求。"},
+        json_schema_extra={"label": "Enable Low Balance Alerts", "hint": "Use existing DeepSeek balance records; only private reminder to admins, no additional query requests."},
     )
     budget_low_balance_threshold: float = Field(
         default=10.0, ge=0.0, le=1000000.0,
-        json_schema_extra={"label": "低余额提醒线", "hint": "按余额接口返回的各币种分别比较；0 表示只在余额为零时提醒。"},
+        json_schema_extra={"label": "Low-balance threshold", "hint": "Compare by each currency returned by the balance interface; 0 means only remind when the balance is zero."},
     )
     budget_alert_cooldown_hours: int = Field(
         default=24, ge=1, le=168,
-        json_schema_extra={"label": "低余额重复提醒间隔（小时）"},
+        json_schema_extra={"label": "Low Balance Repeat Reminder Interval (Hours)"},
     )
 
     @field_validator("balance_alias")
@@ -722,61 +722,61 @@ class DeepSeekWebSettings(PluginConfigBase):
         return value
     base_url: str = Field(
         default="https://api.deepseek.com",
-        description="DeepSeek API 根地址",
-        json_schema_extra={"label": "API 地址", "hint": "通常保持默认值；使用代理时填写对应地址。"},
+        description="DeepSeek API root address",
+        json_schema_extra={"label": "API address", "hint": "Usually keep the default value; fill in the corresponding address when using the proxy."},
     )
     timeout_seconds: float = Field(
         default=20.0, ge=1.0, le=120.0,
-        json_schema_extra={"label": "请求超时（秒）"},
+        json_schema_extra={"label": "Request timeout (seconds)"},
     )
     default_count: int = Field(
         default=4, ge=1, le=50,
-        json_schema_extra={"label": "默认搜索条数", "hint": "麦麦没有指定 count 时使用。"},
+        json_schema_extra={"label": "Default number of searches", "hint": "Used when count is not specified by MaiBot."},
     )
     max_count: int = Field(
         default=10, ge=1, le=50,
-        json_schema_extra={"label": "最多搜索条数", "hint": "超出时截为这个上限。"},
+        json_schema_extra={"label": "Max searches", "hint": "Truncate to this limit when exceeded."},
     )
     search_content_chars: int = Field(
         default=2000, ge=0, le=20000,
-        json_schema_extra={"label": "每条网页正文上限", "hint": "仅 need_content=true 时返回，0 表示不返回正文。"},
+        json_schema_extra={"label": "Maximum page body per search result", "hint": "Returns only when need_content = true, 0 means no body is returned."},
     )
     search_output_chars: int = Field(
         default=8000, ge=1000, le=50000,
-        json_schema_extra={"label": "搜索总输出上限", "hint": "避免一次结果占用过多聊天上下文。"},
+        json_schema_extra={"label": "Total search output limit", "hint": "Avoid using too much chat context in one result."},
     )
     cache_ttl_seconds: int = Field(
         default=600, ge=0, le=86400,
-        json_schema_extra={"label": "搜索缓存（秒）", "hint": "相同搜索短时间内复用结果，0 表示关闭缓存。"},
+        json_schema_extra={"label": "Search Cache (sec)", "hint": "For the same search, the results are reused in a short time, and 0 means that the cache is closed."},
     )
     search_qps: float = Field(
         default=5.0, ge=0.1, le=100.0,
-        json_schema_extra={"label": "搜索每秒请求上限", "hint": "插件实例自己的搜索限速。"},
+        json_schema_extra={"label": "Search request limit per second", "hint": "The plugin instance's own search speed limit."},
     )
     fetch_content_chars: int = Field(
         default=8000, ge=0, le=50000,
-        json_schema_extra={"label": "网页抓取正文上限", "hint": "已知 URL 的 Markdown 正文最多返回多少字符。"},
+        json_schema_extra={"label": "Maximum page crawl body", "hint": "The maximum number of characters returned by the Markdown body of a known URL."},
     )
     fetch_qps: float = Field(
         default=5.0, ge=0.1, le=25.0,
-        json_schema_extra={"label": "抓取每秒请求上限", "hint": "插件实例自己的网页抓取限速。"},
+        json_schema_extra={"label": "Crawl Request Per Second Limit", "hint": "The plugin instance's own page crawl speed limit."},
     )
 
 
 class MessageDebounceSettings(PluginConfigBase):
-    """把同一用户短时间内连续发送的内容交给麦麦一次处理。"""
+    "Combine a user's closely spaced messages so MaiBot processes them once."
 
-    __ui_label__: ClassVar[str] = "消息防抖"
+    __ui_label__: ClassVar[str] = "Message Debouncing"
 
-    enabled: bool = Field(default=True, json_schema_extra={"label": "启用消息防抖", "hint": "同一聊天流中同一用户的连续消息会合并，麦麦只处理一次。"})
-    debounce_seconds: float = Field(default=2.0, ge=0.1, le=10.0, json_schema_extra={"label": "等候后续消息（秒）", "hint": "每收到一条新消息重新等待，推荐 2 秒。"})
-    max_wait_seconds: float = Field(default=8.0, ge=1.0, le=30.0, json_schema_extra={"label": "最长等待（秒）", "hint": "连续发消息也不会无限延后，推荐 8 秒。"})
-    suppress_stale_private_replies: bool = Field(default=True, json_schema_extra={"label": "取消过时的私聊回复", "hint": "麦麦还在生成旧消息的回复时，如果你又发来新消息，就不再发送那条旧回复。"})
-    merge_separator: str = Field(default="\n", max_length=10, json_schema_extra={"label": "消息分隔符"})
-    enable_private: bool = Field(default=True, json_schema_extra={"label": "私聊启用"})
-    enable_group: bool = Field(default=True, json_schema_extra={"label": "群聊启用"})
-    ignore_commands: bool = Field(default=True, json_schema_extra={"label": "命令直接放行"})
-    command_prefixes: list[str] = Field(default_factory=lambda: ["/", "!", "！"], json_schema_extra={"label": "命令前缀", "hint": "以这些文字开头的消息不参与合并。"})
+    enabled: bool = Field(default=True, json_schema_extra={"label": "Enable Message Debouncing", "hint": "Consecutive messages from the same user in the same chat stream are merged and processed only once."})
+    debounce_seconds: float = Field(default=2.0, ge=0.1, le=10.0, json_schema_extra={"label": "Wait for follow-up message (seconds)", "hint": "It is recommended to wait 2 seconds for each new message received."})
+    max_wait_seconds: float = Field(default=8.0, ge=1.0, le=30.0, json_schema_extra={"label": "Longest wait (seconds)", "hint": "Consecutive messages will not be delayed indefinitely, recommended for 8 seconds."})
+    suppress_stale_private_replies: bool = Field(default=True, json_schema_extra={"label": "Cancel outdated private reply", "hint": "If a new private message arrives while MaiBot is still answering an older one, suppress the outdated reply."})
+    merge_separator: str = Field(default="\n", max_length=10, json_schema_extra={"label": "Message Delimiter"})
+    enable_private: bool = Field(default=True, json_schema_extra={"label": "Private Chat Enabled"})
+    enable_group: bool = Field(default=True, json_schema_extra={"label": "Group Chat Enabled"})
+    ignore_commands: bool = Field(default=True, json_schema_extra={"label": "Bypass command messages"})
+    command_prefixes: list[str] = Field(default_factory=lambda: ["/", "!", "！"], json_schema_extra={"label": "Command Prefix", "hint": "Messages beginning with these words do not participate in the merge."})
 
     @field_validator("command_prefixes")
     @classmethod
