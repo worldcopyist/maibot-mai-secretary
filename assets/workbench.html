@@ -68,7 +68,7 @@
     for (const row of [...(data.followups || [])].reverse()) {
       const box = add(followups, 'div', '', 'item'); add(box, 'strong', row.topic);
       add(box, 'p', `${row.owner_account} · ${row.stream_id} · ${row.status} · ${new Date(row.due_at * 1000).toLocaleString()}`, 'muted');
-      if (row.status === 'active') { const button = add(box, 'button', '取消'); button.addEventListener('click', () => run(() => call('followup_cancel', {followup_id: row.id}))); }
+      if (row.status === 'active') { const button = add(box, 'button', '取消'); button.addEventListener('click', () => { if (window.confirm(window.secretaryTranslate('确定取消这项回访吗？'))) run(() => call('followup_cancel', {followup_id: row.id})); }); }
     }
     const receipts = $('receipts'); receipts.replaceChildren();
     if (!data.receipts?.length) empty(receipts, '暂无任务回执。');
@@ -76,7 +76,7 @@
       const box = add(receipts, 'div', '', 'item'); add(box, 'strong', `${row.status} · ${row.instruction}`);
       add(box, 'p', `回执 ${row.id} · ${row.stream_id} · ${new Date(row.accepted_at * 1000).toLocaleString()}`, 'muted');
       if (row.error) add(box, 'p', row.error, 'muted');
-      if (row.status === 'send_failed' && !row.retry_of) { const button = add(box, 'button', '重试一次'); button.addEventListener('click', () => run(() => call('receipt_retry', {receipt_id: row.id}))); }
+      if (row.status === 'send_failed' && !row.retry_of) { const button = add(box, 'button', '重试一次'); button.addEventListener('click', () => { if (window.confirm(window.secretaryTranslate('确定重试这项已经确认发送失败的任务吗？'))) run(() => call('receipt_retry', {receipt_id: row.id})); }); }
     }
   }
   $('save-relationship').addEventListener('click', () => run(() => call('relationship_set', {action: $('level').value, account: $('account').value.trim()})));
@@ -84,3 +84,129 @@
   refresh().catch(error => status(String(error.message || error), true));
 })();
 </script>
+<!-- secretary-i18n:start -->
+<script>
+(() => {
+  const catalogs = {"en":{" · 当前生效：否":" · Effective: No"," · 当前生效：是":" · Effective: Yes"," 次":" times","QQ 账号":"QQ account","“已入队”只是主程序接受任务；“确认发送”才有实际发送回执。“未知”不会自动重发。仅明确发送失败可手动重试一次。":"“Queued” means MaiBot accepted the task. “Confirmed sent” means a message delivery was observed. Unknown results are not retried automatically. You can retry a confirmed send failure once.","互动 ":"Interactions: ","保存关系":"save relationship","关系管理":"Relationships","关系级别":"relationship level","关闭":"Off","删除":"Delete","刷新":"Refresh","刷新状态":"Refresh status","功能开关":"Feature switches","发送失败":"Sending failed","取消":"Cancel","回执 ":"Receipt ","定时任务回执":"Task delivery receipts","已保存":"Saved","已入队":"Queued","已关闭":"Off","已开启":"On","开关：":"Switch: ","开启":"On","当前生效：":"Effective: ","恢复自动判断":"Restore automatic judgment","恢复配置":"Use configured value","操作失败":"Operation failed","暂无任务回执。":"No delivery receipts yet.","暂无回访。":"No follow-ups yet.","暂无记录":"No record yet","暂时没有记录的关系。":"There are currently no recorded relationships.","未知":"unknown","正在保存…":"Saving…","正在读取聊天流…":"Reading chat stream...","熟人":"acquaintance","用户可以在聊天中用自然语言创建、查询、取消个人回访，或退出个人回访。页面可取消已安排的事项。":"Users can ask MaiBot in natural language to schedule, list, or cancel a personal follow-up, or opt out. Scheduled follow-ups can be canceled here.","确定取消这项回访吗？":"Cancel this follow-up?","确定重试这项已经确认发送失败的任务吗？":"Retry this task after its confirmed delivery failure?","确认发送":"Confirmed sent","等待执行":"Waiting for execution","管理员手动指定":"Set by administrator","约定回访":"Follow-ups","聊天设置覆盖中":"Chat override active","请选择聊天流":"Please select a chat stream","这里显示当前实际生效的模块状态。聊天中由管理员设定的开关会保存到小秘书状态文件，并覆盖配置页原值；“恢复配置”可撤销这层覆盖。MaiBot 管理页若整体关闭插件，聊天开关无法重新加载它。":"This displays the current module status that is actually in effect. The switches set by the administrator in the chat will be saved to the secretary status file and overwrite the original value on the configuration page; \"Restore Configuration\" can undo this override. If the plug-in is closed entirely on the MaiBot management page, the chat switch cannot reload it.","配置页：":"Configured: ","重试一次":"Try again","陌生人":"stranger"},"ja":{" · 当前生效：否":" · 適用中：いいえ"," · 当前生效：是":" · 適用中：はい"," 次":"回","QQ 账号":"QQアカウント","“已入队”只是主程序接受任务；“确认发送”才有实际发送回执。“未知”不会自动重发。仅明确发送失败可手动重试一次。":"「キューに登録」はMaiBotがタスクを受け付けた状態です。「送信確認済み」は実際の送信を確認した状態です。不明な結果は自動再送せず、送信失敗が確認された場合のみ1回手動で再試行できます。","互动 ":"交流回数：","保存关系":"関係を保存する","关系管理":"関係の管理","关系级别":"関係レベル","关闭":"オフ","删除":"削除","刷新":"リフレッシュ","刷新状态":"状態を更新","功能开关":"機能の切り替え","发送失败":"送信に失敗しました","取消":"キャンセル","回执 ":"送信記録 ","定时任务回执":"定時タスクの送信結果","已保存":"保存済み","已入队":"キューに登録","已关闭":"オフ","已开启":"オン","开关：":"切替：","开启":"オン","当前生效：":"適用中：","恢复自动判断":"自動判定を復活させる","恢复配置":"設定値に戻す","操作失败":"操作が失敗しました","暂无任务回执。":"送信記録はありません。","暂无回访。":"フォローアップはありません。","暂无记录":"まだ記録がありません","暂时没有记录的关系。":"現在、記録された関係はありません。","未知":"不明","正在保存…":"保存中…","正在读取聊天流…":"チャット ストリームを読んでいます...","熟人":"知人","用户可以在聊天中用自然语言创建、查询、取消个人回访，或退出个人回访。页面可取消已安排的事项。":"ユーザーは自然な言葉で個人向けフォローアップの作成・確認・取消や受信停止を依頼できます。このページでも予定を取り消せます。","确定取消这项回访吗？":"このフォローアップを取り消しますか？","确定重试这项已经确认发送失败的任务吗？":"送信失敗が確認されたタスクを再試行しますか？","确认发送":"送信確認済み","等待执行":"実行を待っています","管理员手动指定":"管理者が指定","约定回访":"フォローアップ","聊天设置覆盖中":"チャット側の設定を適用中","请选择聊天流":"チャット ストリームを選択してください","这里显示当前实际生效的模块状态。聊天中由管理员设定的开关会保存到小秘书状态文件，并覆盖配置页原值；“恢复配置”可撤销这层覆盖。MaiBot 管理页若整体关闭插件，聊天开关无法重新加载它。":"実際に有効な現在のモジュールのステータスが表示されます。管理者がチャットで設定したスイッチは秘書ステータス ファイルに保存され、設定ページの元の値が上書きされます。 「構成の復元」を使用すると、このオーバーライドを元に戻すことができます。 MaiBot 管理ページでプラグインが完全に閉じられている場合、チャット スイッチはプラグインをリロードできません。","配置页：":"設定値：","重试一次":"もう一度試してください","陌生人":"見知らぬ人"},"ko":{" · 当前生效：否":" · 적용 상태: 아니요"," · 当前生效：是":" · 적용 상태: 예"," 次":"회","QQ 账号":"QQ 계정","“已入队”只是主程序接受任务；“确认发送”才有实际发送回执。“未知”不会自动重发。仅明确发送失败可手动重试一次。":"“대기열에 등록됨”은 MaiBot이 작업을 수락했다는 뜻입니다. “전송 확인됨”은 실제 메시지 전송이 확인된 상태입니다. 결과가 불명확하면 자동 재전송하지 않으며, 전송 실패가 확인된 경우에만 한 번 수동 재시도할 수 있습니다.","互动 ":"대화 횟수: ","保存关系":"관계 저장","关系管理":"관계 관리","关系级别":"관계 수준","关闭":"꺼짐","删除":"삭제","刷新":"새로고침","刷新状态":"상태 새로고침","功能开关":"기능 스위치","发送失败":"전송 실패","取消":"취소","回执 ":"전송 기록 ","定时任务回执":"예약 작업 전송 기록","已保存":"저장됨","已入队":"대기열에 등록됨","已关闭":"꺼짐","已开启":"켜짐","开关：":"스위치: ","开启":"켜짐","当前生效：":"적용 상태: ","恢复自动判断":"자동 판단을 복원","恢复配置":"설정값으로 복원","操作失败":"작업 실패","暂无任务回执。":"전송 기록이 없습니다.","暂无回访。":"후속 대화가 없습니다.","暂无记录":"아직 기록이 없습니다","暂时没有记录的关系。":"현재 등록된 관계가 없습니다.","未知":"알 수 없음","正在保存…":"저장 중…","正在读取聊天流…":"채팅 스트림을 읽는 중...","熟人":"지인","用户可以在聊天中用自然语言创建、查询、取消个人回访，或退出个人回访。页面可取消已安排的事项。":"사용자는 자연어로 개인 후속 대화를 만들고 확인하거나 취소하고, 후속 대화를 거부할 수 있습니다. 이 페이지에서도 예정된 항목을 취소할 수 있습니다.","确定取消这项回访吗？":"이 후속 알림을 취소할까요?","确定重试这项已经确认发送失败的任务吗？":"전송 실패가 확인된 작업을 다시 시도할까요?","确认发送":"전송 확인됨","等待执行":"실행을 기다리는 중","管理员手动指定":"관리자가 지정함","约定回访":"후속 대화","聊天设置覆盖中":"채팅 설정이 우선 적용됨","请选择聊天流":"채팅 스트림을 선택하세요.","这里显示当前实际生效的模块状态。聊天中由管理员设定的开关会保存到小秘书状态文件，并覆盖配置页原值；“恢复配置”可撤销这层覆盖。MaiBot 管理页若整体关闭插件，聊天开关无法重新加载它。":"실제로 적용되는 현재 모듈 상태를 표시합니다. 관리자가 채팅에서 설정한 스위치는 비서 상태 파일에 저장되며 구성 페이지의 원래 값을 덮어씁니다. \"구성 복원\"을 통해 이 재정의를 취소할 수 있습니다. MaiBot 관리 페이지에서 플러그인이 완전히 닫혀 있으면 채팅 스위치가 플러그인을 다시 로드할 수 없습니다.","配置页：":"설정값: ","重试一次":"다시 시도하세요","陌生人":"낯선 사람"}};
+  const fragments = ["确定重试这项已经确认发送失败的任务吗？","暂时没有记录的关系。","确定取消这项回访吗？"," · 当前生效：否"," · 当前生效：是","正在读取聊天流…","暂无任务回执。","管理员手动指定","聊天设置覆盖中","请选择聊天流","当前生效：","暂无回访。","正在保存…","发送失败","恢复配置","操作失败","暂无记录","确认发送","等待执行","配置页：","重试一次","互动 ","回执 ","已保存","已入队","已关闭","已开启","开关：","陌生人"," 次","关闭","删除","刷新","取消","开启","未知","熟人"];
+  const originals = new WeakMap();
+  const attributes = new WeakMap();
+  let language = 'zh';
+
+  function translate(value) {
+    if (language === 'zh') return value;
+    const catalog = catalogs[language];
+    const trimmed = value.trim();
+    if (catalog[trimmed]) return value.replace(trimmed, catalog[trimmed]);
+    const weekdays = {
+      en: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'],
+      ja: ['月曜日', '火曜日', '水曜日', '木曜日', '金曜日', '土曜日', '日曜日'],
+      ko: ['월요일', '화요일', '수요일', '목요일', '금요일', '토요일', '일요일'],
+    }[language];
+    const longDate = trimmed.match(/^(\d{4}) 年 (\d{1,2}) 月 (\d{1,2}) 日$/);
+    if (longDate) {
+      const date = new Date(Date.UTC(+longDate[1], +longDate[2] - 1, +longDate[3]));
+      return new Intl.DateTimeFormat(language, { year: 'numeric', month: 'long', day: 'numeric', timeZone: 'UTC' }).format(date);
+    }
+    const dateLabel = trimmed.match(/^(\d{4})年(\d{1,2})月(\d{1,2})日，(\d+)项任务$/);
+    if (dateLabel) {
+      const date = new Date(Date.UTC(+dateLabel[1], +dateLabel[2] - 1, +dateLabel[3]));
+      const label = new Intl.DateTimeFormat(language, { year: 'numeric', month: 'long', day: 'numeric', timeZone: 'UTC' }).format(date);
+      return `${label}, ${dateLabel[4]} ${catalog['项任务']}`;
+    }
+    let translated = value;
+    translated = translated.replace(/^周 ([1-7]) (\d{2}:\d{2})$/, (_, day, time) => `${weekdays[+day - 1]} ${time}`);
+    translated = translated.replace(/^周([1-7]) 第(\d+)–(\d+)节/, (_, day, first, last) => {
+      if (language === 'en') return `${weekdays[+day - 1]}, periods ${first}–${last}`;
+      if (language === 'ja') return `${weekdays[+day - 1]}・${first}～${last}限`;
+      return `${weekdays[+day - 1]} ${first}~${last}교시`;
+    });
+    translated = translated.replace(/第([\d、]+)周/g, (_, weeks) => {
+      if (language === 'en') return `weeks ${weeks.replaceAll('、', ', ')}`;
+      if (language === 'ja') return `第${weeks}週`;
+      return `제${weeks.replaceAll('、', ', ')}주`;
+    });
+    translated = translated.replace(/第 (\d+) 周/g, (_, week) => {
+      if (language === 'en') return `week ${week}`;
+      if (language === 'ja') return `第${week}週`;
+      return `제${week}주`;
+    });
+    translated = translated.replace(/第 (\d+)–(\d+) 节(?!开始时间)/g, (_, first, last) => {
+      if (language === 'en') return `periods ${first}–${last}`;
+      if (language === 'ja') return `第${first}～${last}限`;
+      return `제${first}~${last}교시`;
+    });
+    const status = {
+      en: { active: 'Active', sent: 'Sent', send_failed: 'Send failed', unknown: 'Unknown', familiar: 'Familiar', stranger: 'Stranger' },
+      ja: { active: '有効', sent: '送信済み', send_failed: '送信失敗', unknown: '不明', familiar: '知人', stranger: '初対面' },
+      ko: { active: '활성', sent: '전송됨', send_failed: '전송 실패', unknown: '알 수 없음', familiar: '지인', stranger: '낯선 사람' },
+    }[language];
+    translated = translated.replace(/^(active|sent|send_failed|unknown)(?= · )/, match => status[match]);
+    translated = translated.replace(/(?<= · )(familiar|stranger)$/, match => status[match]);
+    for (const source of fragments) {
+      if (translated.includes(source)) translated = translated.replaceAll(source, catalog[source]);
+    }
+    return translated;
+  }
+
+  function updateText(node) {
+    if (node.parentElement?.closest('script,style')) return;
+    const current = node.nodeValue || '';
+    let item = originals.get(node);
+    if (!item || current !== item.rendered) item = { source: current, rendered: current };
+    const rendered = translate(item.source);
+    item.rendered = rendered;
+    originals.set(node, item);
+    if (current !== rendered) node.nodeValue = rendered;
+  }
+
+  function updateAttributes(element) {
+    let saved = attributes.get(element);
+    if (!saved) saved = {};
+    for (const name of ['placeholder', 'aria-label', 'title']) {
+      if (!element.hasAttribute(name)) continue;
+      const current = element.getAttribute(name) || '';
+      let item = saved[name];
+      if (!item || current !== item.rendered) item = { source: current, rendered: current };
+      const rendered = translate(item.source);
+      item.rendered = rendered;
+      saved[name] = item;
+      if (current !== rendered) element.setAttribute(name, rendered);
+    }
+    attributes.set(element, saved);
+  }
+
+  function scan(root) {
+    if (root.nodeType === Node.TEXT_NODE) return updateText(root);
+    if (root.nodeType !== Node.ELEMENT_NODE || root.matches('script,style')) return;
+    updateAttributes(root);
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_ELEMENT | NodeFilter.SHOW_TEXT);
+    while (walker.nextNode()) {
+      if (walker.currentNode.nodeType === Node.TEXT_NODE) updateText(walker.currentNode);
+      else if (!walker.currentNode.matches('script,style')) updateAttributes(walker.currentNode);
+    }
+  }
+
+  function setLanguage(value) {
+    const next = String(value || 'zh').toLowerCase().split('-')[0];
+    language = Object.hasOwn(catalogs, next) ? next : 'zh';
+    scan(document.body);
+  }
+
+  window.secretaryTranslate = translate;
+
+  const observer = new MutationObserver(records => {
+    for (const record of records) {
+      if (record.type === 'characterData') updateText(record.target);
+      else if (record.type === 'attributes') updateAttributes(record.target);
+      else for (const node of record.addedNodes) scan(node);
+    }
+  });
+  observer.observe(document.body, { subtree: true, childList: true, characterData: true, attributes: true, attributeFilter: ['placeholder', 'aria-label', 'title'] });
+  scan(document.body);
+  maibot.ready.then(() => setLanguage(maibot.context.language));
+  window.addEventListener('maibot:context', event => setLanguage(event.detail.language));
+})();
+
+</script>
+<!-- secretary-i18n:end -->

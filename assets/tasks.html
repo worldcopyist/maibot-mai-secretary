@@ -252,6 +252,7 @@
       add(info, 'div', `任务编号：${task.id} · 来源：${task.owner_user_id === '__secretary_webui__' ? '插件页面' : '聊天用户 '+task.owner_user_id}`, 'muted task-meta');
       const button = add(row, 'button', task.status === 'active' ? '取消任务' : '删除记录', 'button danger'); button.type = 'button';
       button.addEventListener('click', async () => {
+        if (!window.confirm(window.secretaryTranslate('确定取消这项定时任务吗？'))) return;
         if (busy) return;
         try { setBusy(true); await action('cancel', {task_id: task.id}); await refresh(); showStatus('任务已取消'); }
         catch (error) { showStatus(String(error), true); } finally { setBusy(false); }
@@ -300,3 +301,129 @@
   maibot.ready.then(() => refresh().catch(error => showStatus(String(error), true)));
 })();
 </script>
+<!-- secretary-i18n:start -->
+<script>
+(() => {
+  const catalogs = {"en":{" 年":"year"," 日":"day"," 月":"month"," 项 · ":" tasks · ","上个月":"last month","下个月":"next month","下次执行":"Next run","为这一天创建任务":"Create a task for this day","仅一次":"only once","今天":"today","任务列表已刷新":"Task list has been refreshed","任务已取消":"Task canceled","任务日历":"Task calendar","任务编号：":"Task number:","例如：告诉我今天的天气预报，并附上查询来源":"For example: Tell me today’s weather forecast and cite the sources","创建定时任务":"Create a scheduled task","删除":"Delete","删除记录":"delete record","到点要麦麦做什么？":"What do you want Mai Mai to do when the time comes?","刷新":"Refresh","单次":"Once","原计划时间":"Original planned time","发送到哪个聊天流？":"Which chat stream to send to?","取消":"Cancel","取消任务":"Cancel task","只能选择麦麦已经建立的聊天流；列表为空时，先在目标聊天中发一条消息。":"You can only select chat streams that Maimai has established; when the list is empty, send a message to the target chat first.","可切换月份和年份，支持选择 2030 年及之后的日期。点击某天会选中它，并把日期填入下方的单次任务表单。日历按每项任务自己的时区标记；周期任务只显示下次执行及之后的日期。":"The month and year can be switched, supporting the selection of dates in 2030 and later. Clicking on a day will select it and fill in the date in the single task form below. The calendar is marked with each task's own time zone; recurring tasks only show the next execution date and beyond.","周 ":"week","周一":"Monday","周三":"wednesday","周二":"Tuesday","周五":"Friday","周六":"Saturday","周四":"Thursday","周日":"Sunday","定时任务已创建":"Scheduled task has been created","定时任务模块当前已关闭。已有任务仍会显示，开启后才可创建和执行。":"The scheduled task module is currently closed. Existing tasks will still be displayed and can only be created and executed after being turned on.","已关闭":"Off","已创建的任务":"Scheduled tasks","已开启":"On","已触发（未确认消息发出）":"Triggered (delivery unconfirmed)","已选择 ":"Selected ","已错过":"Missed","手动创建任务":"Create tasks manually","执行方式":"Execution method","执行日期和时间":"Execution date and time","插件页面":"Plugin page","操作失败":"Operation failed","日，":"day,","时区":"time zone","星期几执行？":"What day of the week does it take place?","暂无可选聊天流":"No optional chat stream available yet","暂无记录":"No record yet","最近错误：":"Recent errors:","来源：":"Source:","查看。手动创建的任务会在所选聊天流中执行；下方时间按填写的时区计算。":"View. Manually created tasks will be executed in the selected chat flow; the times below are calculated in the time zone filled in.","正在读取任务…":"Loading tasks…","正在读取聊天流…":"Reading chat stream...","每周":"weekly","每天":"every day","每天执行时间":"Execution time per day","点击日期查看当天任务，或为当天创建单次任务。":"Click on a date to view tasks for that day, or create a single task for that day.","确定取消这项定时任务吗？":"Cancel this scheduled task?","等待执行":"Waiting for execution","聊天流读取失败：":"Chat stream read failed:","聊天流：":"Chat: ","聊天用户 ":"Chat user: ","触发失败":"Trigger failed","请在下方填写时间、聊天流和任务内容。":"Please fill in the time, chat flow and task content below.","请填写聊天流、任务内容、执行时间；每周任务还要选择星期。":"Please fill in the chat flow, task content, and execution time; also select a week for weekly tasks.","请选择聊天流":"Please select a chat stream","课表页面":"Class schedule page","过去的日期只能查看任务。":"Only tasks can be viewed for past dates.","还没有定时任务":"There are no scheduled tasks yet","这一天已过去，不能新建单次任务。":"The day has passed and new single tasks cannot be created.","这一天没有已安排的任务。":"There are no scheduled tasks for this day.","这里显示普通定时任务，包括在聊天中创建的任务。单次任务提交提醒后会从列表移除；启用任务回执时，仍可在那里查看发送结果。每天和每周任务会保留。上课提醒请到":"Common scheduled tasks are displayed here, including tasks created in chat. Once a single task reminder is submitted, it will be removed from the list; when task receipts are enabled, the sending results can still be viewed there. Daily and weekly tasks are retained. Please come to class reminders","选择任务日期":"Select task date","选择年份":"Select year","选择月份":"Select month","项任务":"tasks"},"ja":{" 年":"年"," 日":"日"," 月":"月"," 项 · ":" 件 · ","上个月":"先月","下个月":"来月","下次执行":"次回実行","为这一天创建任务":"この日のタスクを作成","仅一次":"一度だけ","今天":"今日","任务列表已刷新":"タスクリストが更新されました","任务已取消":"タスクがキャンセルされました","任务日历":"タスクカレンダー","任务编号：":"タスク番号:","例如：告诉我今天的天气预报，并附上查询来源":"例：今日の天気予報を、参照元とともに教えてください","创建定时任务":"スケジュールされたタスクを作成する","删除":"削除","删除记录":"レコードを削除する","到点要麦麦做什么？":"その時が来たら、マイマイに何をしてほしいですか？","刷新":"リフレッシュ","单次":"1回のみ","原计划时间":"当初の予定時間","发送到哪个聊天流？":"どのチャット ストリームに送信するか?","取消":"キャンセル","取消任务":"タスクをキャンセルする","只能选择麦麦已经建立的聊天流；列表为空时，先在目标聊天中发一条消息。":"Maimai が確立したチャット ストリームのみを選択できます。リストが空の場合は、まずターゲットのチャットにメッセージを送信します。","可切换月份和年份，支持选择 2030 年及之后的日期。点击某天会选中它，并把日期填入下方的单次任务表单。日历按每项任务自己的时区标记；周期任务只显示下次执行及之后的日期。":"月と年の切り替えが可能で、2030年以降の日付の選択にも対応しています。日付をクリックするとその日が選択され、下の単一タスク フォームに日付が入力されます。カレンダーには、各タスク独自のタイムゾーンがマークされます。定期的なタスクには、次回以降の実行日のみが表示されます。","周 ":"週","周一":"月曜日","周三":"水曜日","周二":"火曜日","周五":"金曜日","周六":"土曜日","周四":"木曜日","周日":"日曜日","定时任务已创建":"スケジュールされたタスクが作成されました","定时任务模块当前已关闭。已有任务仍会显示，开启后才可创建和执行。":"スケジュールされたタスク モジュールは現在閉じられています。既存のタスクは引き続き表示され、オンにした後でのみ作成および実行できます。","已关闭":"オフ","已创建的任务":"作成済みのタスク","已开启":"オン","已触发（未确认消息发出）":"実行済み（送信未確認）","已选择 ":"選択：","已错过":"逃した","手动创建任务":"タスクを手動で作成する","执行方式":"実行方法","执行日期和时间":"実行日時","插件页面":"プラグインページ","操作失败":"操作が失敗しました","日，":"日、","时区":"タイムゾーン","星期几执行？":"何曜日に開催されますか?","暂无可选聊天流":"オプションのチャット ストリームはまだ利用できません","暂无记录":"まだ記録がありません","最近错误：":"最近のエラー:","来源：":"出典:","查看。手动创建的任务会在所选聊天流中执行；下方时间按填写的时区计算。":"見る。手動で作成したタスクは、選択したチャット フローで実行されます。以下の時間は、入力されたタイムゾーンで計算されます。","正在读取任务…":"タスクを読み込み中…","正在读取聊天流…":"チャット ストリームを読んでいます...","每周":"毎週","每天":"毎日","每天执行时间":"1日あたりの実行時間","点击日期查看当天任务，或为当天创建单次任务。":"日付をクリックしてその日のタスクを表示するか、その日のタスクを 1 つ作成します。","确定取消这项定时任务吗？":"この予約タスクを取り消しますか？","等待执行":"実行を待っています","聊天流读取失败：":"チャット ストリームの読み取りに失敗しました:","聊天流：":"チャット：","聊天用户 ":"チャットユーザー：","触发失败":"トリガーが失敗しました","请在下方填写时间、聊天流和任务内容。":"以下に時間、チャットの流れ、タスクの内容をご記入ください。","请填写聊天流、任务内容、执行时间；每周任务还要选择星期。":"チャットの流れ、タスク内容、実行時間をご記入ください。毎週のタスクの場合は週を選択することもできます。","请选择聊天流":"チャット ストリームを選択してください","课表页面":"クラススケジュールページ","过去的日期只能查看任务。":"過去の日付のタスクのみを表示できます。","还没有定时任务":"スケジュールされたタスクはまだありません","这一天已过去，不能新建单次任务。":"その日が経過すると、新しい単一タスクを作成できなくなります。","这一天没有已安排的任务。":"この日に予定されているタスクはありません。","这里显示普通定时任务，包括在聊天中创建的任务。单次任务提交提醒后会从列表移除；启用任务回执时，仍可在那里查看发送结果。每天和每周任务会保留。上课提醒请到":"チャットで作成されたタスクを含む、一般的なスケジュールされたタスクがここに表示されます。単一のタスク リマインダーが送信されると、リストから削除されます。タスクの受信が有効になっている場合でも、送信結果はそこで表示できます。毎日および毎週のタスクは保持されます。授業リマインダーに来てください","选择任务日期":"タスクの日付を選択してください","选择年份":"年を選択してください","选择月份":"月を選択してください","项任务":"件のタスク"},"ko":{" 年":"년"," 日":"일"," 月":"달"," 项 · ":"개 작업 · ","上个月":"지난달","下个月":"다음 달","下次执行":"다음 실행","为这一天创建任务":"이 날짜에 작업 만들기","仅一次":"한 번만","今天":"오늘","任务列表已刷新":"할 일 목록이 새로고침되었습니다.","任务已取消":"작업이 취소되었습니다.","任务日历":"작업 달력","任务编号：":"작업 번호:","例如：告诉我今天的天气预报，并附上查询来源":"예: 오늘의 일기예보를 출처와 함께 알려줘","创建定时任务":"예약된 작업 만들기","删除":"삭제","删除记录":"기록 삭제","到点要麦麦做什么？":"마이마이가 때가 오면 무엇을 하고 싶나요?","刷新":"새로고침","单次":"한 번","原计划时间":"원래 예정 시간","发送到哪个聊天流？":"어떤 채팅 스트림으로 보낼까요?","取消":"취소","取消任务":"작업 취소","只能选择麦麦已经建立的聊天流；列表为空时，先在目标聊天中发一条消息。":"Maimai가 설정한 채팅 스트림만 선택할 수 있습니다. 목록이 비어 있으면 먼저 대상 채팅에 메시지를 보냅니다.","可切换月份和年份，支持选择 2030 年及之后的日期。点击某天会选中它，并把日期填入下方的单次任务表单。日历按每项任务自己的时区标记；周期任务只显示下次执行及之后的日期。":"월과 연도를 전환할 수 있어 2030년 이후의 날짜 선택을 지원합니다. 날짜를 클릭하면 해당 날짜가 선택되고 아래 단일 작업 양식에 날짜가 입력됩니다. 달력에는 각 작업의 고유한 시간대가 표시되어 있습니다. 반복 작업에는 다음 실행 날짜와 그 이후 날짜만 표시됩니다.","周 ":"주","周一":"월요일","周三":"수요일","周二":"화요일","周五":"금요일","周六":"토요일","周四":"목요일","周日":"일요일","定时任务已创建":"예약된 작업이 생성되었습니다","定时任务模块当前已关闭。已有任务仍会显示，开启后才可创建和执行。":"예약된 작업 모듈이 현재 닫혀 있습니다. 기존 작업은 계속 표시되며 활성화된 후에만 생성하고 실행할 수 있습니다.","已关闭":"꺼짐","已创建的任务":"생성된 작업","已开启":"켜짐","已触发（未确认消息发出）":"실행됨(전송 미확인)","已选择 ":"선택: ","已错过":"놓친","手动创建任务":"수동으로 작업 만들기","执行方式":"실행방법","执行日期和时间":"실행 날짜 및 시간","插件页面":"플러그인 페이지","操作失败":"작업 실패","日，":"일,","时区":"시간대","星期几执行？":"어떤 요일에 진행되나요?","暂无可选聊天流":"아직 선택적 채팅 스트림을 사용할 수 없습니다.","暂无记录":"아직 기록이 없습니다","最近错误：":"최근 오류:","来源：":"출처:","查看。手动创建的任务会在所选聊天流中执行；下方时间按填写的时区计算。":"보기. Manually created tasks will be executed in the selected chat flow; the times below are calculated in the time zone filled in.","正在读取任务…":"작업 불러오는 중…","正在读取聊天流…":"채팅 스트림을 읽는 중...","每周":"매주","每天":"매일","每天执行时间":"일일 실행 시간","点击日期查看当天任务，或为当天创建单次任务。":"날짜를 클릭하면 해당 날짜의 작업을 보거나 해당 날짜에 대한 단일 작업을 만들 수 있습니다.","确定取消这项定时任务吗？":"이 예약 작업을 취소할까요?","等待执行":"실행을 기다리는 중","聊天流读取失败：":"채팅 스트림을 읽지 못했습니다.","聊天流：":"채팅: ","聊天用户 ":"채팅 사용자: ","触发失败":"트리거 실패","请在下方填写时间、聊天流和任务内容。":"아래에 시간, 채팅 흐름, 작업 내용을 입력해 주세요.","请填写聊天流、任务内容、执行时间；每周任务还要选择星期。":"채팅 흐름, 작업 내용, 실행 시간을 입력하세요. 또한 주간 작업에 대해 주를 선택합니다.","请选择聊天流":"채팅 스트림을 선택하세요.","课表页面":"수업 일정 페이지","过去的日期只能查看任务。":"지난 날짜의 작업만 볼 수 있습니다.","还没有定时任务":"아직 예약된 작업이 없습니다.","这一天已过去，不能新建单次任务。":"하루가 지났으며 새 단일 작업을 생성할 수 없습니다.","这一天没有已安排的任务。":"이 날에는 예약된 작업이 없습니다.","这里显示普通定时任务，包括在聊天中创建的任务。单次任务提交提醒后会从列表移除；启用任务回执时，仍可在那里查看发送结果。每天和每周任务会保留。上课提醒请到":"채팅에서 생성된 작업을 포함하여 일반적인 예약된 작업이 여기에 표시됩니다. 단일 작업 알림이 제출되면 목록에서 제거됩니다. 작업 확인이 활성화되어 있어도 전송 결과를 계속해서 볼 수 있습니다. 일일 및 주간 작업이 유지됩니다. 수업 알림으로 오세요","选择任务日期":"작업 날짜 선택","选择年份":"연도 선택","选择月份":"월 선택","项任务":"개 작업"}};
+  const fragments = ["定时任务模块当前已关闭。已有任务仍会显示，开启后才可创建和执行。","请填写聊天流、任务内容、执行时间；每周任务还要选择星期。","点击日期查看当天任务，或为当天创建单次任务。","请在下方填写时间、聊天流和任务内容。","这一天已过去，不能新建单次任务。","已触发（未确认消息发出）","确定取消这项定时任务吗？","过去的日期只能查看任务。","这一天没有已安排的任务。","为这一天创建任务","正在读取聊天流…","聊天流读取失败：","任务列表已刷新","定时任务已创建","暂无可选聊天流","还没有定时任务","请选择聊天流"," 项 · ","任务已取消","任务编号：","原计划时间","最近错误：","聊天用户 ","下次执行","删除记录","取消任务","已选择 ","插件页面","操作失败","暂无记录","等待执行","聊天流：","触发失败","已关闭","已开启","已错过","来源：","项任务"," 年"," 日"," 月","删除","刷新","单次","取消","周 ","周一","周三","周二","周五","周六","周四","周日","日，","每周","每天"];
+  const originals = new WeakMap();
+  const attributes = new WeakMap();
+  let language = 'zh';
+
+  function translate(value) {
+    if (language === 'zh') return value;
+    const catalog = catalogs[language];
+    const trimmed = value.trim();
+    if (catalog[trimmed]) return value.replace(trimmed, catalog[trimmed]);
+    const weekdays = {
+      en: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'],
+      ja: ['月曜日', '火曜日', '水曜日', '木曜日', '金曜日', '土曜日', '日曜日'],
+      ko: ['월요일', '화요일', '수요일', '목요일', '금요일', '토요일', '일요일'],
+    }[language];
+    const longDate = trimmed.match(/^(\d{4}) 年 (\d{1,2}) 月 (\d{1,2}) 日$/);
+    if (longDate) {
+      const date = new Date(Date.UTC(+longDate[1], +longDate[2] - 1, +longDate[3]));
+      return new Intl.DateTimeFormat(language, { year: 'numeric', month: 'long', day: 'numeric', timeZone: 'UTC' }).format(date);
+    }
+    const dateLabel = trimmed.match(/^(\d{4})年(\d{1,2})月(\d{1,2})日，(\d+)项任务$/);
+    if (dateLabel) {
+      const date = new Date(Date.UTC(+dateLabel[1], +dateLabel[2] - 1, +dateLabel[3]));
+      const label = new Intl.DateTimeFormat(language, { year: 'numeric', month: 'long', day: 'numeric', timeZone: 'UTC' }).format(date);
+      return `${label}, ${dateLabel[4]} ${catalog['项任务']}`;
+    }
+    let translated = value;
+    translated = translated.replace(/^周 ([1-7]) (\d{2}:\d{2})$/, (_, day, time) => `${weekdays[+day - 1]} ${time}`);
+    translated = translated.replace(/^周([1-7]) 第(\d+)–(\d+)节/, (_, day, first, last) => {
+      if (language === 'en') return `${weekdays[+day - 1]}, periods ${first}–${last}`;
+      if (language === 'ja') return `${weekdays[+day - 1]}・${first}～${last}限`;
+      return `${weekdays[+day - 1]} ${first}~${last}교시`;
+    });
+    translated = translated.replace(/第([\d、]+)周/g, (_, weeks) => {
+      if (language === 'en') return `weeks ${weeks.replaceAll('、', ', ')}`;
+      if (language === 'ja') return `第${weeks}週`;
+      return `제${weeks.replaceAll('、', ', ')}주`;
+    });
+    translated = translated.replace(/第 (\d+) 周/g, (_, week) => {
+      if (language === 'en') return `week ${week}`;
+      if (language === 'ja') return `第${week}週`;
+      return `제${week}주`;
+    });
+    translated = translated.replace(/第 (\d+)–(\d+) 节(?!开始时间)/g, (_, first, last) => {
+      if (language === 'en') return `periods ${first}–${last}`;
+      if (language === 'ja') return `第${first}～${last}限`;
+      return `제${first}~${last}교시`;
+    });
+    const status = {
+      en: { active: 'Active', sent: 'Sent', send_failed: 'Send failed', unknown: 'Unknown', familiar: 'Familiar', stranger: 'Stranger' },
+      ja: { active: '有効', sent: '送信済み', send_failed: '送信失敗', unknown: '不明', familiar: '知人', stranger: '初対面' },
+      ko: { active: '활성', sent: '전송됨', send_failed: '전송 실패', unknown: '알 수 없음', familiar: '지인', stranger: '낯선 사람' },
+    }[language];
+    translated = translated.replace(/^(active|sent|send_failed|unknown)(?= · )/, match => status[match]);
+    translated = translated.replace(/(?<= · )(familiar|stranger)$/, match => status[match]);
+    for (const source of fragments) {
+      if (translated.includes(source)) translated = translated.replaceAll(source, catalog[source]);
+    }
+    return translated;
+  }
+
+  function updateText(node) {
+    if (node.parentElement?.closest('script,style')) return;
+    const current = node.nodeValue || '';
+    let item = originals.get(node);
+    if (!item || current !== item.rendered) item = { source: current, rendered: current };
+    const rendered = translate(item.source);
+    item.rendered = rendered;
+    originals.set(node, item);
+    if (current !== rendered) node.nodeValue = rendered;
+  }
+
+  function updateAttributes(element) {
+    let saved = attributes.get(element);
+    if (!saved) saved = {};
+    for (const name of ['placeholder', 'aria-label', 'title']) {
+      if (!element.hasAttribute(name)) continue;
+      const current = element.getAttribute(name) || '';
+      let item = saved[name];
+      if (!item || current !== item.rendered) item = { source: current, rendered: current };
+      const rendered = translate(item.source);
+      item.rendered = rendered;
+      saved[name] = item;
+      if (current !== rendered) element.setAttribute(name, rendered);
+    }
+    attributes.set(element, saved);
+  }
+
+  function scan(root) {
+    if (root.nodeType === Node.TEXT_NODE) return updateText(root);
+    if (root.nodeType !== Node.ELEMENT_NODE || root.matches('script,style')) return;
+    updateAttributes(root);
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_ELEMENT | NodeFilter.SHOW_TEXT);
+    while (walker.nextNode()) {
+      if (walker.currentNode.nodeType === Node.TEXT_NODE) updateText(walker.currentNode);
+      else if (!walker.currentNode.matches('script,style')) updateAttributes(walker.currentNode);
+    }
+  }
+
+  function setLanguage(value) {
+    const next = String(value || 'zh').toLowerCase().split('-')[0];
+    language = Object.hasOwn(catalogs, next) ? next : 'zh';
+    scan(document.body);
+  }
+
+  window.secretaryTranslate = translate;
+
+  const observer = new MutationObserver(records => {
+    for (const record of records) {
+      if (record.type === 'characterData') updateText(record.target);
+      else if (record.type === 'attributes') updateAttributes(record.target);
+      else for (const node of record.addedNodes) scan(node);
+    }
+  });
+  observer.observe(document.body, { subtree: true, childList: true, characterData: true, attributes: true, attributeFilter: ['placeholder', 'aria-label', 'title'] });
+  scan(document.body);
+  maibot.ready.then(() => setLanguage(maibot.context.language));
+  window.addEventListener('maibot:context', event => setLanguage(event.detail.language));
+})();
+
+</script>
+<!-- secretary-i18n:end -->

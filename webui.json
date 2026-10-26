@@ -24,10 +24,10 @@
         }},
         "receipt_retry": {"api": "secretary_receipt_retry", "parameters": {
           "receipt_id": {"type": "string", "required": true, "max_length": 32}
-        }, "confirmation": "确定重试这项已经确认发送失败的任务吗？"},
+        }},
         "followup_cancel": {"api": "secretary_followup_cancel", "parameters": {
           "followup_id": {"type": "string", "required": true, "max_length": 32}
-        }, "confirmation": "确定取消这项回访吗？"}
+        }}
       }
     },
     {
@@ -54,7 +54,7 @@
         }},
         "cancel": {"api": "secretary_tasks_cancel", "parameters": {
           "task_id": {"type": "string", "required": true, "max_length": 32}
-        }, "confirmation": "确定取消这项定时任务吗？"}
+        }}
       }
     },
     {
@@ -82,7 +82,7 @@
         }},
         "delete": {"api": "secretary_timetable_delete", "parameters": {
           "stream_id": {"type": "string", "required": true, "max_length": 200}
-        }, "confirmation": "确定删除这个聊天流的课表和全部未来上课提醒吗？"}
+        }}
       }
     },
     {
@@ -106,8 +106,8 @@
         "finish": {"api": "secretary_kb_finish", "parameters": {"upload_id": {"type": "string", "required": true, "max_length": 32}}},
         "add_text": {"api": "secretary_kb_add_text", "parameters": {"title": {"type": "string", "required": true, "max_length": 100}, "content": {"type": "string", "required": true, "max_length": 45000}}},
         "mod_add_text": {"api": "secretary_mod_add_text", "parameters": {"group_id": {"type": "string", "required": true, "max_length": 20}, "title": {"type": "string", "required": true, "max_length": 100}, "content": {"type": "string", "required": true, "max_length": 45000}}},
-        "delete": {"api": "secretary_kb_delete", "parameters": {"document_id": {"type": "string", "required": true, "max_length": 32}}, "confirmation": "确定永久删除这份文档和它的检索索引吗？"},
-        "mod_delete": {"api": "secretary_mod_delete", "parameters": {"document_id": {"type": "string", "required": true, "max_length": 32}}, "confirmation": "确定删除这份群管敏感词文档吗？"},
+        "delete": {"api": "secretary_kb_delete", "parameters": {"document_id": {"type": "string", "required": true, "max_length": 32}}},
+        "mod_delete": {"api": "secretary_mod_delete", "parameters": {"document_id": {"type": "string", "required": true, "max_length": 32}}},
         "rebuild": {"api": "secretary_kb_rebuild", "parameters": {"document_id": {"type": "string", "required": true, "max_length": 32}}}
       }
     }
