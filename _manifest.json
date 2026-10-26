@@ -2,7 +2,7 @@
   "manifest_version": 2,
   "id": "worldcopyist.mai-secretary",
   "name": "Mai Secretary",
-  "version": "0.32.1",
+  "version": "0.33.0",
   "description": "Modular proactive chat, shared simulated life and mood, scheduled tasks, experimental class reminders, daily reports, relationship management, anti-bullying, knowledge retrieval, web tools, and QQ group management.",
   "display": {
     "icon": {
@@ -30,7 +30,9 @@
   "dependencies": [
     {"type": "python_package", "name": "pypdf", "version_spec": ">=6.16,<7"},
     {"type": "python_package", "name": "httpx", "version_spec": ">=0.27,<1"},
-    {"type": "python_package", "name": "Pillow", "version_spec": ">=11,<13"}
+    {"type": "python_package", "name": "Pillow", "version_spec": ">=11,<13"},
+    {"type": "python_package", "name": "xlrd", "version_spec": ">=2.0,<3"},
+    {"type": "python_package", "name": "openpyxl", "version_spec": ">=3.1,<4"}
   ],
   "plugin_type": "management",
   "capabilities": [

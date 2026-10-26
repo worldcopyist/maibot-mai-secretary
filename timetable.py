@@ -1,12 +1,7 @@
-"""Import a timetable workbook and schedule reminders for its teaching weeks.
-
-Only the developer school's current .xls export layout is supported. The module
-does not log in to a school system or accept credentials and session cookies.
-"""
+"""Import offline timetable exports and schedule teaching-week reminders."""
 
 from __future__ import annotations
 
-import base64
 import hashlib
 import re
 from dataclasses import asdict, dataclass
@@ -18,17 +13,21 @@ from maibot_sdk import Field, PluginConfigBase
 from pydantic import field_validator
 
 from .secretary_core import ScheduledTask, parse_clock
+from .timetable_formats import LEGACY_XLS_PREFIX, read_tables
 
 DEFAULT_SECTION_STARTS = [
     "08:10", "09:00", "10:15", "11:05", "14:30", "15:20",
     "16:25", "17:15", "19:10", "20:00", "20:50",
 ]
 MAX_IMPORT_CHARS = 65_536  # MaiBot WebUI 字符串参数上限
-XLS_BASE64_PREFIX = "XLS-BASE64:"
+XLS_BASE64_PREFIX = LEGACY_XLS_PREFIX
 IMPORT_SOURCE = "课表 Excel 文件"
 TIMETABLE_TIMEZONE = "Asia/Shanghai"
-DAY_HEADERS = {"星期一": 1, "星期二": 2, "星期三": 3, "星期四": 4,
-               "星期五": 5, "星期六": 6, "星期日": 7, "周日": 7}
+DAY_HEADERS = {f"星期{name}": index for index, name in enumerate("一二三四五六日", 1)} | {
+    f"周{name}": index for index, name in enumerate("一二三四五六日", 1)
+} | {"星期天": 7, "周天": 7}
+DAY_HEADERS.update({name: index for index, pair in enumerate(("monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"), 1)
+                    for name in (pair, pair[:3])})
 
 
 class TimetableSettings(PluginConfigBase):
@@ -41,14 +40,14 @@ class TimetableSettings(PluginConfigBase):
         "label": "Reminder before class (min)", "hint": "Modifications reschedule reminders for future classes; 0 means reminders for class time.",
     })
     section_starts: list[str] = Field(default_factory=lambda: list(DEFAULT_SECTION_STARTS), json_schema_extra={
-        "label": "Start times for periods 1–11", "hint": "Enter one HH:MM time per line for periods 1–11. Check your school's current timetable before importing.",
+        "label": "Start times for periods 1–20", "hint": "Enter at least 11 and up to 20 consecutive HH:MM start times. Check your school's current timetable before importing.",
     })
 
     @field_validator("section_starts")
     @classmethod
     def validate_sections(cls, values: list[str]) -> list[str]:
-        if len(values) != 11:
-            raise ValueError("须填写第 1 至 11 节共 11 个开始时间")
+        if not 11 <= len(values) <= 20:
+            raise ValueError("须填写至少 11 节、最多 20 节连续的开始时间")
         for value in values:
             parse_clock(value)
         return values
@@ -70,8 +69,8 @@ class Course:
         day = int(raw.get("day_of_week", 0))
         start = int(raw.get("start_section", 0))
         end = int(raw.get("end_section", start))
-        if not name or len(name) > 120 or not 1 <= day <= 7 or not 1 <= start <= end <= 11:
-            raise ValueError("课程名称、星期或节次无效；节次必须在 1–11 之间")
+        if not name or len(name) > 120 or not 1 <= day <= 7 or not 1 <= start <= end <= 20:
+            raise ValueError("课程名称、星期或节次无效；节次必须在 1–20 之间")
         raw_weeks = raw.get("weeks", [])
         if isinstance(raw_weeks, list):
             weeks = sorted({int(value) for value in raw_weeks})
@@ -92,34 +91,155 @@ class Course:
 
 
 def parse_weeks(value: str) -> list[int]:
-    """Parse teaching-week expressions in the currently supported workbook."""
-    text = re.sub(r"[\[【][^\]】]*[\]】]", "", value)
-    text = text.replace("（", "(").replace("）", ")").replace("－", "-")
+    """Expand explicit week ranges, lists, and odd/even markers without guessing."""
+    text = value.replace("（", "(").replace("）", ")").replace("－", "-")
     text = text.replace("～", "-").replace("~", "-").replace("至", "-")
-    text = text.replace("(周)", "")
-    text = re.sub(r"\(\s*\)+", "", text)  # 导出格式 "3-5,7-16([周])" 去掉 [周] 后残留的空括号
-    text = re.sub(r"(?:第|周次|周)", "", text)
+    text = re.sub(r"[\[【][^\]】]*节[\]】]", "", text)
+    text = re.sub(r"\(\s*\[?周\]?\s*\)", "", text)
+    text = re.sub(r"\(\s*([单双])周\s*\)", r"(\1)", text)
+    text = re.sub(r"([单双])周", r"(\1)", text)
+    text = re.sub(r"(?:教学周|周次|第|周)", "", text)
+    text = text.strip(" \t:：{}【】")
+    if not text:
+        return []
     found: set[int] = set()
     for part in re.split(r"[,，、;；\s]+", text):
         if not part:
             continue
         match = re.fullmatch(r"(\d{1,2})(?:-(\d{1,2}))?(?:\((单|双)\))?", part)
         if not match:
-            continue
-        first = int(match.group(1))
-        last = int(match.group(2) or first)
+            raise ValueError(f"无法识别教学周：{value[:80]}")
+        first, last = int(match.group(1)), int(match.group(2) or match.group(1))
         if first < 1 or last > 25 or last < first:
             raise ValueError("教学周须在 1–25 之间")
         parity = match.group(3)
         found.update(week for week in range(first, last + 1)
-                     if parity is None or (week % 2 == (1 if parity == "单" else 0)))
-    if not found and re.search(r"\d", text):
-        raise ValueError(f"无法识别教学周：{value[:80]}")
+                     if parity is None or week % 2 == (1 if parity == "单" else 0))
     return sorted(found)
 
 
-_SECTION_MARK = re.compile(r"\[([\d\-]+)节\]")
-_XLS_SECTION_ROW = re.compile(r"(?:第\s*)?[一二三四五六七八九十零〇\d\s\-—~至、,，]+节")
+_SECTION_MARK = re.compile(r"\[([\d\s\-、,，]+)节\]")
+_WEEK_CLAUSE = re.compile(
+    r"(?:第\s*)?\d{1,2}(?:\s*[-~～至]\s*\d{1,2})?"
+    r"(?:\s*[,，、]\s*\d{1,2}(?:\s*[-~～至]\s*\d{1,2})?)*"
+    r"\s*周(?:\s*[（(]\s*[单双](?:周)?\s*[)）])?"
+)
+_HEADER_ALIASES = {
+    "name": {"课程名称", "课程名", "课程", "科目", "course", "coursename", "name"},
+    "day": {"星期", "周几", "星期几", "上课星期", "上课日期星期", "weekday", "day"},
+    "date": {"日期", "上课日期", "教学日期", "date", "classdate"},
+    "period": {"节次", "上课节次", "上课时间节次", "课时", "period", "periods"},
+    "start": {"开始节次", "起始节次", "开始节", "起始节", "startperiod", "startsection"},
+    "end": {"结束节次", "终止节次", "结束节", "endperiod", "endsection"},
+    "weeks": {"周次", "教学周", "上课周次", "授课周次", "weeks", "week"},
+    "first_week": {"开始周", "起始周", "起始周次", "startweek"},
+    "last_week": {"结束周", "终止周", "结束周次", "endweek"},
+    "parity": {"单双周", "单双", "weektype", "parity"},
+    "teacher": {"教师", "任课教师", "老师", "teacher"},
+    "location": {"教室", "地点", "上课地点", "校区教室", "location", "room", "classroom"},
+}
+
+
+def _sections(value: str) -> tuple[int, int]:
+    text = str(value).strip().replace("—", "-").replace("~", "-").replace("至", "-")
+    text = re.sub(r"(?:第|节|课|次|\[|\]|\s)", "", text)
+    if not text or not re.fullmatch(r"[\d一二三四五六七八九十零〇\-,，、]+", text):
+        raise ValueError(f"无法识别节次：{value[:60]}")
+    if re.search(r"[一二三四五六七八九十零〇]", text):
+        digits = {char: index for index, char in enumerate("零一二三四五六七八九")}
+        digits["〇"] = 0
+        def chinese_number(part: str) -> int:
+            if "十" in part:
+                first, _, last = part.partition("十")
+                return (digits.get(first, 1) if first else 1) * 10 + digits.get(last, 0)
+            return digits[part]
+        if "十" not in text and len(text) > 1 and all(char in digits for char in text):
+            numbers = [digits[char] for char in text]
+        else:
+            numbers = [chinese_number(part) for part in re.split(r"[-,，、]", text)]
+    else:
+        numbers = [int(part) for part in re.split(r"[-,，、]", text)]
+    if not numbers or any(number < 1 or number > 20 for number in numbers):
+        raise ValueError("节次须在 1–20 之间")
+    first, last = min(numbers), max(numbers)
+    if numbers != list(range(first, last + 1)) and len(numbers) > 2:
+        raise ValueError("同一门课的节次须连续")
+    return first, last
+
+
+def _day(value: str) -> int:
+    text = str(value).strip().lower().replace("礼拜", "星期")
+    if text.isdigit() and 1 <= int(text) <= 7:
+        return int(text)
+    short = re.fullmatch(r"(?:星期|周)([1-7])", text)
+    if short:
+        return int(short.group(1))
+    if text in DAY_HEADERS:
+        return DAY_HEADERS[text]
+    raise ValueError(f"无法识别星期：{value[:40]}")
+
+
+def _header(row: list[str]) -> dict[str, int]:
+    result = {}
+    for index, value in enumerate(row):
+        normalized = re.sub(r"[\s:：()（）_\-]", "", value).lower()
+        for field, aliases in _HEADER_ALIASES.items():
+            if normalized in aliases and field not in result:
+                result[field] = index
+                break
+    if {"name"} <= result.keys() and ("day" in result or "date" in result) and (
+        "period" in result or "start" in result
+    ) and ("weeks" in result or {"first_week", "last_week"} <= result.keys() or "date" in result):
+        return result
+    return {}
+
+
+def _courses_from_rows(rows: list[list[str]], header_row: int, columns: dict[str, int],
+                       total_weeks: int, semester_start: str | None) -> list[Course]:
+    first_monday = date.fromisoformat(semester_start) if semester_start else None
+    courses = []
+    for line, row in enumerate(rows[header_row + 1:], header_row + 2):
+        def get(field: str, cells: list[str] = row) -> str:
+            return cells[columns[field]].strip() if field in columns and columns[field] < len(cells) else ""
+        name = get("name")
+        if not name or name in {"合计", "总计", "备注", "说明"}:
+            continue
+        try:
+            day = _day(get("day")) if "day" in columns else 0
+            if "date" in columns and get("date"):
+                class_date = date.fromisoformat(get("date").split(" ", 1)[0].replace("/", "-"))
+                if first_monday is None:
+                    raise ValueError("按日期列导入时必须填写第 1 教学周的周一")
+                date_day = class_date.isoweekday()
+                if day and day != date_day:
+                    raise ValueError("日期与星期列不一致")
+                day = date_day
+                date_week = (class_date - first_monday).days // 7 + 1
+            else:
+                date_week = None
+            sections = _sections(get("period")) if "period" in columns else (
+                _sections(get("start"))[0], _sections(get("end"))[1] if get("end") else _sections(get("start"))[0]
+            )
+            weeks_text = get("weeks")
+            if not weeks_text and get("first_week") and get("last_week"):
+                weeks_text = f"{get('first_week')}-{get('last_week')}"
+                if get("parity") in {"单", "单周", "odd"}:
+                    weeks_text += "(单)"
+                elif get("parity") in {"双", "双周", "even"}:
+                    weeks_text += "(双)"
+            weeks = parse_weeks(weeks_text) if weeks_text else ([date_week] if date_week else [])
+            if date_week is not None and weeks_text and date_week not in weeks:
+                raise ValueError("日期不在该行的教学周范围内")
+            if date_week is not None:
+                weeks = [date_week]
+            courses.append(Course.from_mapping({
+                "name": name, "day_of_week": day, "start_section": sections[0],
+                "end_section": sections[1], "weeks": weeks,
+                "location": get("location"), "teacher": get("teacher"),
+            }, total_weeks))
+        except (TypeError, ValueError) as exc:
+            raise ValueError(f"课表第 {line} 行无法导入：{exc}") from exc
+    return courses
 
 
 def _xls_course(block: str, day: int, total_weeks: int) -> Course:
@@ -131,8 +251,7 @@ def _xls_course(block: str, day: int, total_weeks: int) -> Course:
     week_line = lines[marker]
     section_mark = _SECTION_MARK.search(week_line)
     assert section_mark is not None
-    numbers = [int(value) for value in re.findall(r"\d+", section_mark.group(1))]
-    start_section, end_section = min(numbers), max(numbers)
+    start_section, end_section = _sections(section_mark.group(1))
     weeks = parse_weeks(week_line)
     if not weeks:
         raise ValueError(f"无法识别教学周：{week_line[:80]}")
@@ -146,68 +265,91 @@ def _xls_course(block: str, day: int, total_weeks: int) -> Course:
     }, total_weeks)
 
 
-def _courses_from_xls(payload: bytes, total_weeks: int) -> list[Course]:
-    try:
-        import xlrd
-    except ImportError as exc:
-        raise ValueError("服务器缺少 xlrd 依赖，无法读取 .xls 课表导出") from exc
-    try:
-        sheet = xlrd.open_workbook(file_contents=payload).sheet_by_index(0)
-    except Exception as exc:  # xlrd 的异常类型随版本变化，统一转成导入错误
-        raise ValueError(f".xls 文件无法解析：{exc}") from exc
+def _grid_course(block: str, day: int, sections: tuple[int, int], total_weeks: int) -> Course:
+    if _SECTION_MARK.search(block) and len(block.splitlines()) >= 3:
+        return _xls_course(block, day, total_weeks)
+    matches = list(_WEEK_CLAUSE.finditer(block))
+    if not matches:
+        raise ValueError(f"课程缺少明确周次：{block[:60]}")
+    week_mark = matches[-1]
+    weeks = parse_weeks(week_mark.group())
+    lines = [line.strip() for line in block.splitlines() if line.strip()]
+    name = lines[0].split("{", 1)[0].strip(" ：:，,;；") if lines else ""
+    if week_mark.start() < len(lines[0]):
+        name = block[:week_mark.start()].splitlines()[0].strip(" {：:，,;；")
+    if not name:
+        raise ValueError("课程缺少名称")
+    section_mark = _SECTION_MARK.search(block)
+    if section_mark:
+        sections = _sections(section_mark.group(1))
+    teacher = re.search(r"(?:教师|老师|任课教师)\s*[:：]\s*([^\n;；]+)", block)
+    location = re.search(r"(?:教室|地点|上课地点)\s*[:：]\s*([^\n;；]+)", block)
+    return Course.from_mapping({
+        "name": name, "day_of_week": day, "start_section": sections[0],
+        "end_section": sections[1], "weeks": weeks,
+        "teacher": teacher.group(1).strip() if teacher else "",
+        "location": location.group(1).strip() if location else "",
+    }, total_weeks)
+
+
+def _courses_from_grid(rows: list[list[str]], total_weeks: int) -> list[Course]:
     day_columns: dict[int, int] = {}
     header_row = -1
-    for row in range(sheet.nrows):
-        for col in range(1, sheet.ncols):
-            day = DAY_HEADERS.get(str(sheet.cell_value(row, col)).strip())
-            if day is not None:
-                day_columns[col] = day
-                header_row = row
+    for index, row in enumerate(rows[:30]):
+        found = {}
+        for col, value in enumerate(row):
+            try:
+                found[col] = _day(value)
+            except ValueError:
+                continue
+        if found and len(set(found.values())) == len(found):
+            day_columns, header_row = found, index
+            break
     if not day_columns:
-        raise ValueError("未找到星期表头；目前仅支持按星期分列的 .xls 课表文件")
+        return []
     courses: list[Course] = []
-    for row in range(header_row + 1, sheet.nrows):
-        label = str(sheet.cell_value(row, 0)).strip()
-        # 教务导出把“备注/课程说明”放在星期列下方；它不是某节课。
-        if not _XLS_SECTION_ROW.fullmatch(label):
+    first_day_col = min(day_columns)
+    for row in rows[header_row + 1:]:
+        label = row[0].strip() if row and first_day_col > 0 else ""
+        try:
+            sections = _sections(label)
+        except ValueError:
+            # 教务导出常把备注或课程说明放在星期列下方；它们不是课。
             continue
         for col, day in day_columns.items():
-            cell = str(sheet.cell_value(row, col)).strip()
+            cell = row[col].strip() if col < len(row) else ""
             if not cell:
                 continue
             for block in re.split(r"\n\s*\n", cell):
-                if block.strip():
-                    courses.append(_xls_course(block, day, total_weeks))
+                if block.strip() and block.strip() not in {"休息", "午休", "自习", "无课"}:
+                    courses.append(_grid_course(block, day, sections, total_weeks))
     return courses
 
 
-def _courses_from_base64_xls(encoded: str, total_weeks: int) -> list[Course]:
-    try:
-        payload = base64.b64decode(encoded.strip(), validate=True)
-    except ValueError as exc:  # binascii.Error 是 ValueError 的子类
-        raise ValueError("XLS-BASE64 数据无效") from exc
-    if not payload.startswith(b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1"):
-        raise ValueError("不是有效的 .xls 文件；请上传课表 Excel 文件")
-    return _courses_from_xls(payload, total_weeks)
-
-
-def parse_import(content: str, total_weeks: int) -> tuple[list[Course], str]:
+def parse_import(content: str, total_weeks: int, semester_start: str | None = None) -> tuple[list[Course], str]:
     if not 1 <= total_weeks <= 25:
         raise ValueError("学期周数须在 1–25 之间")
     if not content or len(content) > MAX_IMPORT_CHARS:
         raise ValueError("课表内容为空或超过 65536 字符（WebUI 参数上限）")
-    text = content.lstrip("\ufeff \t\r\n")
-    if not text.startswith(XLS_BASE64_PREFIX):
-        raise ValueError("目前只支持上传开发者学校导出的 .xls 课表文件")
-    courses = _courses_from_base64_xls(text[len(XLS_BASE64_PREFIX):], total_weeks)
-    unique = {(
-        item.name, item.day_of_week, item.start_section, item.end_section,
-        item.weeks, item.location,
-    ): item for item in courses}
-    courses = sorted(unique.values(), key=lambda item: (item.day_of_week, item.start_section, item.name))
+    tables, source = read_tables(content.lstrip("\ufeff \t\r\n"))
+    courses: list[Course] = []
+    for rows in tables:
+        columns = next(((index, fields) for index, row in enumerate(rows[:30])
+                        if (fields := _header(row))), None)
+        if columns:
+            courses.extend(_courses_from_rows(rows, columns[0], columns[1], total_weeks, semester_start))
+        else:
+            courses.extend(_courses_from_grid(rows, total_weeks))
+    grouped: dict[tuple[str, int, int, int, str, str], set[int]] = {}
+    for item in courses:
+        key = (item.name, item.day_of_week, item.start_section, item.end_section, item.location, item.teacher)
+        grouped.setdefault(key, set()).update(item.weeks)
+    courses = sorted((Course(*key[:4], tuple(sorted(weeks)), key[4], key[5])
+                      for key, weeks in grouped.items()),
+                     key=lambda item: (item.day_of_week, item.start_section, item.name))
     if not courses or len(courses) > 200:
         raise ValueError("未识别到课程，或课程超过 200 门；请检查导入文件")
-    return courses, IMPORT_SOURCE
+    return courses, source
 
 
 class TimetableModule:
@@ -232,6 +374,8 @@ class TimetableModule:
             if not isinstance(profile, dict):
                 raise TypeError("课表状态格式错误")
             previous = str(profile.get("source") or "")
+            if previous in {"课表 Excel 文件", "课表 XLSX 文件", "课表 CSV 文件", "课表 HTML 文件"}:
+                continue
             normalized = IMPORT_SOURCE if "Excel" in previous else "旧版课表数据"
             if previous != normalized:
                 profile["source"] = normalized
@@ -278,6 +422,8 @@ class TimetableModule:
             course = Course.from_mapping(raw, int(profile["total_weeks"]))
             for week in course.weeks:
                 day = first + timedelta(days=(week - 1) * 7 + course.day_of_week - 1)
+                if course.start_section > len(starts):
+                    raise ValueError(f"课程 {course.name} 使用第 {course.start_section} 节，但只配置了 {len(starts)} 节开始时间")
                 starts_at = datetime.combine(day, parse_clock(starts[course.start_section - 1]), zone)
                 remind_at = starts_at - lead
                 if remind_at <= now:
@@ -302,11 +448,9 @@ class TimetableModule:
         return tasks
 
     def _replace_tasks(self, stream_id: str, profile: dict[str, Any] | None, now: datetime) -> int:
+        tasks = self._new_tasks(stream_id, profile, now) if profile is not None else []
         self.plugin.scheduled.tasks = {task_id: task for task_id, task in self.plugin.scheduled.tasks.items()
                                        if not (task.owner_user_id == self.TASK_OWNER and task.stream_id == stream_id)}
-        if profile is None:
-            return 0
-        tasks = self._new_tasks(stream_id, profile, now)
         self.plugin.scheduled.tasks.update({task.id: task for task in tasks})
         return len(tasks)
 
@@ -320,7 +464,7 @@ class TimetableModule:
         if "error" in streams or stream_id not in {item["stream_id"] for item in streams["streams"]}:
             raise ValueError("所选聊天流不存在，请刷新后重选")
         self._validate_start(semester_start)
-        courses, source = parse_import(content, int(total_weeks))
+        courses, source = parse_import(content, int(total_weeks), semester_start)
         profile = {"semester_start": semester_start, "total_weeks": int(total_weeks),
                    "source": source, "courses": [course.to_dict() for course in courses]}
         tasks = self._new_tasks(stream_id, profile, datetime.now(UTC))

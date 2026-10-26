@@ -76,13 +76,13 @@ async def test_timetable_config_rebuild_and_disable(tmp_path):
     assert not plugin.scheduled.tasks
 
 
-def test_timetable_rejects_other_imports_and_invalid_sections():
+def test_timetable_rejects_invalid_imports_and_sections():
     with pytest.raises(ValueError, match="教学周"):
         parse_weeks("1-30(周)")
     with pytest.raises(ValueError, match="节次"):
-        parse_import(_one_course_xls_base64("坏课程", sections="12-13"), 20)
+        parse_import(_one_course_xls_base64("坏课程", sections="21-22"), 20)
     for content in ('{"courses": []}', '<table><tr><td>课程</td></tr></table>'):
-        with pytest.raises(ValueError, match="只支持上传"):
+        with pytest.raises(ValueError, match="请从课表页面上传"):
             parse_import(content, 20)
     with pytest.raises(ValueError, match="缺少明确的教学周"):
         timetable.Course.from_mapping({"name": "坏课程", "day_of_week": 1,
@@ -170,5 +170,77 @@ def test_xls_import_parses_grid_and_course_blocks():
     assert training.location == "综B201（计算机）"
     assert all("：劳动教育" not in course.name for course in courses)
 
-    with pytest.raises(ValueError, match="不是有效的 .xls"):
+    with pytest.raises(ValueError, match="不是可识别"):
         parse_import(timetable.XLS_BASE64_PREFIX + base64.b64encode(b"not an excel").decode(), 18)
+
+
+def _file_content(suffix: str, data: bytes) -> str:
+    return f"TIMETABLE-FILE:{suffix}:" + base64.b64encode(data).decode()
+
+
+def test_structured_csv_weeks_and_parity():
+    data = ("课程名称,星期,节次,周次,教师,教室\n"
+            "高等数学,星期一,1-2,1-8(单),陈老师,A101\n"
+            "物理,周三,3-4,2-8(双),王老师,B202\n").encode()
+    courses, source = parse_import(_file_content("csv", data), 10)
+    assert source == "课表 CSV 文件"
+    assert [(c.name, c.day_of_week, c.weeks) for c in courses] == [
+        ("高等数学", 1, (1, 3, 5, 7)), ("物理", 3, (2, 4, 6, 8))]
+    with pytest.raises(ValueError, match="无法识别教学周"):
+        parse_import(_file_content("csv", data.replace(b"1-8(\xe5\x8d\x95)", b"1-8(foo)")), 10)
+
+
+def test_date_rows_only_schedule_their_own_week():
+    data = ("课程名称,上课日期,节次,周次\n"
+            "艺术,2030-01-07,5-6,1-16周\n").encode()
+    courses, _ = parse_import(_file_content("csv", data), 16, "2030-01-07")
+    assert courses[0].weeks == (1,)
+    with pytest.raises(ValueError, match="日期不在"):
+        parse_import(_file_content("csv", data.replace(b"1-16", b"3-16")), 16,
+                     "2030-01-07")
+
+
+def test_xlsx_structured_table_and_html_disguised_as_xls():
+    openpyxl = pytest.importorskip("openpyxl")
+    book = openpyxl.Workbook()
+    sheet = book.active
+    sheet.append(["课程名称", "星期", "节次", "开始周", "结束周", "单双周", "教室"])
+    sheet.append(["数据结构", "星期二", "9-10", 1, 16, "双周", "C301"])
+    output = io.BytesIO()
+    book.save(output)
+    courses, source = parse_import(_file_content("xlsx", output.getvalue()), 16)
+    assert source == "课表 XLSX 文件"
+    assert courses[0].weeks == tuple(range(2, 17, 2))
+    assert courses[0].start_section == 9
+    html = ('<table><tr><th>节次</th><th>星期一</th></tr>'
+            '<tr><td>1-2节</td><td>写作 {第1-16周 教室:A101</td></tr>'
+            '<tr><td>课程说明</td><td>劳动教育 1-16周</td></tr></table>').encode()
+    courses, source = parse_import(_file_content("xls", html), 16)
+    assert source == "课表 HTML 文件"
+    assert len(courses) == 1
+    assert courses[0].name == "写作"
+    assert courses[0].weeks == tuple(range(1, 17))
+
+
+def test_html_multiple_course_blocks_and_gb18030_csv():
+    html = ('<table><tr><th>节次</th><th>周1</th></tr>'
+            '<tr><td>1-2节</td><td><div>高数 第1-8周</div>'
+            '<div>语文 第9-16周</div></td></tr></table>').encode()
+    courses, _ = parse_import(_file_content("htm", html), 16)
+    assert {item.name: item.weeks[0] for item in courses} == {"高数": 1, "语文": 9}
+    csv_data = "课程名称;星期;节次;周次\n物理;周五;3-4;2-4周\n".encode("gb18030")
+    courses, _ = parse_import(_file_content("csv", csv_data), 4)
+    assert courses[0].weeks == (2, 3, 4)
+
+
+@pytest.mark.asyncio
+async def test_preview_refuses_unconfigured_period_without_replacing_schedule(tmp_path):
+    plugin, _ = make_plugin(tmp_path)
+    first = await plugin.timetable.preview("other-stream", "2030-01-07", 3,
+                                          _one_course_xls_base64("原课"))
+    await plugin.timetable.commit(first["preview_id"])
+    before = dict(plugin.scheduled.tasks)
+    with pytest.raises(ValueError, match="只配置了 11 节"):
+        await plugin.timetable.preview("other-stream", "2030-01-07", 3,
+                                       _one_course_xls_base64("新课", sections="12-13"))
+    assert plugin.scheduled.tasks == before
