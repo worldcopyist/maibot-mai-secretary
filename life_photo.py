@@ -23,6 +23,15 @@ BUILTIN_REFERENCES = {
     "icon": ASSETS / "icon.png",
     "home": ASSETS / "life_photo_home.png",
     "park": ASSETS / "life_photo_park.png",
+    "living_room_views": ASSETS / "life_photo_scenes/living_room_views.png",
+    "kitchen_dining_views": ASSETS / "life_photo_scenes/kitchen_dining_views.png",
+    "bedroom_views": ASSETS / "life_photo_scenes/bedroom_views.png",
+    "hobby_desk_views": ASSETS / "life_photo_scenes/hobby_desk_views.png",
+    "balcony_views": ASSETS / "life_photo_scenes/balcony_views.png",
+    "bathroom_views": ASSETS / "life_photo_scenes/bathroom_views.png",
+    "neighborhood_views": ASSETS / "life_photo_scenes/neighborhood_views.png",
+    "fried_chicken_restaurant_views": ASSETS / "life_photo_scenes/fried_chicken_restaurant_views.png",
+    "wetland_park_views": ASSETS / "life_photo_scenes/wetland_park_views.png",
 }
 ENDPOINTS = {
     "beijing": "https://dashscope.aliyuncs.com/compatible-mode/v1/images/generations",
@@ -33,8 +42,26 @@ MINIMAX_ENDPOINTS = {
     "global": "https://api.minimax.io/v1/image_generation",
 }
 SCENE_ANCHORS = {
-    "home": "A small tidy apartment living room with a compact sofa, low table, potted plant, game controller and warm window light.",
-    "park": "A quiet wetland park path beside a calm pond, with reeds, low wooden railing and several distant trees.",
+    "home": "One fixed living room: moss-green sofa on the left, television on an oak cabinet on the right, coffee table and navy floor cushion in the center, sliding balcony doors at the back.",
+    "kitchen": "One compact adjoining kitchen: oak lower cabinets, cream upper cabinets, sink under the window, stove and a two-seat wooden dining table.",
+    "bedroom": "One cozy bedroom: bed along the left wall, oak wardrobe on the right, window on the far wall and a few soft toys.",
+    "hobby": "One craft desk near the living room: the same wood desk, storage shelves, building blocks, fuse beads and drawing supplies.",
+    "balcony": "One narrow apartment balcony: sliding doors, cream parapet, small plant stand, familiar potted plants and the same city skyline.",
+    "bathroom": "One compact bathroom: oval sink and oak vanity on the left, glass shower on the right, frosted window and blue towels.",
+    "neighborhood": "One neighborhood block: cream apartment building, green-awning corner grocery, a large ginkgo tree, bike racks and a crosswalk.",
+    "restaurant": "One familiar fried-chicken restaurant: red-framed street entrance, counter at the back, red booth on the right and pale wood tables in the center.",
+    "park": "One wetland park: curving gravel path on the left of the lake, low wooden fence, tall reeds, large tree at the entrance and distant hills.",
+}
+REFERENCE_FIELDS = {
+    "home": "home_reference",
+    "kitchen": "kitchen_reference",
+    "bedroom": "bedroom_reference",
+    "hobby": "hobby_reference",
+    "balcony": "balcony_reference",
+    "bathroom": "bathroom_reference",
+    "neighborhood": "neighborhood_reference",
+    "restaurant": "restaurant_reference",
+    "park": "park_reference",
 }
 DEFAULT_CHARACTER_PROMPT = (
     "The first reference image is the character identity reference. Preserve the same face, "
@@ -44,8 +71,9 @@ DEFAULT_CHARACTER_PROMPT = (
 )
 DEFAULT_SCENE_PROMPT = (
     "Make one casual illustrated snapshot of the character naturally doing the stated current activity. "
-    "If a location reference is provided, keep its recognizable layout and furnishings, "
-    "while allowing camera angle and small props to vary. Natural light, candid composition, "
+    "If a location reference sheet is provided, choose one physically plausible camera view of that "
+    "same place and preserve its recognizable layout and furnishings. Render ONE continuous scene, "
+    "never a triptych, collage, split panel or contact sheet. Natural light, candid composition, "
     "no captions, text, logos, watermark or extra people."
 )
 
@@ -77,11 +105,32 @@ class LifePhotoSettings(PluginConfigBase):
     character_reference: str = Field(default="builtin:icon", json_schema_extra={
         "label": "Character reference", "hint": "builtin:icon uses the plugin avatar. To replace it, put a PNG/JPEG/WebP file in plugin data/life-photo-references and enter its filename."
     })
-    home_reference: str = Field(default="builtin:home", json_schema_extra={
-        "label": "Home location reference", "hint": "builtin:home or a filename in plugin data/life-photo-references. Used for home activities."
+    home_reference: str = Field(default="builtin:living_room_views", json_schema_extra={
+        "label": "Living room reference", "hint": "Three views of one living room. Use builtin:home for the original single view, or a filename in plugin data/life-photo-references."
     })
-    park_reference: str = Field(default="builtin:park", json_schema_extra={
-        "label": "Park location reference", "hint": "builtin:park or a filename in plugin data/life-photo-references. Used for park and walking activities."
+    kitchen_reference: str = Field(default="builtin:kitchen_dining_views", json_schema_extra={
+        "label": "Kitchen and dining reference", "hint": "Three views of one kitchen and dining area, or a custom reference filename."
+    })
+    bedroom_reference: str = Field(default="builtin:bedroom_views", json_schema_extra={
+        "label": "Bedroom reference", "hint": "Three views of one bedroom, or a custom reference filename."
+    })
+    hobby_reference: str = Field(default="builtin:hobby_desk_views", json_schema_extra={
+        "label": "Craft and game desk reference", "hint": "Three views of one craft desk, or a custom reference filename."
+    })
+    balcony_reference: str = Field(default="builtin:balcony_views", json_schema_extra={
+        "label": "Balcony reference", "hint": "Three views of one balcony and plant corner, or a custom reference filename."
+    })
+    bathroom_reference: str = Field(default="builtin:bathroom_views", json_schema_extra={
+        "label": "Bathroom reference", "hint": "Three views of one wash area, or a custom reference filename."
+    })
+    neighborhood_reference: str = Field(default="builtin:neighborhood_views", json_schema_extra={
+        "label": "Neighborhood reference", "hint": "Three views of one nearby street and grocery, or a custom reference filename."
+    })
+    restaurant_reference: str = Field(default="builtin:fried_chicken_restaurant_views", json_schema_extra={
+        "label": "Fried-chicken restaurant reference", "hint": "Three views of one restaurant, or a custom reference filename."
+    })
+    park_reference: str = Field(default="builtin:wetland_park_views", json_schema_extra={
+        "label": "Wetland park reference", "hint": "Three views of one wetland park. Use builtin:park for the original single view, or a custom reference filename."
     })
     character_prompt: str = Field(default=DEFAULT_CHARACTER_PROMPT, max_length=1500, json_schema_extra={
         "label": "Character consistency prompt", "hint": "Describe the bot's appearance generically or customize it for your own character. MaiBot's persona remains authoritative.", "x-widget": "textarea"
@@ -155,11 +204,24 @@ class LifePhotoModule:
 
     @staticmethod
     def _location(activity: str) -> str:
-        if any(word in activity.casefold() for word in ("公园", "湿地", "散步", "野餐", "park", "walk", "hike")):
+        activity = activity.casefold()
+        if any(word in activity for word in ("公园", "湿地", "野餐", "park", "wetland", "hike")):
             return "park"
-        if any(word in activity.casefold() for word in ("家", "小窝", "客厅", "房间", "厨房", "游戏", "动漫", "电视剧", "乐高", "拼豆", "打扫", "home", "room", "cook", "game")):
-            return "home"
-        return ""
+        if any(word in activity for word in ("kfc", "肯德基", "疯狂星期四", "炸鸡", "薯条", "fried chicken")):
+            return "restaurant"
+        if any(word in activity for word in ("买菜", "买晚饭食材", "杂货店", "便利店", "超市", "出门散", "街道", "散步", "grocery", "street", "walk")):
+            return "neighborhood"
+        if any(word in activity for word in ("睡觉", "上床", "床铺", "叠被子", "熄灯", "整理小窝", "收玩偶", "卧室", "bedroom", "sleep", "bedtime")) and not any(word in activity for word in ("早餐", "午饭", "晚饭", "烤吐司", "热饮")):
+            return "bedroom"
+        if any(word in activity for word in ("早餐", "午饭", "午餐", "晚饭", "烤吐司", "煎蛋", "热粥", "煮", "做一碗", "饼干", "烤箱", "餐具", "厨房", "cook", "breakfast", "lunch", "dinner", "bake")):
+            return "kitchen"
+        if any(word in activity for word in ("拼豆", "乐高", "拼图", "画画", "手工", "照片相册", "彩笔", "游戏", "积木", "craft", "lego", "puzzle", "game")):
+            return "hobby"
+        if any(word in activity for word in ("洗漱", "刷牙", "洗脸", "洗澡", "bathroom", "wash", "shower")):
+            return "bathroom"
+        if any(word in activity for word in ("窗边", "开窗", "植物", "浇水", "晚霞", "阳台", "balcony", "plant", "window")):
+            return "balcony"
+        return "home"
 
     def _prompt_and_refs(self, activity: str, detail: str) -> tuple[str, list[str]]:
         settings = self.plugin.config.life_photo
@@ -167,18 +229,18 @@ class LifePhotoModule:
         if not refs[0]:
             raise ValueError("需先配置角色参考图")
         location = self._location(activity)
-        if location:
-            choice = settings.home_reference if location == "home" else settings.park_reference
-            location_ref = self._reference_data(choice)
-            if location_ref:
-                refs.append(location_ref)
+        choice = getattr(settings, REFERENCE_FIELDS[location])
+        location_ref = self._reference_data(choice)
+        if location_ref:
+            refs.append(location_ref)
         anchor = SCENE_ANCHORS.get(location, "")
         prompt = (
             f"{settings.character_prompt.strip()}\n{settings.scene_prompt.strip()}\n"
             f"Current activity: {activity.strip()[:180]}\n"
             f"Optional moment detail: {detail.strip()[:160]}\n"
             f"Location continuity: {anchor}\n"
-            "Image 1 is the character reference. Image 2, if present, is only the location reference. "
+            "Image 1 is the character reference. Image 2, if present, is only the location reference sheet; "
+            "its separate panels show camera angles of ONE place and must never appear as panels in the result. "
             "The current MaiBot persona takes priority; do not add facts or identity traits absent from it."
         )
         return prompt, [ref for ref in refs if ref]

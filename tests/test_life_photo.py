@@ -8,6 +8,7 @@ import types
 
 import httpx
 import pytest
+from mai_secretary.virtual_life import DEFAULT_CHOICES, DEFAULT_FIXED_TEXT
 from PIL import Image
 from test_secretary import make_plugin
 
@@ -49,7 +50,7 @@ async def test_current_life_photo_uses_two_refs_and_sends_to_verified_stream(tmp
     assert sent[0][1].startswith(b"\x89PNG")
     assert len(request_bodies) == 1
     assert request_bodies[0]["model"] == "qwen-image-2.1-turbo"
-    assert len(request_bodies[0]["image"]) == 2  # character plus home/park scene
+    assert len(request_bodies[0]["image"]) == 2  # character plus selected location sheet
     assert "Current activity:" in request_bodies[0]["prompt"]
     assert (await plugin.life_photo.share(stream_id="real-stream-1", chat_id="wrong"))["success"] is False
     assert (await plugin.life_photo.share(stream_id="real-stream-1", chat_id="real-stream-1"))["success"] is False
@@ -60,6 +61,37 @@ def test_references_cannot_escape_plugin_data_directory(tmp_path):
     with pytest.raises(ValueError):
         plugin.life_photo._reference_path("../secret.png")
     assert plugin.life_photo._reference_path("builtin:icon").is_file()
+
+
+@pytest.mark.parametrize(("activity", "location"), [
+    ("窝在沙发上看动漫", "home"),
+    ("烤吐司和煎蛋当早餐", "kitchen"),
+    ("整理床铺，准备睡觉", "bedroom"),
+    ("在桌边拼乐高", "hobby"),
+    ("给窗边植物浇水", "balcony"),
+    ("起床洗漱", "bathroom"),
+    ("出门散一小会儿步，顺路买晚饭食材", "neighborhood"),
+    ("去 KFC 吃炸鸡和薯条", "restaurant"),
+    ("去湿地公园散步", "park"),
+])
+def test_activity_selects_matching_multiview_reference(tmp_path, activity, location):
+    plugin, _ = make_plugin(tmp_path)
+    assert plugin.life_photo._location(activity) == location
+    prompt, refs = plugin.life_photo._prompt_and_refs(activity, "")
+    assert len(refs) == 2
+    assert "ONE place" in prompt
+    assert all(ref.startswith("data:image/png;base64,") for ref in refs)
+
+
+def test_every_default_simulated_activity_has_a_location(tmp_path):
+    plugin, _ = make_plugin(tmp_path)
+    choices = [item for period in DEFAULT_CHOICES.values() for item in period]
+    choices.extend(DEFAULT_FIXED_TEXT.values())
+    for activity in choices:
+        location = plugin.life_photo._location(activity)
+        assert location in {"home", "kitchen", "bedroom", "hobby", "balcony", "bathroom", "neighborhood", "restaurant", "park"}
+        prompt, refs = plugin.life_photo._prompt_and_refs(activity, "")
+        assert prompt and len(refs) == 2
 
 
 @pytest.mark.asyncio
