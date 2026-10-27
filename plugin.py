@@ -33,6 +33,7 @@ from .followups import FollowupModule
 from .group_admin import GroupAdminModule
 from .group_moderation import GroupModerationModule
 from .knowledge_base import KnowledgeBaseModule, KnowledgeError
+from .life_photo import LifePhotoModule, LifePhotoSettings
 from .message_debounce import MessageDebounceModule
 from .module_contract import SecretaryModule
 from .mood import MoodModule, MoodSettings
@@ -802,6 +803,7 @@ class SecretaryConfig(PluginConfigBase):
     daily_report: DailyReportSettings = Field(default_factory=DailyReportSettings)
     proactive: ProactiveSettings = Field(default_factory=ProactiveSettings)
     virtual_life: VirtualLifeSettings = Field(default_factory=VirtualLifeSettings)
+    life_photo: LifePhotoSettings = Field(default_factory=LifePhotoSettings)
     mood: MoodSettings = Field(default_factory=MoodSettings)
     anti_bullying: AntiBullyingSettings = Field(default_factory=AntiBullyingSettings)
     knowledge_base: KnowledgeBaseSettings = Field(default_factory=KnowledgeBaseSettings)
@@ -847,6 +849,7 @@ class MaiSecretaryPlugin(MaiBotPlugin):
         self.group_moderation = GroupModerationModule(self)
         self.voice_synthesis = VoiceSynthesisModule(self)
         self.virtual_life = VirtualLifeModule(self)
+        self.life_photo = LifePhotoModule(self)
         self.mood = MoodModule(self)
         self.proactive = ProactiveChatModule(self)
         self.anti_bullying = AntiBullyingModule(self)
@@ -868,6 +871,7 @@ class MaiSecretaryPlugin(MaiBotPlugin):
         self._register_module(self.group_moderation)
         self._register_module(self.voice_synthesis)
         self._register_module(self.virtual_life)
+        self._register_module(self.life_photo)
         self._register_module(self.mood)
         self._register_module(self.proactive)
         self._register_module(self.anti_bullying)
@@ -911,6 +915,7 @@ class MaiSecretaryPlugin(MaiBotPlugin):
         await self.message_debounce.stop()
         await self.poke.stop()
         await self.daily_report.stop()
+        await self.life_photo.stop()
         await self.anti_bullying.stop()
         await self.mood.stop()
         await self.group_moderation.stop()
@@ -1534,6 +1539,24 @@ class MaiSecretaryPlugin(MaiBotPlugin):
     )
     async def secretary_speak(self, text: str, mode: str = "speech", **kwargs: Any) -> dict[str, Any]:
         return await self.voice_synthesis.speak(text, mode, **kwargs)
+
+    @Tool(
+        "secretary_share_life_photo",
+        description=(
+            "当你正自然分享自己此刻在做的事，并觉得发一张照片会让当前对话更生动时，可选择调用。"
+            "只有模拟生活当前活动或本轮主动发言场景可用；不需要每次主动发言都拍照。"
+            "插件用已配置的角色和场景参考图生成一张图，受全局冷却与每日张数限制。"
+            "成功返回只表示开始生成，图片稍后发到当前聊天；不要提前声称已经发出。"
+            "不为无关话题、用户未要求的真实世界照片或他人肖像调用。"
+        ),
+        parameters=[
+            ToolParameterInfo(name="detail", param_type=ToolParamType.STRING, description="可选：此刻画面里的简短动作或物品细节，不添加与当前活动冲突的事", required=False),
+            ToolParameterInfo(name="activity", param_type=ToolParamType.STRING, description="仅在模拟生活关闭而本轮主动发言已决定活动时填写", required=False),
+        ],
+        visibility="visible",
+    )
+    async def secretary_share_life_photo(self, detail: str = "", activity: str = "", **kwargs: Any) -> dict[str, Any]:
+        return await self.life_photo.share(detail, activity, **kwargs)
 
     @Tool(
         "secretary_search_knowledge",

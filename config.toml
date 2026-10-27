@@ -104,6 +104,22 @@ average_interval_hours = 2.0
 offset_minutes = 15
 intent = "请根据这个聊天流的最近对话、人物关系和已有记忆，找一个贴合上下文的话题，在当前聊天流发出一条自然的消息。避免复述最近说过的话；上下文较少时可聊轻松的日常话题。不要提及插件或定时器。"
 
+[life_photo]
+enabled = false
+provider = "qwen"
+api_key = ""
+region = "beijing"
+model = "qwen-image-2.1-turbo"
+minimax_api_key = ""
+minimax_region = "china"
+character_reference = "builtin:icon"
+home_reference = "builtin:home"
+park_reference = "builtin:park"
+character_prompt = 'The first reference image is the character identity reference. Preserve the same face, hair, distinctive accessories, color palette and art style. Use a medium or closer shot so these features stay recognizable. Do not invent a different person. Keep the apparent age and identity consistent with that reference and the bot persona.'
+scene_prompt = 'Make one casual illustrated snapshot of the character naturally doing the stated current activity. If a location reference is provided, keep its recognizable layout and furnishings, while allowing camera angle and small props to vary. Natural light, candid composition, no captions, text, logos, watermark or extra people.'
+cooldown_minutes = 120
+max_images_per_day = 3
+
 [anti_bullying]
 enabled = true
 forbidden_words = []

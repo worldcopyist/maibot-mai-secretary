@@ -194,6 +194,14 @@ class ProactiveChatModule:
             "日常闲聊无需联网，也不要无故创建定时任务。"
             f"{TOOL_ROUTING_PROMPT}"
         )
+        if self.plugin.config.life_photo.enabled:
+            intent += (
+                "\n若这次确实聊到自己此刻在做的事，并且一张生活照片会自然地丰富交流，"
+                "你可以自行决定是否调用 `secretary_share_life_photo`（可选 detail；"
+                "仅模拟生活关闭时还需传入刚决定的 activity）。"
+                "照片不是每次主动聊天的必需品；工具受费用、冷却和每日上限控制。"
+                "返回已开始生成时不要说图片已经送达。MaiBot 当前人设始终优先。"
+            )
         last_message = str(continuity.get("last_message") or "").strip()
         if last_message:
             last_sent_at = continuity.get("last_sent_at")

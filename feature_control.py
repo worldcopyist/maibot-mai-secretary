@@ -20,6 +20,7 @@ class FeatureControlModule:
         "manual_report": ("daily_report", "manual_enabled", "即时日报", ("手动日报",)),
         "proactive": ("proactive", "enabled", "主动发言", ("随机发言", "主动聊天")),
         "virtual_life": ("virtual_life", "enabled", "模拟生活", ("虚拟生活",)),
+        "life_photo": ("life_photo", "enabled", "生活照片", ("主动发图", "生图分享", "拍照分享")),
         "mood": ("mood", "enabled", "心情模块", ("心情", "情绪模块")),
         "mood_chat": ("mood", "chat_influence_enabled", "聊天影响心情", ("对话影响心情",)),
         "mood_bullying": ("mood", "bullying_mood_enabled", "反霸凌影响心情", ("被辱骂后改变心情",)),

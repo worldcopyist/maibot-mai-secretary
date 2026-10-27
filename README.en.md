@@ -6,14 +6,14 @@
 
 ## At a glance
 
-- **Companionship and plans:** shared simulated life and mood, proactive chat, scheduled tasks, class reminders, daily reports, relationships, and follow-ups.
+- **Companionship and plans:** shared simulated life and mood, proactive chat with optional life photos, scheduled tasks, class reminders, daily reports, relationships, and follow-ups.
 - **Information and expression:** knowledge retrieval, web search, Blueberry balance, experimental voice replies, and pokes.
 - **Chat management:** QQ group management, anti-bullying, message debouncing, and natural-language feature switches for administrators.
 
 ## Token usage and cost
 
 > [!IMPORTANT]
-> **Token usage:** Most features exposed to MaiBot send tool results or extra context back to the LLM (language model) for a decision or reply, increasing input token use and potentially increasing cost when the model charges per token. Daily summaries, AI group moderation, and chat-driven mood changes may also make separate model calls. Actual usage depends on how often features run and how much text they return.
+> **Token usage:** Most features exposed to MaiBot send tool results or extra context back to the LLM (language model) for a decision or reply, increasing input token use and potentially increasing cost when the model charges per token. Daily summaries, AI group moderation, and chat-driven mood changes may also make separate model calls. **Life photos make a separate paid image API call.** Actual usage depends on how often features run and how much text they return.
 
 ## Open the plugin pages
 
@@ -38,6 +38,7 @@ The four plugin pages also switch immediately with MaiBot's interface language: 
 | `task_receipts.py` | Separates Maisaka's queue acceptance from a matched actual send result. Records accepted, sent, failed, and unknown states. Unknown results are never automatically resent; an administrator can retry a confirmed failure once. | `secretary_task_receipts`; workbench |
 | `proactive_chat.py` | Randomly starts conversations in selected chat streams during configured time windows. Supports a target average interval plus random offset, recent context, and continuity from the last message actually sent. | `[proactive]` |
 | `virtual_life.py` | Chooses one activity per time period and shares it across every chat stream, including after a restart. Editable random choices and fixed weekday activities remain available. MaiBot's own persona has priority. | `[virtual_life].*_choices`, `fixed_activities` |
+| `life_photo.py` | Lets MaiBot optionally generate and share one illustrated snapshot of its current activity. Uses a character reference and optional home/park references, with a global cooldown and daily cap. Disabled until configured. | `secretary_share_life_photo`; `[life_photo]` |
 | `mood.py` | Draws one shared mood per time period, influenced by activity and previous mood. Addressed chats can change it through a background model judgment. Confirmed anti-bullying events use a separate editable mood distribution. Each set of nine probabilities must total 100%. Owner, familiar, and stranger tiers express it with different intensity. Off by default. | `[mood]`; `secretary_feature_switch` |
 | `daily_report.py`, `daily_report_renderer.py` | Summarizes one chat stream's text on schedule or on an administrator's request. Local rendering places the text on a 9:16 Azure, classical letter-paper, or custom theme; no image generation model is required. | `secretary_generate_daily_report`; `[daily_report].theme` |
 | `role_recognition.py` | Checks the real platform account and applies separate owner, familiar, or stranger prompts. The owner's identity comes from plugin admins or MaiBot plugin managers; strangers become familiar after more than 50 counted successful interactions by default. | `[role_recognition]` |
@@ -56,6 +57,14 @@ The four plugin pages also switch immediately with MaiBot's interface language: 
 The **DeepSeek 联网与余额** plugin configuration section contains search, balance, and low-balance alert settings together. The old standalone Blueberry budget card was removed from the workbench; existing budget tools and saved balance history remain available. Set a mood's base probability to zero to exclude it from time-period draws; a sufficiently clear chat interaction can still cause that mood. Activity and previous mood adjust the remaining draw weights. When enabled, chat influence analyzes private messages and group messages addressed to MaiBot in the background. Each analyzed message makes one short model call, without holding up the current reply. A confirmed targeted abuse verdict from the anti-bullying module uses separate `[mood].bullying_*` weights (defaults: wronged 40%, sad 30%, irritable 20%, angry 10%). This local draw overrides ordinary chat analysis of the same message and adds no model call beyond anti-bullying's existing judgment. The shared state stores the resulting mood, never the message text or another stream's conversation. MaiBot's persona and current conversation take priority.
 
 The knowledge base accepts text, Markdown, CSV/TSV, JSON/JSONL, XML/YAML, HTML, RTF, PDF with extractable text, DOCX, XLSX, PPTX, EPUB, ODT/ODS/ODP. Scanned PDFs require OCR before upload. The upload limit is 8 MiB per file. Chat retrieval is denied until `[knowledge_base].allowed_chats` contains an approved stream.
+
+### Life photos (image API)
+
+In the native **Life Photos** settings, choose `qwen` or `minimax`, add that provider's image API key and region, then enable the module. The public repository ships disabled and contains no key. While naturally discussing its current simulated activity, or during a proactive turn in which it just chose an activity, MaiBot may decide whether `secretary_share_life_photo` adds value. A successful tool response means generation has started; the image is sent asynchronously to that same chat stream only after completion.
+
+The built-in character reference is [`assets/icon.png`](assets/icon.png), with [`assets/life_photo_home.png`](assets/life_photo_home.png) and [`assets/life_photo_park.png`](assets/life_photo_park.png) for matching locations. Generic default prompts put character identity before location and request a medium or closer shot. Qwen accepts the character plus one matching location image. MiniMax's official API accepts only one character reference per request, so its location continuity uses the built-in text descriptions and cannot guarantee identical room furnishings across images. The avatar shows only the head, so full-body clothing and perfect consistency **cannot be guaranteed**. For better results, place a licensed PNG/JPEG/WebP character sheet in the installed plugin data directory's `life-photo-references/` and set `character_reference` to its filename. `home_reference` and `park_reference` may point to files in that directory for Qwen. References are limited to 8 MB and filenames within that directory; arbitrary paths and URLs are rejected. Character and scene prompts are editable, with MaiBot's current persona taking priority.
+
+The module supports the [official Qwen Image API](https://help.aliyun.com/zh/model-studio/qwen-image-generation-and-editing-api-reference) with `qwen-image-2.1-turbo` and the [official MiniMax Image API](https://platform.minimax.io/docs/api-reference/image-generation-i2i) with `image-01`. It creates at most one image per call; by default all streams share a 120-minute cooldown and three attempted generations per day. Failed requests count toward the cap because billing may be uncertain. Prompts and reference images are sent to the selected provider. Plugin state retains only usage count, time and result, not generated images or full prompts. Test image quality and charges in a small chat first; without a configured key it makes no image request.
 
 ### Timetable import (experimental)
 
