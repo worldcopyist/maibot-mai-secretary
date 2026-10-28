@@ -99,7 +99,7 @@ QQ 空间直接调用 NapCat 的 `send_qzone_msg`，不需要单独扫码登录�
 
 内置自拍角色参考图为 [`assets/icon.png`](assets/icon.png)。普通生活照**不传角色图**，以免模型画出第三人称人物；千问只接收匹配的场景图。模拟生活按活动选用客厅、厨房餐桌、卧室、手工桌、阳台、洗漱区、附近街道、炸鸡店或湿地公园的三视角场景图；完整图集、活动对应关系及固定布局见 [`场景图集`](docs/life-photo-scene-atlas.md)。用户提供的客厅原图和原有公园图仍保留，原始提示词见 [`参考图提示词`](docs/life-photo-reference-prompts.md)。自拍时千问同时接收角色图与场景图；MiniMax 自拍只接收一张人物参考图，普通生活照则只靠场景文字描述，不能保证房间摆设逐张完全相同。头像只有头部信息，不能保证自拍中的服装或每张图完全一致。要提升自拍角色一致性，请在服务器插件数据目录的 `life-photo-references/` 放入有权使用的 PNG/JPEG/WebP 角色设定图，并在 `character_reference` 填文件名。九个地点各有 `*_reference` 配置项，可改为同目录中的自制场景图供千问使用；留空则仅凭文字生成。`character_prompt` 只用于自拍，`scene_prompt` 用于普通第一人称照片；MaiBot 当前人设始终优先。参考图文件最大 8 MB，只接受该数据目录内的文件名，不能填写任意路径或网址。
 
-目前接入阿里云的 [`qwen-image-2.1-turbo`](https://help.aliyun.com/zh/model-studio/qwen-image-generation-and-editing-api-reference) 和 MiniMax 的 [`image-01`](https://platform.minimax.cn/docs/api-reference/image-generation-i2i)。每次调用最多生成一张，默认全聊天流共享 **120 分钟冷却**与**每天 3 张尝试上限**；失败的 API 请求也计入尝试，避免不确定计费时自动重试。插件将提示词及参考图发给所选服务商；返回的图片仅发往当前聊天流，插件状态文件只保留次数、时间、结果，不保留图片或完整提示词。请先在小范围聊天测试生成效果与实际账单，API 未配置时不会产生生图请求。
+目前接入阿里云的 [`qwen-image-2.1-turbo`](https://help.aliyun.com/zh/model-studio/qwen-image-generation-and-editing-api-reference) 和 MiniMax 的 [`image-01`](https://platform.minimax.cn/docs/api-reference/image-generation-i2i)。每次调用最多生成一张，默认全聊天流共享 **120 分钟冷却**与**每天 3 张尝试上限**；失败的 API 请求也计入尝试，避免不确定计费时自动重试。管理员可以明确要求忽略冷却，插件会核验当前真实发送者；每日上限仍然生效。插件将提示词及参考图发给所选服务商；返回的图片仅发往当前聊天流，插件状态文件只保留次数、时间、结果，不保留图片或完整提示词。请先在小范围聊天测试生成效果与实际账单，API 未配置时不会产生生图请求。
 
 例如，用户说“每天早上八点给我说天气预报”，麦麦可调用 `secretary_create_task`，用 `daily`、`08:00` 和原请求建立任务。任务到点时，可调用小秘书的 `secretary_deepseek_search` 查询实时天气资料；若查询失败或来源不可靠，应如实说明，不能编造预报。
 

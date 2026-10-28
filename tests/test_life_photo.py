@@ -5,11 +5,46 @@ import base64
 import io
 import json
 import types
+from datetime import UTC, datetime
+from zoneinfo import ZoneInfo
 
 import httpx
 import pytest
 from PIL import Image
 from test_secretary import make_plugin
+
+
+@pytest.mark.asyncio
+async def test_cooldown_override_requires_verified_admin_and_retains_daily_cap(tmp_path):
+    plugin, _ = make_plugin(tmp_path, {"virtual_life": {"enabled": True}, "life_photo": {"enabled": True, "api_key": "test-only", "cooldown_minutes": 120, "max_images_per_day": 3}})
+    plugin.virtual_life.scene_at = lambda _now: {"activity": "在家玩游戏"}
+    plugin._ctx.chat.streams = [{"stream_id": "chat", "platform": "qq", "chat_type": "private", "user_id": "123"}]
+    plugin.role_recognition.admin_accounts = lambda **_kwargs: asyncio.sleep(0, result={"qq:123"})
+    plugin.role_recognition.peek_planner_speaker = lambda _stream: "qq:123"
+    plugin.role_recognition.consume_planner_speaker = lambda _stream: "qq:123"
+    plugin.life_photo._produce = lambda *_args: asyncio.sleep(0)
+    now = datetime.now(UTC)
+    plugin.life_photo.usage = {"day": now.astimezone(ZoneInfo(plugin.config.plugin.timezone)).date().isoformat(), "count": 1, "last_attempt_at": now.timestamp()}
+    common = {"stream_id": "chat", "chat_id": "chat", "user_id": "123"}
+    assert not (await plugin.life_photo.share(**common))["success"]
+    assert not (await plugin.life_photo.share(ignore_cooldown=True, **dict(common, user_id="other")))["success"]
+    assert (await plugin.life_photo.share(ignore_cooldown=True, **common))["success"]
+    await asyncio.gather(*plugin.life_photo._jobs)
+    assert plugin.life_photo.usage["count"] == 2
+    plugin.life_photo.usage["count"] = 3
+    assert not (await plugin.life_photo.share(ignore_cooldown=True, **common))["success"]
+
+
+@pytest.mark.asyncio
+async def test_cooldown_override_handles_verified_group_speaker(tmp_path):
+    plugin, _ = make_plugin(tmp_path)
+    plugin._ctx.chat.streams = [{"stream_id": "group", "platform": "qq", "chat_type": "group"}]
+    plugin.role_recognition.admin_accounts = lambda **_kwargs: asyncio.sleep(0, result={"qq:123"})
+    plugin.role_recognition.peek_planner_speaker = lambda _stream: "qq:123"
+    plugin.role_recognition.consume_planner_speaker = lambda _stream: "qq:123"
+    assert await plugin.life_photo._can_override_cooldown("group", "")
+    plugin.role_recognition.peek_planner_speaker = lambda _stream: None
+    assert not await plugin.life_photo._can_override_cooldown("group", "")
 
 
 @pytest.mark.asyncio

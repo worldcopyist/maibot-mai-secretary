@@ -268,7 +268,35 @@ class LifePhotoModule:
         )
         return prompt, refs
 
-    async def share(self, detail: str = "", activity: str = "", mode: str = "scene", **kwargs: Any) -> dict[str, Any]:
+    async def _can_override_cooldown(self, stream_id: str, user_id: str) -> bool:
+        """Require a current verified human speaker and the configured admin account."""
+        role = self.plugin.role_recognition
+        account = role.peek_planner_speaker(stream_id)
+        if not account or account not in await role.admin_accounts(force_refresh=True):
+            return False
+        response = await self.plugin.ctx.chat.get_all_streams(platform="all_platforms")
+        streams = response if isinstance(response, list) else response.get("streams") if isinstance(response, dict) and response.get("success") is not False else None
+        if not isinstance(streams, list):
+            return False
+        matches = [row for row in streams if isinstance(row, dict) and str(row.get("stream_id") or row.get("session_id") or "") == stream_id]
+        if len(matches) != 1:
+            return False
+        stream = matches[0]
+        platform = str(stream.get("platform") or "").strip().lower()
+        kind = str(stream.get("chat_type") or "").strip().lower()
+        if not platform or not account.startswith(platform + ":"):
+            return False
+        if kind == "private":
+            if not user_id or str(stream.get("user_id") or "").strip() != user_id or account != f"{platform}:{user_id}":
+                return False
+        elif kind == "group":
+            if user_id and account != f"{platform}:{user_id}":
+                return False
+        else:
+            return False
+        return role.consume_planner_speaker(stream_id) == account
+
+    async def share(self, detail: str = "", activity: str = "", mode: str = "scene", ignore_cooldown: bool = False, **kwargs: Any) -> dict[str, Any]:
         stream_id = str(kwargs.get("stream_id") or "").strip()
         if not stream_id or stream_id != str(kwargs.get("chat_id") or "").strip():
             return {"success": False, "error": "无法核验当前聊天流"}
@@ -306,7 +334,14 @@ class LifePhotoModule:
             if count >= settings.max_images_per_day:
                 return {"success": False, "error": "今天的生活照片张数已达上限"}
             if wait > 0:
-                return {"success": False, "error": f"生活照片还在冷却，约 {int(wait // 60) + 1} 分钟后可再次生成"}
+                override = False
+                if ignore_cooldown:
+                    try:
+                        override = await self._can_override_cooldown(stream_id, str(kwargs.get("user_id") or "").strip())
+                    except Exception:
+                        LOG.warning("无法核验照片冷却豁免请求者", exc_info=True)
+                if not override:
+                    return {"success": False, "error": f"生活照片还在冷却，约 {int(wait // 60) + 1} 分钟后可再次生成；管理员可明确要求忽略冷却"}
             try:
                 prompt, refs = self._prompt_and_refs(activity, detail, mode)
             except (ValueError, OSError, UnidentifiedImageError) as exc:
