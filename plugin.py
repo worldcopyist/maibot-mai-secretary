@@ -1581,7 +1581,7 @@ class MaiSecretaryPlugin(MaiBotPlugin):
         ],
         visibility="visible",
     )
-    async def secretary_qzone_post(self, action: str, source: str = "life", topic: str = "", include_image: bool = False, **kwargs: Any) -> dict[str, Any]:
+    async def secretary_qzone_post(self, action: str, source: str = "life", topic: str = "", include_image: bool | None = None, **kwargs: Any) -> dict[str, Any]:
         return await self.qzone.tool(action, source, topic, include_image, **kwargs)
 
     @Tool(

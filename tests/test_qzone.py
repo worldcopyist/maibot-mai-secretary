@@ -52,10 +52,43 @@ async def test_publish_uses_native_napcat_action_and_waits_for_confirmed_tid(tmp
 
 @pytest.mark.asyncio
 async def test_automatic_daily_post_is_claimed_once(tmp_path):
-    plugin, _ = make_plugin(tmp_path, {"qzone": {"enabled": True, "automatic_enabled": True, "automatic_time": "20:30"}})
+    plugin, _ = make_plugin(tmp_path, {"qzone": {"enabled": True, "automatic_enabled": True, "automatic_time": "20:30", "post_probability": 100}})
     calls = []
     plugin.qzone._queue = lambda *args: asyncio.sleep(0, result=calls.append(args))
     due = datetime(2026, 10, 28, 12, 30, tzinfo=UTC)
     await plugin.qzone.tick(due)
     await plugin.qzone.tick(due)
     assert len(calls) == 1
+
+
+@pytest.mark.asyncio
+async def test_probability_boundaries_and_empty_allowlist(tmp_path):
+    plugin, _ = make_plugin(tmp_path, {"qzone": {"enabled": True, "automatic_enabled": True, "post_probability": 0}})
+    calls = []
+    plugin.qzone._queue = lambda *args: asyncio.sleep(0, result=calls.append(args))
+    due = datetime(2026, 10, 28, 12, 30, tzinfo=UTC)
+    await plugin.qzone.tick(due)
+    assert not calls
+    plugin.qzone.state["automatic_day"] = ""
+    plugin.config.qzone.post_probability = 100
+    plugin.config.qzone.life_probability = 0
+    plugin.config.qzone.include_image = True
+    plugin.config.qzone.image_probability = 100
+    await plugin.qzone.tick(due)
+    assert calls[0][0] == "life" and calls[0][2] is True
+
+
+@pytest.mark.asyncio
+async def test_life_summary_uses_recorded_today_and_current_mood(tmp_path):
+    plugin, _ = make_plugin(tmp_path, {"virtual_life": {"enabled": True}, "mood": {"enabled": True}})
+    now = datetime.now(UTC)
+    plugin.virtual_life.scene_at(now)
+    prompts = []
+    async def generate(**kwargs):
+        prompts.append(kwargs["prompt"])
+        return {"success": True, "response": "今天过得很充实，做了喜欢的事情，心情也很不错。"}
+    plugin._ctx.llm = types.SimpleNamespace(generate=generate)
+    plugin.mood.current = lambda _now: {"mood": "happy"}
+    await plugin.qzone._compose("life", "")
+    assert plugin.virtual_life.history[0]["activity"] in prompts[0]
+    assert "开心" in prompts[0]

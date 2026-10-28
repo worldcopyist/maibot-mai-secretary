@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import base64
 import logging
+import random
 from datetime import UTC, datetime, time
 from typing import Any, ClassVar
 from zoneinfo import ZoneInfo
@@ -15,6 +16,7 @@ from pydantic import field_validator
 
 from .anti_bullying import normalize_admin_account
 from .daily_report import _message_text
+from .mood import MOODS
 from .prompts import PERSONA_PRIORITY_PROMPT
 from .stream_router import resolve_stream
 
@@ -27,7 +29,10 @@ class QZoneSettings(PluginConfigBase):
     enabled: bool = Field(default=False, json_schema_extra={"label": "Enable QQ Space posting", "hint": "Requires a NapCat version with the native send_qzone_msg action. No separate QQ Space login is needed."})
     automatic_enabled: bool = Field(default=False, json_schema_extra={"label": "Automatically post every day", "hint": "When enabled, post at the configured local time. NapCat must support QQ Space posts."})
     automatic_time: str = Field(default="20:30", json_schema_extra={"label": "Daily post time", "hint": "HH:MM in the plugin timezone."})
-    automatic_source: str = Field(default="life", json_schema_extra={"label": "Automatic post source", "choices": ["life", "daily"], "hint": "life uses current simulated life; daily summarizes only allowlisted chat streams."})
+    automatic_source: str = Field(default="life", json_schema_extra={"label": "Legacy source setting", "choices": ["life", "daily"], "hint": "Retained for older configurations; automatic posts now use the source probability below."})
+    post_probability: int = Field(default=70, ge=0, le=100, json_schema_extra={"label": "Daily posting probability (%)", "hint": "One random draw at the scheduled time; 0 never posts, 100 always posts."})
+    life_probability: int = Field(default=90, ge=0, le=100, json_schema_extra={"label": "Simulated life source probability (%)", "hint": "Otherwise use allowed chat highlights; if no streams are allowed, use simulated life."})
+    image_probability: int = Field(default=30, ge=0, le=100, json_schema_extra={"label": "Automatic photo probability (%)", "hint": "Applied when automatic photos are enabled; explicit manual photo requests are unaffected."})
     allowed_streams: list[str] = Field(default_factory=list, json_schema_extra={"label": "Chat streams allowed for daily highlights", "hint": "Only these exact stream IDs may be summarized for a QQ Space post. Empty means no chat records may be used."})
     include_image: bool = Field(default=False, json_schema_extra={"label": "Include a life photo", "hint": "Uses the life-photo provider and its daily image budget. The photo is first-person unless selfie mode is requested separately."})
     visibility: str = Field(default="friends", json_schema_extra={"label": "Post visibility", "choices": ["private", "friends", "public"]})
@@ -94,7 +99,11 @@ class QZoneModule:
             return
         self.state["automatic_day"] = day  # Claim before network I/O; never duplicate an uncertain publish.
         self.plugin._save_state()
-        await self._queue(settings.automatic_source, "", settings.include_image, "", "automatic")
+        if random.random() * 100 >= settings.post_probability:
+            return
+        source = "life" if random.random() * 100 < settings.life_probability or not settings.allowed_streams else "daily"
+        include_image = settings.include_image and random.random() * 100 < settings.image_probability
+        await self._queue(source, "", include_image, "", "automatic")
 
     async def _verified_admin(self, kwargs: dict[str, Any]) -> tuple[str, str]:
         stream_id = str(kwargs.get("stream_id") or "").strip()
@@ -122,7 +131,7 @@ class QZoneModule:
             raise ValueError("只有管理员能发布 QQ 空间")
         return stream_id, account
 
-    async def tool(self, action: str, source: str = "life", topic: str = "", include_image: bool = False, **kwargs: Any) -> dict[str, Any]:
+    async def tool(self, action: str, source: str = "life", topic: str = "", include_image: bool | None = None, **kwargs: Any) -> dict[str, Any]:
         try:
             stream_id, _account = await self._verified_admin(kwargs)
             if action == "status":
@@ -131,6 +140,9 @@ class QZoneModule:
                 raise ValueError("QQ 空间操作只能是 publish 或 status")
             if not self.plugin.config.plugin.enabled or not self.plugin.config.qzone.enabled:
                 raise ValueError("QQ 空间模块尚未启用")
+            if include_image is None:
+                settings = self.plugin.config.qzone
+                include_image = settings.include_image and random.random() * 100 < settings.image_probability
             return await self._queue(source, topic, include_image, stream_id, "manual")
         except (ValueError, OSError, TypeError) as exc:
             return {"success": False, "error": str(exc)}
@@ -182,13 +194,18 @@ class QZoneModule:
 
     async def _compose(self, source: str, topic: str) -> tuple[str, str]:
         if source == "life":
-            scene = self.plugin.virtual_life.scene_at(datetime.now(UTC))
+            now = datetime.now(UTC)
+            scene = self.plugin.virtual_life.scene_at(now)
             if not scene or not scene.get("activity"):
                 raise ValueError("当前没有可分享的模拟生活事件")
             activity = str(scene["activity"])
             if "睡觉" in activity or "睡" in activity and "准备" not in activity:
                 raise ValueError("当前在睡觉，不能发布生活动态")
-            material = f"当前模拟生活事件：{activity}"
+            day = now.astimezone(ZoneInfo(self.plugin.config.plugin.timezone)).date().isoformat()
+            history = [row for row in self.plugin.virtual_life.history if str(row.get("key", "")).startswith(day + ":")]
+            if not any(row.get("key") == scene.get("key") for row in history):
+                history.append(scene)
+            material = "今天已记录的模拟生活活动（只根据这些记录总结，不补造未记录的时段）：\n" + "\n".join(f"{row.get('period', '')}：{row.get('activity', '')}" for row in history)
         else:
             now = datetime.now(UTC).astimezone(ZoneInfo(self.plugin.config.plugin.timezone))
             rows: list[str] = []
@@ -200,9 +217,11 @@ class QZoneModule:
                 raise ValueError("今天允许的聊天流没有可总结的文字")
             material = "今天聊天摘要素材（仅提取适合公开分享的轻松内容，勿泄露账号、隐私或逐字引用）：\n" + "\n".join(rows[-60:])[-8000:]
             activity = str((self.plugin.virtual_life.scene_at(datetime.now(UTC)) or {}).get("activity") or "")
+        mood = self.plugin.mood.current(datetime.now(UTC))
+        mood_text = MOODS.get(str(mood.get("mood")), ("", ""))[0] if mood else ""
         prompt = (f"{PERSONA_PRIORITY_PROMPT}\n请为麦麦自己的 QQ 空间写一条简短自然的说说。只返回说说正文，40–180 字，不要标题、引号、话题标签或解释。"
                   "必须基于下面素材；不要捏造真实经历或把别人的私事公开。遵循 MaiBot 当前人设与语气。"
-                  f"\n话题建议：{topic[:200]}\n{material}")
+                  f"\n当前心情：{mood_text or '未启用心情模块，按人设自然表达'}；让语气自然反映当前心情。\n话题建议：{topic[:200]}\n{material}")
         model_name = self.plugin.config.qzone.text_model.strip()
         options: dict[str, Any] = {"model_name": model_name} if model_name else {}
         result = await self.plugin.ctx.llm.generate(

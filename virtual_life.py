@@ -234,11 +234,12 @@ class VirtualLifeModule:
     """Select one time-bound activity shared by every chat stream."""
 
     name = "virtual_life"
-    state_keys = frozenset({"virtual_life_scene"})
+    state_keys = frozenset({"virtual_life_scene", "virtual_life_history"})
 
     def __init__(self, plugin: Any) -> None:
         self.plugin = plugin
         self.scene: dict[str, Any] = {}
+        self.history: list[dict[str, Any]] = []
         self.rng = random.Random()
 
     def load_state(self, data: dict[str, Any]) -> None:
@@ -246,10 +247,14 @@ class VirtualLifeModule:
         self.scene = raw if isinstance(raw, dict) and all(
             isinstance(raw.get(key), str) for key in ("key", "signature", "period", "activity")
         ) else {}
+        history = data.get("virtual_life_history", [])
+        self.history = [item for item in history if isinstance(item, dict) and isinstance(item.get("key"), str) and isinstance(item.get("activity"), str)][-64:] if isinstance(history, list) else []
 
     def dump_state(self, payload: dict[str, Any]) -> None:
         if self.scene:
             payload["virtual_life_scene"] = self.scene
+        if self.history:
+            payload["virtual_life_history"] = self.history
 
     def on_config_update(self) -> None:
         pass  # The config signature invalidates the scene on the next read.
@@ -271,5 +276,6 @@ class VirtualLifeModule:
             local_time, previous=str(self.scene.get("activity") or ""), rng=self.rng,
         )
         self.scene = {"key": key, "signature": signature, "period": period, "activity": activity}
+        self.history = [item for item in self.history if item.get("key") != key][-63:] + [dict(self.scene)]
         self.plugin._save_state()
         return self.scene
