@@ -203,7 +203,12 @@ class QZoneModule:
         prompt = (f"{PERSONA_PRIORITY_PROMPT}\n请为麦麦自己的 QQ 空间写一条简短自然的说说。只返回说说正文，40–180 字，不要标题、引号、话题标签或解释。"
                   "必须基于下面素材；不要捏造真实经历或把别人的私事公开。遵循 MaiBot 当前人设与语气。"
                   f"\n话题建议：{topic[:200]}\n{material}")
-        result = await self.plugin.ctx.llm.generate(prompt=prompt, task_name="utils", model_name=self.plugin.config.qzone.text_model.strip(), temperature=0.5, max_tokens=500, rpc_timeout_ms=90000)
+        model_name = self.plugin.config.qzone.text_model.strip()
+        options: dict[str, Any] = {"model_name": model_name} if model_name else {}
+        result = await self.plugin.ctx.llm.generate(
+            prompt=prompt, task_name="utils", temperature=0.5, max_tokens=500,
+            rpc_timeout_ms=90000, **options,
+        )
         if not isinstance(result, dict) or result.get("success") is False:
             raise RuntimeError("空间文案模型调用失败")
         text = str(result.get("response") or result.get("content") or "").strip().strip('"“”')

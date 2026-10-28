@@ -22,7 +22,11 @@ async def test_publish_uses_native_napcat_action_and_waits_for_confirmed_tid(tmp
     plugin._ctx.chat.streams = [{"stream_id": "real-stream-1", "platform": "qq", "chat_type": "private", "user_id": "123", "account_id": "bot-1"}]
     plugin.role_recognition.admin_accounts = lambda **kwargs: asyncio.sleep(0, result={"qq:123"})
     plugin.virtual_life.scene_at = lambda now: {"activity": "在桌边拼乐高"}
-    plugin._ctx.llm = types.SimpleNamespace(generate=lambda **kwargs: asyncio.sleep(0, result={"success": True, "response": "今天终于把小房子拼好了，最后一块积木找了好久！"}))
+    model_calls = []
+    def generate(**kwargs):
+        model_calls.append(kwargs)
+        return asyncio.sleep(0, result={"success": True, "response": "今天终于把小房子拼好了，最后一块积木找了好久！"})
+    plugin._ctx.llm = types.SimpleNamespace(generate=generate)
     plugin._trigger = lambda *args, **kwargs: asyncio.sleep(0, result=True)
     requests = []
     async def call(name, **kwargs):
@@ -34,6 +38,7 @@ async def test_publish_uses_native_napcat_action_and_waits_for_confirmed_tid(tmp
     await asyncio.gather(*plugin.qzone._jobs)
     assert plugin.qzone.state["posts"][-1]["status"] == "published"
     assert plugin.qzone.state["posts"][-1]["tid"] == "321"
+    assert "model_name" not in model_calls[0]
     assert len(requests) == 1 and requests[0][0] == "adapter.napcat.action.call"
     assert requests[0][1]["action_name"] == "send_qzone_msg"
     body = requests[0][1]["params"]
