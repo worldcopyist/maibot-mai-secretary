@@ -1,0 +1,56 @@
+from __future__ import annotations
+
+import asyncio
+import types
+from datetime import UTC, datetime
+
+import pytest
+from test_secretary import make_plugin, module
+
+
+def test_napcat_module_auto_post_stays_off(tmp_path):
+    plugin, _ = make_plugin(tmp_path)
+    assert plugin.config.qzone.enabled is False
+    assert plugin.config.qzone.automatic_enabled is False
+    with pytest.raises(ValueError):
+        module.QZoneSettings(automatic_time="25:00")
+
+
+@pytest.mark.asyncio
+async def test_publish_uses_native_napcat_action_and_waits_for_confirmed_tid(tmp_path):
+    plugin, _ = make_plugin(tmp_path, {"qzone": {"enabled": True}, "virtual_life": {"enabled": True}})
+    plugin._ctx.chat.streams = [{"stream_id": "real-stream-1", "platform": "qq", "chat_type": "private", "user_id": "123", "account_id": "bot-1"}]
+    plugin.role_recognition.admin_accounts = lambda **kwargs: asyncio.sleep(0, result={"qq:123"})
+    plugin.virtual_life.scene_at = lambda now: {"activity": "在桌边拼乐高"}
+    plugin._ctx.llm = types.SimpleNamespace(generate=lambda **kwargs: asyncio.sleep(0, result={"success": True, "response": "今天终于把小房子拼好了，最后一块积木找了好久！"}))
+    plugin._trigger = lambda *args, **kwargs: asyncio.sleep(0, result=True)
+    requests = []
+    async def call(name, **kwargs):
+        requests.append((name, kwargs))
+        return {"success": True, "result": {"status": "ok", "retcode": 0, "data": {"tid": "321"}}}
+    plugin._ctx.api = types.SimpleNamespace(call=call)
+    result = await plugin.qzone.tool("publish", "life", "今天的手工", False, stream_id="real-stream-1", chat_id="real-stream-1", user_id="123")
+    assert result["success"] is True
+    await asyncio.gather(*plugin.qzone._jobs)
+    assert plugin.qzone.state["posts"][-1]["status"] == "published"
+    assert plugin.qzone.state["posts"][-1]["tid"] == "321"
+    assert len(requests) == 1 and requests[0][0] == "adapter.napcat.action.call"
+    assert requests[0][1]["action_name"] == "send_qzone_msg"
+    body = requests[0][1]["params"]
+    assert body["ugc_right"] == 4 and body["images"] == []
+    assert "最后一块" in body["content"]
+    duplicate = await plugin.qzone.tool("publish", "life", "", False, stream_id="real-stream-1", chat_id="real-stream-1", user_id="123")
+    assert duplicate["success"] is False
+    outsider = await plugin.qzone.tool("status", stream_id="real-stream-1", chat_id="real-stream-1", user_id="other")
+    assert outsider["success"] is False
+
+
+@pytest.mark.asyncio
+async def test_automatic_daily_post_is_claimed_once(tmp_path):
+    plugin, _ = make_plugin(tmp_path, {"qzone": {"enabled": True, "automatic_enabled": True, "automatic_time": "20:30"}})
+    calls = []
+    plugin.qzone._queue = lambda *args: asyncio.sleep(0, result=calls.append(args))
+    due = datetime(2026, 10, 28, 12, 30, tzinfo=UTC)
+    await plugin.qzone.tick(due)
+    await plugin.qzone.tick(due)
+    assert len(calls) == 1

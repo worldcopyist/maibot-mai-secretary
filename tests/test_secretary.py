@@ -76,6 +76,7 @@ def test_sdk_exposes_secretary_tools_apis_and_hooks(tmp_path):
         ("TOOL", "secretary_group_welcome"),
         ("TOOL", "secretary_speak"),
         ("TOOL", "secretary_share_life_photo"),
+        ("TOOL", "secretary_qzone_post"),
         ("TOOL", "secretary_search_knowledge"),
         ("TOOL", "secretary_deepseek_search"),
         ("TOOL", "secretary_deepseek_fetch"),

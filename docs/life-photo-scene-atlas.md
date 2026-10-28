@@ -32,10 +32,10 @@ The sheets were generated from the original living-room or park image with this 
 
 For a generated life photo, use a separate prompt:
 
-> Generate ONE casual illustrated snapshot of the character doing [current activity] at [location]. Reference image 1 fixes character identity. Reference image 2 is a three-view sheet of ONE place; select a plausible camera angle and preserve the fixed landmarks. Do not output a triptych, split panel, collage, label or copy of the reference sheet. The character's current MaiBot persona remains authoritative.
+> Generate ONE candid smartphone photograph from the bot's own eye level while doing [current activity] at [location]. The bot holds the camera and is invisible in the frame; show what it sees, such as food, a craft project or scenery. Reference image 1, if present, is a three-view sheet of ONE place. Preserve the fixed landmarks, but do not copy its art style or output a triptych, split panel, collage or label. Use the separate `selfie` mode and character reference only for a front-camera selfie. The current MaiBot persona remains authoritative.
 
 ## Limits / 使用边界
 
-These are generated reference illustrations, not a measured 3D model. Large landmarks and overall palette were visually checked, but small props, exact counts, door geometry and reverse-view perspective can still drift. The park sheet includes two similar path-side angles. Qwen can receive the character and one selected scene sheet; its output consistency still needs a real generation test. MiniMax currently accepts only the character image through this module, so it uses the same location descriptions as text; the sheets do **not** lock MiniMax's geometry. The module is off by default and no paid generation is required to inspect these assets.
+These are generated reference illustrations, not a measured 3D model. Large landmarks and overall palette were visually checked, but small props, exact counts, door geometry and reverse-view perspective can still drift. The park sheet includes two similar path-side angles. Qwen receives one selected scene sheet for an ordinary first-person photo; a selfie receives the character reference as well. MiniMax ordinary photos use the same location descriptions as text; the sheets do **not** lock MiniMax's geometry. The module is off by default and no paid generation is required to inspect these assets.
 
-这些图不是严格测绘的三维模型。大件布局与色调经过目视检查，细小道具、门窗几何和反向视角仍可能有偏差；公园图有两个相近的岸边视角。千问可接收角色图和一张场景图，但最终一致性还需要实际生成验证。MiniMax 当前只接收角色图，地点只能靠文字描述，因此不能保证和这些场景图严格一致。模块默认关闭，查看图集不会触发生图费用。
+这些图不是严格测绘的三维模型。大件布局与色调经过目视检查，细小道具、门窗几何和反向视角仍可能有偏差；公园图有两个相近的岸边视角。千问普通第一人称照片接收一张场景图，自拍才额外接收角色图，最终一致性仍需实际生成验证。MiniMax 普通照片的地点只能靠文字描述，不能保证和这些场景图严格一致。模块默认关闭，查看图集不会触发生图费用。

@@ -34,8 +34,8 @@ BUILTIN_REFERENCES = {
     "wetland_park_views": ASSETS / "life_photo_scenes/wetland_park_views.png",
 }
 ENDPOINTS = {
-    "beijing": "https://dashscope.aliyuncs.com/compatible-mode/v1/images/generations",
-    "singapore": "https://dashscope-intl.aliyuncs.com/compatible-mode/v1/images/generations",
+    "beijing": "https://dashscope.aliyuncs.com/api/v1/services/aigc/multimodal-generation/generation",
+    "singapore": "https://dashscope-intl.aliyuncs.com/api/v1/services/aigc/multimodal-generation/generation",
 }
 MINIMAX_ENDPOINTS = {
     "china": "https://api.minimax.cn/v1/image_generation",
@@ -64,17 +64,26 @@ REFERENCE_FIELDS = {
     "park": "park_reference",
 }
 DEFAULT_CHARACTER_PROMPT = (
-    "The first reference image is the character identity reference. Preserve the same face, "
-    "hair, distinctive accessories, color palette and art style. Use a medium or closer shot "
-    "so these features stay recognizable. Do not invent a different person. "
-    "Keep the subject's apparent age and identity consistent with that reference and the bot persona."
+    "For an explicitly requested front-camera selfie only, use the first reference image as "
+    "the photographer's identity reference. Preserve the same face, hair and distinctive "
+    "accessories without inventing a different person. The current bot persona remains authoritative."
 )
 DEFAULT_SCENE_PROMPT = (
-    "Make one casual illustrated snapshot of the character naturally doing the stated current activity. "
-    "If a location reference sheet is provided, choose one physically plausible camera view of that "
-    "same place and preserve its recognizable layout and furnishings. Render ONE continuous scene, "
-    "never a triptych, collage, split panel or contact sheet. Natural light, candid composition, "
-    "no captions, text, logos, watermark or extra people."
+    "Produce an actual unillustrated handheld smartphone CAMERA PHOTO taken by the bot from its "
+    "own eye level while doing the current activity. Photograph what it is looking at and wants "
+    "to share: nearby food, a craft project, a room detail, plants or scenery. The photographer "
+    "stays BEHIND the camera and is never visible as a face, body, hand, reflection or shadow. "
+    "Use believable camera optics, physical textures, slight phone noise, modest framing "
+    "imperfections and natural light. A location reference sheet supplies spatial layout and "
+    "fixed landmarks ONLY; replace its drawn or anime textures with photographic materials. "
+    "Render ONE continuous photo, never an illustration, 3D render, staged portrait, triptych, "
+    "collage or contact sheet. No captions, text overlay, watermark or extra people."
+)
+SELFIE_PROMPT = (
+    "This is explicitly a FRONT-CAMERA SELFIE taken by the bot. Show the same person as the "
+    "character reference in a natural close phone photo, with some of the current location "
+    "visible behind them. Preserve their identity and do not add other people. Render one "
+    "photographic frame, not an illustration, collage or third-person portrait."
 )
 
 
@@ -94,7 +103,7 @@ class LifePhotoSettings(PluginConfigBase):
         "label": "API region", "hint": "Choose the region in which your Qwen Image API key is valid.", "choices": ["beijing", "singapore"]
     })
     model: str = Field(default="qwen-image-2.1-turbo", json_schema_extra={
-        "label": "Image model", "hint": "Qwen Image 2.1 Turbo accepts character and location references."
+        "label": "Image model", "hint": "Qwen Image 2.1 Turbo uses the DashScope image API. Ordinary photos send the location sheet only."
     })
     minimax_api_key: str = Field(default="", json_schema_extra={
         "label": "MiniMax API key", "hint": "A standard image-generation API key for the selected MiniMax region. Keep it in the installed plugin config.", "x-widget": "password"
@@ -103,7 +112,7 @@ class LifePhotoSettings(PluginConfigBase):
         "label": "MiniMax API region", "hint": "Use china for api.minimax.cn or global for api.minimax.io; the key must match the region.", "choices": ["china", "global"]
     })
     character_reference: str = Field(default="builtin:icon", json_schema_extra={
-        "label": "Character reference", "hint": "builtin:icon uses the plugin avatar. To replace it, put a PNG/JPEG/WebP file in plugin data/life-photo-references and enter its filename."
+        "label": "Selfie character reference", "hint": "Used only for front-camera selfies. builtin:icon uses the plugin avatar; replace it with a PNG/JPEG/WebP character sheet in plugin data/life-photo-references."
     })
     home_reference: str = Field(default="builtin:living_room_views", json_schema_extra={
         "label": "Living room reference", "hint": "Three views of one living room. Use builtin:home for the original single view, or a filename in plugin data/life-photo-references."
@@ -133,10 +142,10 @@ class LifePhotoSettings(PluginConfigBase):
         "label": "Wetland park reference", "hint": "Three views of one wetland park. Use builtin:park for the original single view, or a custom reference filename."
     })
     character_prompt: str = Field(default=DEFAULT_CHARACTER_PROMPT, max_length=1500, json_schema_extra={
-        "label": "Character consistency prompt", "hint": "Describe the bot's appearance generically or customize it for your own character. MaiBot's persona remains authoritative.", "x-widget": "textarea"
+        "label": "Selfie identity prompt", "hint": "Used only when selfie mode is selected. MaiBot's current persona remains authoritative.", "x-widget": "textarea"
     })
     scene_prompt: str = Field(default=DEFAULT_SCENE_PROMPT, max_length=1500, json_schema_extra={
-        "label": "Scene consistency prompt", "hint": "Image-only instructions. The activity comes from the current simulated-life scene.", "x-widget": "textarea"
+        "label": "First-person scene prompt", "hint": "Ordinary life photos are taken from the bot's point of view, with the bot out of frame.", "x-widget": "textarea"
     })
     cooldown_minutes: int = Field(default=120, ge=10, le=1440, json_schema_extra={
         "label": "Minimum minutes between images", "hint": "Global cooldown across all chat streams, counted from the moment an API request is accepted."
@@ -223,29 +232,41 @@ class LifePhotoModule:
             return "balcony"
         return "home"
 
-    def _prompt_and_refs(self, activity: str, detail: str) -> tuple[str, list[str]]:
+    def _prompt_and_refs(self, activity: str, detail: str, mode: str = "scene") -> tuple[str, list[str]]:
         settings = self.plugin.config.life_photo
-        refs = [self._reference_data(settings.character_reference)]
-        if not refs[0]:
-            raise ValueError("需先配置角色参考图")
+        if mode not in {"scene", "selfie"}:
+            raise ValueError("照片模式只能是 scene 或 selfie")
+        refs: list[str] = []
+        if mode == "selfie":
+            character_ref = self._reference_data(settings.character_reference)
+            if not character_ref:
+                raise ValueError("自拍需先配置角色参考图")
+            refs.append(character_ref)
         location = self._location(activity)
         choice = getattr(settings, REFERENCE_FIELDS[location])
         location_ref = self._reference_data(choice)
         if location_ref:
             refs.append(location_ref)
         anchor = SCENE_ANCHORS.get(location, "")
+        composition = (
+            f"{settings.character_prompt.strip()}\n{SELFIE_PROMPT}\n"
+            "Image 1 is the photographer's identity reference. Image 2, if present, shows the location. "
+            if mode == "selfie" else
+            f"{settings.scene_prompt.strip()}\n"
+            "The photographer is BEHIND the camera and must not appear anywhere in the frame. "
+            "Image 1, if present, is a location reference ONLY; it does not depict the photographer. "
+        )
         prompt = (
-            f"{settings.character_prompt.strip()}\n{settings.scene_prompt.strip()}\n"
+            f"{composition}"
             f"Current activity: {activity.strip()[:180]}\n"
             f"Optional moment detail: {detail.strip()[:160]}\n"
             f"Location continuity: {anchor}\n"
-            "Image 1 is the character reference. Image 2, if present, is only the location reference sheet; "
-            "its separate panels show camera angles of ONE place and must never appear as panels in the result. "
+            "Any location reference sheet shows camera angles of ONE place and must never appear as panels in the result. "
             "The current MaiBot persona takes priority; do not add facts or identity traits absent from it."
         )
-        return prompt, [ref for ref in refs if ref]
+        return prompt, refs
 
-    async def share(self, detail: str = "", activity: str = "", **kwargs: Any) -> dict[str, Any]:
+    async def share(self, detail: str = "", activity: str = "", mode: str = "scene", **kwargs: Any) -> dict[str, Any]:
         stream_id = str(kwargs.get("stream_id") or "").strip()
         if not stream_id or stream_id != str(kwargs.get("chat_id") or "").strip():
             return {"success": False, "error": "无法核验当前聊天流"}
@@ -272,6 +293,8 @@ class LifePhotoModule:
             activity = activity.strip()
         if not activity or len(activity) > 200 or len(detail) > 200:
             return {"success": False, "error": "活动或照片细节长度无效"}
+        if any(word in activity.casefold() for word in ("睡觉", "安稳睡", "熄灯睡", "asleep", "sleeping")):
+            return {"success": False, "error": "当前活动是睡觉，不能在睡着时拍生活照片"}
         now = datetime.now(UTC)
         local_day = now.astimezone(ZoneInfo(self.plugin.config.plugin.timezone)).date().isoformat()
         async with self.plugin._lock:
@@ -283,23 +306,23 @@ class LifePhotoModule:
             if wait > 0:
                 return {"success": False, "error": f"生活照片还在冷却，约 {int(wait // 60) + 1} 分钟后可再次生成"}
             try:
-                prompt, refs = self._prompt_and_refs(activity, detail)
+                prompt, refs = self._prompt_and_refs(activity, detail, mode)
             except (ValueError, OSError, UnidentifiedImageError) as exc:
                 return {"success": False, "error": str(exc)}
             if settings.provider == "minimax" and len(prompt) > 1500:
                 return {"success": False, "error": "MiniMax 提示词最多 1500 字符，请缩短角色或场景提示词"}
             self.usage = {"day": local_day, "count": count + 1, "last_attempt_at": now.timestamp(), "status": "queued", "stream_id": stream_id}
             self.plugin._save_state()
-        job = asyncio.create_task(self._produce(stream_id, prompt, refs), name="secretary-life-photo")
+        job = asyncio.create_task(self._produce(stream_id, prompt, refs, mode), name="secretary-life-photo")
         self._jobs.add(job)
         job.add_done_callback(self._jobs.discard)
         return {"success": True, "content": "已开始生成这张生活照片。图片发送是异步的，请先不要说已经发出；生成成功后会发到当前聊天流。"}
 
-    async def _produce(self, stream_id: str, prompt: str, refs: list[str]) -> None:
+    async def _produce(self, stream_id: str, prompt: str, refs: list[str], mode: str) -> None:
         try:
             settings = self.plugin.config.life_photo
             async with httpx.AsyncClient(timeout=httpx.Timeout(240.0), follow_redirects=False) as client:
-                raw = await self._request_image(client, prompt, refs, settings)
+                raw = await self._request_image(client, prompt, refs, settings, mode)
             with Image.open(io.BytesIO(raw)) as image:
                 if image.width * image.height > 12_000_000:
                     raise ValueError("生成图片尺寸过大")
@@ -321,15 +344,18 @@ class LifePhotoModule:
         finally:
             self.plugin._save_state()
 
-    async def _request_image(self, client: httpx.AsyncClient, prompt: str, refs: list[str], settings: LifePhotoSettings) -> bytes:
+    async def _request_image(self, client: httpx.AsyncClient, prompt: str, refs: list[str], settings: LifePhotoSettings, mode: str = "scene") -> bytes:
         if settings.provider == "minimax":
+            payload: dict[str, Any] = {
+                "model": "image-01", "prompt": prompt, "aspect_ratio": "2:3",
+                "response_format": "base64", "n": 1, "prompt_optimizer": False,
+            }
+            if mode == "selfie":
+                payload["subject_reference"] = [{"type": "character", "image_file": refs[0]}]
             response = await client.post(
                 MINIMAX_ENDPOINTS[settings.minimax_region],
                 headers={"Authorization": f"Bearer {settings.minimax_api_key.strip()}"},
-                json={
-                    "model": "image-01", "prompt": prompt, "subject_reference": [{"type": "character", "image_file": refs[0]}],
-                    "aspect_ratio": "2:3", "response_format": "base64", "n": 1, "prompt_optimizer": False,
-                },
+                json=payload,
             )
             response.raise_for_status()
             result = response.json()
@@ -343,14 +369,29 @@ class LifePhotoModule:
             if len(raw) > 12_000_000:
                 raise ValueError("生成图片过大")
             return raw
+        content = [{"image": ref} for ref in refs]
+        content.append({"text": prompt})
         response = await client.post(
             ENDPOINTS[settings.region],
             headers={"Authorization": f"Bearer {settings.api_key.strip()}"},
-            json={"model": settings.model, "prompt": prompt, "image": refs, "n": 1, "size": "1024x1536"},
+            json={
+                "model": settings.model,
+                "input": {"messages": [{"role": "user", "content": content}]},
+                "parameters": {"n": 1, "size": "1024*1536", "prompt_extend": False},
+            },
         )
-        response.raise_for_status()
+        if response.is_error:
+            try:
+                error = response.json()
+            except ValueError:
+                response.raise_for_status()
+            raise ValueError(f"千问生图失败：{str(error.get('code') or response.status_code)[:50]} "
+                             f"{str(error.get('message') or '')[:180]}")
         result = response.json()
-        image_url = str((result.get("data") or [{}])[0].get("url") or "")
+        choices = (result.get("output") or {}).get("choices") or []
+        image_content = ((choices[0].get("message") or {}).get("content") or []) if choices else []
+        image_url = next((item.get("image") for item in image_content if isinstance(item, dict) and item.get("image")), "")
+        image_url = str(image_url)
         parsed = urlparse(image_url)
         host = (parsed.hostname or "").lower()
         if parsed.scheme != "https" or not host.endswith((".aliyuncs.com", ".alicdn.com")) or parsed.username or parsed.password:

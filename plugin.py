@@ -40,6 +40,7 @@ from .mood import MoodModule, MoodSettings
 from .poke_interaction import PokeInteractionModule
 from .proactive_chat import ProactiveChatModule
 from .prompts import CONTROL_ROUTING_PROMPT
+from .qzone import QZoneModule, QZoneSettings
 from .relationship_management import RelationshipManagementModule
 from .role_recognition import RoleRecognitionModule
 from .scheduled_tasks import ScheduledTasksModule
@@ -804,6 +805,7 @@ class SecretaryConfig(PluginConfigBase):
     proactive: ProactiveSettings = Field(default_factory=ProactiveSettings)
     virtual_life: VirtualLifeSettings = Field(default_factory=VirtualLifeSettings)
     life_photo: LifePhotoSettings = Field(default_factory=LifePhotoSettings)
+    qzone: QZoneSettings = Field(default_factory=QZoneSettings)
     mood: MoodSettings = Field(default_factory=MoodSettings)
     anti_bullying: AntiBullyingSettings = Field(default_factory=AntiBullyingSettings)
     knowledge_base: KnowledgeBaseSettings = Field(default_factory=KnowledgeBaseSettings)
@@ -850,6 +852,7 @@ class MaiSecretaryPlugin(MaiBotPlugin):
         self.voice_synthesis = VoiceSynthesisModule(self)
         self.virtual_life = VirtualLifeModule(self)
         self.life_photo = LifePhotoModule(self)
+        self.qzone = QZoneModule(self)
         self.mood = MoodModule(self)
         self.proactive = ProactiveChatModule(self)
         self.anti_bullying = AntiBullyingModule(self)
@@ -872,6 +875,7 @@ class MaiSecretaryPlugin(MaiBotPlugin):
         self._register_module(self.voice_synthesis)
         self._register_module(self.virtual_life)
         self._register_module(self.life_photo)
+        self._register_module(self.qzone)
         self._register_module(self.mood)
         self._register_module(self.proactive)
         self._register_module(self.anti_bullying)
@@ -916,6 +920,7 @@ class MaiSecretaryPlugin(MaiBotPlugin):
         await self.poke.stop()
         await self.daily_report.stop()
         await self.life_photo.stop()
+        await self.qzone.stop()
         await self.anti_bullying.stop()
         await self.mood.stop()
         await self.group_moderation.stop()
@@ -1543,20 +1548,41 @@ class MaiSecretaryPlugin(MaiBotPlugin):
     @Tool(
         "secretary_share_life_photo",
         description=(
-            "当你正自然分享自己此刻在做的事，并觉得发一张照片会让当前对话更生动时，可选择调用。"
+            "当你正自然分享自己此刻在做的事，并觉得发一张手机随拍会让当前对话更生动时，可选择调用。"
             "只有模拟生活当前活动或本轮主动发言场景可用；不需要每次主动发言都拍照。"
-            "插件用已配置的角色和场景参考图生成一张图，受全局冷却与每日张数限制。"
+            "默认 mode=scene：从你本人拿着手机的第一人称视角，拍眼前的食物、手工或风景；你本人不能入镜。"
+            "只有明确想发自拍时才用 mode=selfie，使用角色参考图。受全局冷却与每日张数限制。"
             "成功返回只表示开始生成，图片稍后发到当前聊天；不要提前声称已经发出。"
             "不为无关话题、用户未要求的真实世界照片或他人肖像调用。"
         ),
         parameters=[
-            ToolParameterInfo(name="detail", param_type=ToolParamType.STRING, description="可选：此刻画面里的简短动作或物品细节，不添加与当前活动冲突的事", required=False),
+            ToolParameterInfo(name="detail", param_type=ToolParamType.STRING, description="可选：眼前拍到的物品或景色细节，不描述自己在画面中的动作", required=False),
             ToolParameterInfo(name="activity", param_type=ToolParamType.STRING, description="仅在模拟生活关闭而本轮主动发言已决定活动时填写", required=False),
+            ToolParameterInfo(name="mode", param_type=ToolParamType.STRING, description="scene 第一人称拍眼前事物（默认）；selfie 前置镜头自拍", required=False),
         ],
         visibility="visible",
     )
-    async def secretary_share_life_photo(self, detail: str = "", activity: str = "", **kwargs: Any) -> dict[str, Any]:
-        return await self.life_photo.share(detail, activity, **kwargs)
+    async def secretary_share_life_photo(self, detail: str = "", activity: str = "", mode: str = "scene", **kwargs: Any) -> dict[str, Any]:
+        return await self.life_photo.share(detail, activity, mode, **kwargs)
+
+    @Tool(
+        "secretary_qzone_post",
+        description=(
+            "仅在已核验管理员明确要求发 QQ 空间时调用。action=publish 开始发布，action=status 查看最近结果；"
+            "source=life 写当前模拟生活，source=daily 提取管理员白名单聊天流的当日精华。"
+            "可选 topic 提供话题，可选 include_image 使用生活照片模块配第一人称随拍。"
+            "返回开始准备不代表已经发出；发布结果会稍后回传，不要提前声称成功。"
+        ),
+        parameters=[
+            ToolParameterInfo(name="action", param_type=ToolParamType.STRING, description="publish 或 status", required=True),
+            ToolParameterInfo(name="source", param_type=ToolParamType.STRING, description="life 模拟生活；daily 当日精华，默认 life", required=False),
+            ToolParameterInfo(name="topic", param_type=ToolParamType.STRING, description="可选话题建议", required=False),
+            ToolParameterInfo(name="include_image", param_type=ToolParamType.BOOLEAN, description="是否使用生图模块配图", required=False),
+        ],
+        visibility="visible",
+    )
+    async def secretary_qzone_post(self, action: str, source: str = "life", topic: str = "", include_image: bool = False, **kwargs: Any) -> dict[str, Any]:
+        return await self.qzone.tool(action, source, topic, include_image, **kwargs)
 
     @Tool(
         "secretary_search_knowledge",

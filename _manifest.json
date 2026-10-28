@@ -2,7 +2,7 @@
   "manifest_version": 2,
   "id": "worldcopyist.mai-secretary",
   "name": "Mai Secretary",
-  "version": "0.35.0",
+  "version": "0.37.0",
   "description": "Modular proactive chat, shared simulated life and mood, scheduled tasks, experimental class reminders, daily reports, relationship management, anti-bullying, knowledge retrieval, web tools, and QQ group management.",
   "display": {
     "icon": {
