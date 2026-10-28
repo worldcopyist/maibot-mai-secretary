@@ -1569,19 +1569,19 @@ class MaiSecretaryPlugin(MaiBotPlugin):
         "secretary_qzone_post",
         description=(
             "仅在已核验管理员明确要求发 QQ 空间时调用。action=publish 开始发布，action=status 查看最近结果；"
-            "source=life 写当前模拟生活，source=daily 提取管理员白名单聊天流的当日精华。"
+            "source=auto 按配置概率选择来源，source=life 写当天模拟生活，source=daily 提取管理员白名单聊天流的当日精华。"
             "可选 topic 提供话题，可选 include_image 使用生活照片模块配第一人称随拍。"
             "返回开始准备不代表已经发出；发布结果会稍后回传，不要提前声称成功。"
         ),
         parameters=[
             ToolParameterInfo(name="action", param_type=ToolParamType.STRING, description="publish 或 status", required=True),
-            ToolParameterInfo(name="source", param_type=ToolParamType.STRING, description="life 模拟生活；daily 当日精华，默认 life", required=False),
+            ToolParameterInfo(name="source", param_type=ToolParamType.STRING, description="auto 按概率；life 模拟生活；daily 当日精华，默认 auto", required=False),
             ToolParameterInfo(name="topic", param_type=ToolParamType.STRING, description="可选话题建议", required=False),
             ToolParameterInfo(name="include_image", param_type=ToolParamType.BOOLEAN, description="是否使用生图模块配图", required=False),
         ],
         visibility="visible",
     )
-    async def secretary_qzone_post(self, action: str, source: str = "life", topic: str = "", include_image: bool | None = None, **kwargs: Any) -> dict[str, Any]:
+    async def secretary_qzone_post(self, action: str, source: str = "auto", topic: str = "", include_image: bool | None = None, **kwargs: Any) -> dict[str, Any]:
         return await self.qzone.tool(action, source, topic, include_image, **kwargs)
 
     @Tool(

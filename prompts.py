@@ -46,7 +46,7 @@ TOOL_ROUTING_PROMPT = (
     "且照片确实适合分享时才可自主选择调用。默认 mode=scene 是麦麦拿手机拍眼前事物的第一人称照片，麦麦本人不入镜；"
     "只有明确要发自拍时用 mode=selfie。模拟生活开启时活动由插件确定；"
     "生成有费用和次数限制，工具返回开始生成不代表已发送，不要提前声称图片已发出；"
-    "`secretary_qzone_post` 接收 action=publish/status、source=life/daily、可选 topic/include_image；"
+    "`secretary_qzone_post` 接收 action=publish/status、source=auto/life/daily、可选 topic/include_image；未指定内容或配图时省略对应参数，按设置概率选择；"
     "仅在管理员明确要求发 QQ 空间时发布，自动发布由插件配置控制。life 写当前模拟生活，daily 只读管理员白名单聊天流的当日精华；"
     "include_image 使用生活照片模块的第一人称随拍。返回开始准备不代表已经发布，等待后台结果；"
     "普通语音 mode=speech 使用语音模块中配置的 MiMo VoiceDesign 音色，唱歌 mode=sing 使用预置音色；"

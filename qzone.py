@@ -131,7 +131,7 @@ class QZoneModule:
             raise ValueError("只有管理员能发布 QQ 空间")
         return stream_id, account
 
-    async def tool(self, action: str, source: str = "life", topic: str = "", include_image: bool | None = None, **kwargs: Any) -> dict[str, Any]:
+    async def tool(self, action: str, source: str = "auto", topic: str = "", include_image: bool | None = None, **kwargs: Any) -> dict[str, Any]:
         try:
             stream_id, _account = await self._verified_admin(kwargs)
             if action == "status":
@@ -140,6 +140,9 @@ class QZoneModule:
                 raise ValueError("QQ 空间操作只能是 publish 或 status")
             if not self.plugin.config.plugin.enabled or not self.plugin.config.qzone.enabled:
                 raise ValueError("QQ 空间模块尚未启用")
+            if source == "auto":
+                settings = self.plugin.config.qzone
+                source = "life" if random.random() * 100 < settings.life_probability or not settings.allowed_streams else "daily"
             if include_image is None:
                 settings = self.plugin.config.qzone
                 include_image = settings.include_image and random.random() * 100 < settings.image_probability
