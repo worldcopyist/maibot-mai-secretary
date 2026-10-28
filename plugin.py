@@ -1551,7 +1551,7 @@ class MaiSecretaryPlugin(MaiBotPlugin):
             "当你正自然分享自己此刻在做的事，并觉得发一张手机随拍会让当前对话更生动时，可选择调用。"
             "只有模拟生活当前活动或本轮主动发言场景可用；不需要每次主动发言都拍照。"
             "默认 mode=scene：从你本人拿着手机的第一人称视角，拍眼前的食物、手工或风景；你本人不能入镜。"
-            "只有明确想发自拍时才用 mode=selfie，使用角色参考图。管理员明确要求忽略冷却时可传 ignore_cooldown=true，插件会核验身份；每日上限仍有效。"
+            "只有明确想发自拍时才用 mode=selfie，使用角色参考图。用户明确要求拍照或自拍时传 ignore_cooldown=true，插件核验管理员后可跳过冷却及每日次数限制；自主拍照不可使用此参数。"
             "成功返回只表示开始生成，图片稍后发到当前聊天；不要提前声称已经发出。"
             "不为无关话题、用户未要求的真实世界照片或他人肖像调用。"
         ),
@@ -1559,7 +1559,7 @@ class MaiSecretaryPlugin(MaiBotPlugin):
             ToolParameterInfo(name="detail", param_type=ToolParamType.STRING, description="可选：眼前拍到的物品或景色细节，不描述自己在画面中的动作", required=False),
             ToolParameterInfo(name="activity", param_type=ToolParamType.STRING, description="仅在模拟生活关闭而本轮主动发言已决定活动时填写", required=False),
             ToolParameterInfo(name="mode", param_type=ToolParamType.STRING, description="scene 第一人称拍眼前事物（默认）；selfie 前置镜头自拍", required=False),
-            ToolParameterInfo(name="ignore_cooldown", param_type=ToolParamType.BOOLEAN, description="仅管理员明确要求无视冷却时为 true；每日上限仍有效", required=False),
+            ToolParameterInfo(name="ignore_cooldown", param_type=ToolParamType.BOOLEAN, description="当前用户明确要求拍照时为 true；仅管理员身份核验通过时跳过冷却和次数限制", required=False),
         ],
         visibility="visible",
     )

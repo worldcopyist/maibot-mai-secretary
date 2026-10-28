@@ -15,7 +15,7 @@ from test_secretary import make_plugin
 
 
 @pytest.mark.asyncio
-async def test_cooldown_override_requires_verified_admin_and_retains_daily_cap(tmp_path):
+async def test_admin_request_overrides_cooldown_and_daily_cap(tmp_path):
     plugin, _ = make_plugin(tmp_path, {"virtual_life": {"enabled": True}, "life_photo": {"enabled": True, "api_key": "test-only", "cooldown_minutes": 120, "max_images_per_day": 3}})
     plugin.virtual_life.scene_at = lambda _now: {"activity": "在家玩游戏"}
     plugin._ctx.chat.streams = [{"stream_id": "chat", "platform": "qq", "chat_type": "private", "user_id": "123"}]
@@ -32,7 +32,11 @@ async def test_cooldown_override_requires_verified_admin_and_retains_daily_cap(t
     await asyncio.gather(*plugin.life_photo._jobs)
     assert plugin.life_photo.usage["count"] == 2
     plugin.life_photo.usage["count"] = 3
-    assert not (await plugin.life_photo.share(ignore_cooldown=True, **common))["success"]
+    assert not (await plugin.life_photo.share(**common))["success"]
+    assert not (await plugin.life_photo.share(ignore_cooldown=True, **dict(common, user_id="other")))["success"]
+    assert (await plugin.life_photo.share(ignore_cooldown=True, **common))["success"]
+    await asyncio.gather(*plugin.life_photo._jobs)
+    assert plugin.life_photo.usage["count"] == 4
 
 
 @pytest.mark.asyncio

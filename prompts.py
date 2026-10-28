@@ -44,7 +44,7 @@ TOOL_ROUTING_PROMPT = (
     "`secretary_speak` 接收 text 和可选 mode，只在用户明确要求语音、朗读或唱歌时调用；"
     "`secretary_share_life_photo` 接收可选 detail、activity、mode；只有当前聊天自然谈到麦麦正在做的事、"
     "且照片确实适合分享时才可自主选择调用。默认 mode=scene 是麦麦拿手机拍眼前事物的第一人称照片，麦麦本人不入镜；"
-    "只有明确要发自拍时用 mode=selfie。管理员明确要求忽略照片冷却时使用 ignore_cooldown=true，身份由插件核验，每日上限仍有效；"
+    "只有明确要发自拍时用 mode=selfie。用户明确要求拍照或自拍时使用 ignore_cooldown=true，插件核验管理员后跳过冷却及每日次数限制；自主拍照不得使用此参数；"
     "模拟生活开启时活动由插件确定；"
     "生成有费用和次数限制，工具返回开始生成不代表已发送，不要提前声称图片已发出；"
     "`secretary_qzone_post` 接收 action=publish/status、source=auto/life/daily、可选 topic/include_image；未指定内容或配图时省略对应参数，按设置概率选择；"

@@ -331,9 +331,7 @@ class LifePhotoModule:
             count = int(self.usage.get("count", 0)) if self.usage.get("day") == local_day else 0
             last = float(self.usage.get("last_attempt_at", 0))
             wait = settings.cooldown_minutes * 60 - (now.timestamp() - last)
-            if count >= settings.max_images_per_day:
-                return {"success": False, "error": "今天的生活照片张数已达上限"}
-            if wait > 0:
+            if count >= settings.max_images_per_day or wait > 0:
                 override = False
                 if ignore_cooldown:
                     try:
@@ -341,6 +339,8 @@ class LifePhotoModule:
                     except Exception:
                         LOG.warning("无法核验照片冷却豁免请求者", exc_info=True)
                 if not override:
+                    if count >= settings.max_images_per_day:
+                        return {"success": False, "error": "今天的生活照片张数已达上限；管理员要求拍照时可跳过限制"}
                     return {"success": False, "error": f"生活照片还在冷却，约 {int(wait // 60) + 1} 分钟后可再次生成；管理员可明确要求忽略冷却"}
             try:
                 prompt, refs = self._prompt_and_refs(activity, detail, mode)
