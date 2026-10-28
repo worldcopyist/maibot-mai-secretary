@@ -107,6 +107,7 @@ def test_selfie_is_explicit_and_uses_character_plus_location(tmp_path):
     assert len(scene_refs) == 1 and len(selfie_refs) == 2
     assert scene_refs[0] == selfie_refs[1]
     assert "FRONT-CAMERA SELFIE" in selfie_prompt
+    assert "visual style from the character reference" in selfie_prompt
     assert "photographer stays BEHIND" not in selfie_prompt
     assert "FRONT-CAMERA SELFIE" not in scene_prompt
     with pytest.raises(ValueError, match="scene 或 selfie"):

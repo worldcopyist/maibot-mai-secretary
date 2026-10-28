@@ -82,8 +82,10 @@ DEFAULT_SCENE_PROMPT = (
 SELFIE_PROMPT = (
     "This is explicitly a FRONT-CAMERA SELFIE taken by the bot. Show the same person as the "
     "character reference in a natural close phone photo, with some of the current location "
-    "visible behind them. Preserve their identity and do not add other people. Render one "
-    "photographic frame, not an illustration, collage or third-person portrait."
+    "visible behind them. Preserve the character's face, hair, ears, distinctive accessories "
+    "and visual style from the character reference; keep the location layout from the second "
+    "reference. Show one coherent front-camera selfie, not a three-view sheet, collage, "
+    "third-person portrait or additional people."
 )
 
 
