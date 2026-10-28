@@ -81,11 +81,19 @@ DEFAULT_SCENE_PROMPT = (
 )
 SELFIE_PROMPT = (
     "This is explicitly a FRONT-CAMERA SELFIE taken by the bot. Show the same person as the "
-    "character reference in a natural close phone photo, with some of the current location "
-    "visible behind them. Preserve the character's face, hair, ears, distinctive accessories "
-    "and visual style from the character reference; keep the location layout from the second "
-    "reference. Show one coherent front-camera selfie, not a three-view sheet, collage, "
-    "third-person portrait or additional people."
+    "character reference in a natural close phone photo. Frame from the head and shoulders "
+    "down to at most the waist; do not show hips, legs, feet or a full body. The phone and "
+    "camera-holding arm stay outside the frame; no arm reaches towards the lens, no long arm, "
+    "giant hand, wide-angle distortion or stretched anatomy. Use natural eye-level perspective. "
+    "Keep the recognizable location visible behind the subject and preserve its layout from "
+    "the second reference. Render subject and environment as a single coherent scene with "
+    "matching visual style, light direction, color temperature, exposure and shadows. Let "
+    "ambient light, bounce light and soft contact shadows fall naturally on the face, hair "
+    "and clothing; match edge softness, depth of field and grain to the background. "
+    "Preserve the character's face, hair, ears and distinctive accessories, and adapt the "
+    "background to the character's illustration style so neither looks pasted on. "
+    "Show one coherent front-camera selfie, not a three-view sheet, collage, third-person "
+    "portrait or additional people."
 )
 
 
