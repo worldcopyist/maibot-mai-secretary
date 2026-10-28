@@ -33,6 +33,26 @@ BUILTIN_REFERENCES = {
     "fried_chicken_restaurant_views": ASSETS / "life_photo_scenes/fried_chicken_restaurant_views.png",
     "wetland_park_views": ASSETS / "life_photo_scenes/wetland_park_views.png",
 }
+LIGHTING_PERIODS = {
+    "predawn": "night", "morning": "morning", "late_morning": "day",
+    "noon": "day", "afternoon": "day", "dusk": "dusk",
+    "night": "night", "late_night": "night",
+}
+LIGHTING_DESCRIPTIONS = {
+    "morning": "early morning light and sky",
+    "day": "bright daytime light and sky",
+    "dusk": "evening twilight and fading sunset light",
+    "night": "nighttime darkness outside with appropriate artificial lighting",
+}
+TIMED_SCENE_NAMES = frozenset({
+    "living_room_views", "kitchen_dining_views", "bedroom_views", "hobby_desk_views",
+    "balcony_views", "bathroom_views", "neighborhood_views", "fried_chicken_restaurant_views",
+    "wetland_park_views",
+})
+BUILTIN_REFERENCES.update({
+    f"{scene}_{period}": ASSETS / "life_photo_scenes" / "lighting" / f"{scene}_{period}.png"
+    for scene in TIMED_SCENE_NAMES for period in LIGHTING_DESCRIPTIONS
+})
 ENDPOINTS = {
     "beijing": "https://dashscope.aliyuncs.com/api/v1/services/aigc/multimodal-generation/generation",
     "singapore": "https://dashscope-intl.aliyuncs.com/api/v1/services/aigc/multimodal-generation/generation",
@@ -69,15 +89,10 @@ DEFAULT_CHARACTER_PROMPT = (
     "accessories without inventing a different person. The current bot persona remains authoritative."
 )
 DEFAULT_SCENE_PROMPT = (
-    "Produce an actual unillustrated handheld smartphone CAMERA PHOTO taken by the bot from its "
-    "own eye level while doing the current activity. Photograph what it is looking at and wants "
-    "to share: nearby food, a craft project, a room detail, plants or scenery. The photographer "
-    "stays BEHIND the camera and is never visible as a face, body, hand, reflection or shadow. "
-    "Use believable camera optics, physical textures, slight phone noise, modest framing "
-    "imperfections and natural light. A location reference sheet supplies spatial layout and "
-    "fixed landmarks ONLY; replace its drawn or anime textures with photographic materials. "
-    "Render ONE continuous photo, never an illustration, 3D render, staged portrait, triptych, "
-    "collage or contact sheet. No captions, text overlay, watermark or extra people."
+    "Create one realistic handheld smartphone photo at eye level of what the bot sees during "
+    "its activity. The photographer stays BEHIND the camera: no face, body, hand or reflection. "
+    "Use natural light, believable optics and photographic textures. Location references define "
+    "layout only, not illustration style. No collage, panels, caption, watermark or extra people."
 )
 SELFIE_PROMPT = (
     "This is explicitly a FRONT-CAMERA SELFIE taken by the bot. Show the same person as the "
@@ -242,7 +257,7 @@ class LifePhotoModule:
             return "balcony"
         return "home"
 
-    def _prompt_and_refs(self, activity: str, detail: str, mode: str = "scene") -> tuple[str, list[str]]:
+    def _prompt_and_refs(self, activity: str, detail: str, mode: str = "scene", *, now: datetime | None = None) -> tuple[str, list[str]]:
         settings = self.plugin.config.life_photo
         if mode not in {"scene", "selfie"}:
             raise ValueError("照片模式只能是 scene 或 selfie")
@@ -254,6 +269,12 @@ class LifePhotoModule:
             refs.append(character_ref)
         location = self._location(activity)
         choice = getattr(settings, REFERENCE_FIELDS[location])
+        local_time = (now or datetime.now(UTC)).astimezone(ZoneInfo(self.plugin.config.plugin.timezone))
+        period_key, period_label = self.plugin.config.virtual_life.period_at(local_time)
+        lighting = LIGHTING_PERIODS[period_key]
+        builtin = choice.removeprefix("builtin:") if choice.startswith("builtin:") else ""
+        if builtin in TIMED_SCENE_NAMES:
+            choice = f"builtin:{builtin}_{lighting}"
         location_ref = self._reference_data(choice)
         if location_ref:
             refs.append(location_ref)
@@ -269,6 +290,8 @@ class LifePhotoModule:
         prompt = (
             f"{composition}"
             f"Current activity: {activity.strip()[:180]}\n"
+            f"Current local time: {local_time.strftime('%H:%M')} ({period_label}); lighting: {LIGHTING_DESCRIPTIONS[lighting]}. "
+            "Use this time of day for the scene, sky, illumination and shadows.\n"
             f"Optional moment detail: {detail.strip()[:160]}\n"
             f"Location continuity: {anchor}\n"
             "Any location reference sheet shows camera angles of ONE place and must never appear as panels in the result. "
@@ -351,7 +374,7 @@ class LifePhotoModule:
                         return {"success": False, "error": "今天的生活照片张数已达上限；管理员要求拍照时可跳过限制"}
                     return {"success": False, "error": f"生活照片还在冷却，约 {int(wait // 60) + 1} 分钟后可再次生成；管理员可明确要求忽略冷却"}
             try:
-                prompt, refs = self._prompt_and_refs(activity, detail, mode)
+                prompt, refs = self._prompt_and_refs(activity, detail, mode, now=now)
             except (ValueError, OSError, UnidentifiedImageError) as exc:
                 return {"success": False, "error": str(exc)}
             if settings.provider == "minimax" and len(prompt) > 1500:

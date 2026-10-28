@@ -24,6 +24,14 @@ The original files remain available as `builtin:home` and `builtin:park`. The ni
 
 原图仍可通过 `builtin:home` 和 `builtin:park` 使用。九张图分别通过 `builtin:文件名去掉.png` 选择，也可以在插件配置里为每个地点填写自制参考图文件名。自制图放在插件数据目录的 `life-photo-references/`，每张不超过 8 MB。
 
+## Time-of-day lighting / 按时段选择光照
+
+The nine built-in three-view sheets each have four lighting variants under `lighting/`. The current plugin timezone and the simulated-life time slots select the image at request time: 07:00–08:59 morning; 09:00–17:29 day; 17:30–19:29 dusk; 19:30–06:59 night. These map all eight simulated-life periods to four visual lighting groups. The prompt also includes the actual local time. Normal photos, selfies and QQ Space photos use the same selection. Explicit custom images and legacy `builtin:home` / `builtin:park` retain their chosen file; the time is still included in the prompt. Qwen receives the selected scene image. MiniMax's current integration accepts a character reference for selfies but no scene image, so location and time are conveyed in text only. The default sleep activity still prevents photo generation.
+
+九个内置场景在 `lighting/` 中各有早晨、白天、傍晚和夜间四个光照版本。按插件时区：07:00–08:59 早晨；09:00–17:29 白天；17:30–19:29 傍晚；19:30–次日 06:59 夜间，覆盖模拟生活的八个时间段。请求同时带实际本地时间。随拍、自拍和 QQ 空间配图使用同一套选择；自定义参考图及旧别名 `builtin:home` / `builtin:park` 保持用户指定文件，提示词仍会带时间。千问接收所选场景图；MiniMax 当前接口只在自拍时接收角色图，场景和时间通过文字描述。默认睡眠活动仍禁止拍照。
+
+The 36 variants were generated using the image generation tool with each original scene sheet as the input: “change only the lighting and sky for the selected time, preserve all three views and the room's geometry and objects.” The model may still shift small details; they are visual references, not exact 3D models.
+
 ## Generation prompt pattern / 生成提示词格式
 
 The sheets were generated from the original living-room or park image with this pattern, then visually checked. This is a reusable prompt for a new location sheet:

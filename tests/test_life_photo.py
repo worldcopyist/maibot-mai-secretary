@@ -155,6 +155,32 @@ def test_selfie_is_explicit_and_uses_character_plus_location(tmp_path):
         plugin.life_photo._prompt_and_refs("在桌边拼乐高", "", "portrait")
 
 
+@pytest.mark.parametrize(("clock", "lighting"), [
+    ((0, 0), "night"), ((6, 59), "night"), ((7, 0), "morning"),
+    ((8, 59), "morning"), ((9, 0), "day"), ((11, 30), "day"),
+    ((13, 30), "day"), ((17, 29), "day"), ((17, 30), "dusk"),
+    ((19, 29), "dusk"), ((19, 30), "night"), ((22, 30), "night"),
+])
+def test_photo_uses_lighting_for_local_simulated_life_period(tmp_path, clock, lighting):
+    plugin, _ = make_plugin(tmp_path, {"plugin": {"timezone": "Asia/Shanghai"}})
+    now = datetime(2026, 10, 28, *clock, tzinfo=ZoneInfo("Asia/Shanghai"))
+    prompt, refs = plugin.life_photo._prompt_and_refs("窝在沙发上看动漫", "", now=now)
+    expected = plugin.life_photo._reference_data(f"builtin:living_room_views_{lighting}")
+    assert refs == [expected]
+    assert now.strftime("%H:%M") in prompt
+
+
+def test_custom_scene_reference_is_not_replaced_by_builtin_lighting(tmp_path):
+    plugin, _ = make_plugin(tmp_path, {"life_photo": {"home_reference": "custom.png"}})
+    refs_dir = tmp_path / "life-photo-references"
+    refs_dir.mkdir()
+    Image.new("RGB", (8, 8), "blue").save(refs_dir / "custom.png")
+    now = datetime(2026, 10, 28, 22, 30, tzinfo=ZoneInfo("Asia/Shanghai"))
+    prompt, refs = plugin.life_photo._prompt_and_refs("窝在沙发上看动漫", "", "selfie", now=now)
+    assert refs[1] == plugin.life_photo._reference_data("custom.png")
+    assert "nighttime darkness" in prompt
+
+
 @pytest.mark.asyncio
 async def test_sleeping_scene_cannot_create_an_impossible_photo(tmp_path):
     plugin, _ = make_plugin(tmp_path, {

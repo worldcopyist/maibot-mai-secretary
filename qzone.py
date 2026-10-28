@@ -251,7 +251,7 @@ class QZoneModule:
             count = int(usage.get("count", 0)) if usage.get("day") == local_day else 0
             if count >= settings.max_images_per_day or now.timestamp() - float(usage.get("last_attempt_at", 0)) < settings.cooldown_minutes * 60:
                 raise ValueError("生活照片仍在冷却或已达到今日张数上限")
-            prompt, refs = self.plugin.life_photo._prompt_and_refs(activity, "QQ 空间生活随拍", "scene")
+            prompt, refs = self.plugin.life_photo._prompt_and_refs(activity, "QQ 空间生活随拍", "scene", now=now)
             self.plugin.life_photo.usage = {"day": local_day, "count": count + 1, "last_attempt_at": now.timestamp(), "status": "qzone_attempt"}
             self.plugin._save_state()
         async with httpx.AsyncClient(timeout=httpx.Timeout(240.0), follow_redirects=False) as client:
