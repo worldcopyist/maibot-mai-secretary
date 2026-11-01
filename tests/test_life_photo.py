@@ -145,14 +145,23 @@ def test_selfie_is_explicit_and_uses_character_plus_location(tmp_path):
     selfie_prompt, selfie_refs = plugin.life_photo._prompt_and_refs("在桌边拼乐高", "拼到一半的小房子", "selfie")
     assert len(scene_refs) == 1 and len(selfie_refs) == 2
     assert scene_refs[0] == selfie_refs[1]
-    assert "FRONT-CAMERA SELFIE" in selfie_prompt
+    assert "SELF-CAPTURED PHOTO" in selfie_prompt
     assert "at most the waist" in selfie_prompt
-    assert "camera-holding arm stay outside the frame" in selfie_prompt
+    assert "do not require the character to hold or reach for a phone" in selfie_prompt
+    assert "according to the actual current activity and location" in selfie_prompt
     assert "matching visual style, light direction" in selfie_prompt
     assert "photographer stays BEHIND" not in selfie_prompt
-    assert "FRONT-CAMERA SELFIE" not in scene_prompt
+    assert "SELF-CAPTURED PHOTO" not in scene_prompt
     with pytest.raises(ValueError, match="scene 或 selfie"):
         plugin.life_photo._prompt_and_refs("在桌边拼乐高", "", "portrait")
+
+
+def test_minimax_selfie_prompt_fits_provider_limit(tmp_path):
+    plugin, _ = make_plugin(tmp_path, {"life_photo": {"provider": "minimax"}})
+    prompt, _ = plugin.life_photo._prompt_and_refs("在桌边拼乐高", "", "selfie")
+    assert len(prompt) <= 1500
+    assert "no need to hold a phone" in prompt
+    assert "current activity and location" in prompt
 
 
 @pytest.mark.parametrize(("clock", "lighting"), [

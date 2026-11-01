@@ -95,11 +95,15 @@ DEFAULT_SCENE_PROMPT = (
     "layout only, not illustration style. No collage, panels, caption, watermark or extra people."
 )
 SELFIE_PROMPT = (
-    "This is explicitly a FRONT-CAMERA SELFIE taken by the bot. Show the same person as the "
-    "character reference in a natural close phone photo. Frame from the head and shoulders "
-    "down to at most the waist; do not show hips, legs, feet or a full body. The phone and "
-    "camera-holding arm stay outside the frame; no arm reaches towards the lens, no long arm, "
-    "giant hand, wide-angle distortion or stretched anatomy. Use natural eye-level perspective. "
+    "This is a SELF-CAPTURED PHOTO of the character in the referenced scene. The camera may "
+    "be propped up or use a timer; do not require the character to hold or reach for a phone. "
+    "Show the same person as the character reference, framed from the head and shoulders "
+    "down to at most the waist; do not show hips, legs, feet or a full body. Let the character "
+    "sit, lean, turn naturally, gesture or interact with appropriate nearby objects according to "
+    "the actual current activity and location. Choose an action and expression that fit the "
+    "moment; do not invent unrelated activities, props or repeat the same pose every time. "
+    "Hands and arms may be visible in natural proportions and positions; no unnaturally long "
+    "arm, giant hand, wide-angle distortion or stretched anatomy. Use natural perspective. "
     "Keep the recognizable location visible behind the subject and preserve its layout from "
     "the second reference. Render subject and environment as a single coherent scene with "
     "matching visual style, light direction, color temperature, exposure and shadows. Let "
@@ -107,8 +111,14 @@ SELFIE_PROMPT = (
     "and clothing; match edge softness, depth of field and grain to the background. "
     "Preserve the character's face, hair, ears and distinctive accessories, and adapt the "
     "background to the character's illustration style so neither looks pasted on. "
-    "Show one coherent front-camera selfie, not a three-view sheet, collage, third-person "
-    "portrait or additional people."
+    "Show one coherent self-captured photo, not a three-view sheet, collage or additional people."
+)
+SELFIE_PROMPT_MINIMAX = (
+    "SELF-CAPTURED PHOTO, head and shoulders to at most the waist. The camera can be "
+    "propped up or on a timer; no need to hold a phone. Use a natural pose or hand gesture "
+    "suited to the current activity and location; avoid unrelated props, stretched arms "
+    "and wide-angle distortion. Preserve character identity. Match background and character "
+    "style, lighting direction, color temperature and shadows in one coherent scene."
 )
 
 
@@ -280,7 +290,7 @@ class LifePhotoModule:
             refs.append(location_ref)
         anchor = SCENE_ANCHORS.get(location, "")
         composition = (
-            f"{settings.character_prompt.strip()}\n{SELFIE_PROMPT}\n"
+            f"{settings.character_prompt.strip()}\n{SELFIE_PROMPT_MINIMAX if settings.provider == 'minimax' else SELFIE_PROMPT}\n"
             "Image 1 is the photographer's identity reference. Image 2, if present, shows the location. "
             if mode == "selfie" else
             f"{settings.scene_prompt.strip()}\n"
