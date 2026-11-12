@@ -52,6 +52,7 @@ def make_plugin(tmp_path: Path, config: dict | None = None):
     plugin._ctx = types.SimpleNamespace(
         maisaka=types.SimpleNamespace(proactive=proactive),
         chat=FakeChat(),
+        message=types.SimpleNamespace(get_recent=lambda *_args, **_kwargs: asyncio.sleep(0, result=[])),
         logger=logging.getLogger("test_secretary"),
         paths=types.SimpleNamespace(data_dir=tmp_path),
     )
@@ -821,7 +822,7 @@ async def test_interval_plan_survives_reload_and_replans_on_mode_change(tmp_path
 @pytest.mark.asyncio
 async def test_next_proactive_chat_uses_only_a_successfully_sent_previous_message(tmp_path):
     target = "qq:private:123"
-    config = {"proactive": {"target_chats": [target], "messages_per_window": 2}}
+    config = {"proactive": {"target_chats": [target], "messages_per_window": 2, "unanswered_probabilities": [100, 100, 100, 0]}}
     plugin, proactive = make_plugin(tmp_path, config)
     plugin.proactive.rng.seed(7)
     zone = ZoneInfo("Asia/Shanghai")
@@ -859,6 +860,8 @@ async def test_next_proactive_chat_uses_only_a_successfully_sent_previous_messag
 
     restored, restored_proactive = make_plugin(tmp_path, config)
     restored._load_state()
+    await restored._tick(datetime.fromtimestamp(first + 6, UTC))
+    second = restored.proactive.plans[target]["slots"][0]
     await restored._tick(datetime.fromtimestamp(second + 1, UTC))
     assert len(restored_proactive.calls) == 1
     intent = restored_proactive.calls[0]["intent"]
@@ -923,6 +926,8 @@ async def test_inbound_message_prevents_claiming_an_ordinary_reply(tmp_path):
         sent=True,
     )
     assert "last_message" not in plugin.proactive.continuity[target]
+    await plugin._tick(datetime.fromtimestamp(first + 4, UTC))
+    second = plugin.proactive.plans[target]["slots"][0]
     await plugin._tick(datetime.fromtimestamp(second + 1, UTC))
     assert "这是普通回复" not in proactive.calls[1]["intent"]
 

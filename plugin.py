@@ -473,6 +473,19 @@ class ProactiveSettings(PluginConfigBase):
             "hint": "Each interval is randomly advanced or postponed based on the average, and the offset must be less than the average interval.",
         },
     )
+    unanswered_probabilities: list[int] = Field(
+        default_factory=lambda: [100, 70, 35, 0],
+        json_schema_extra={"label": "Proactive probability after unanswered messages (%)", "hint": "One percentage per unanswered proactive message count, beginning at zero. The last value is reused; a zero stops further messages until a user replies."},
+    )
+
+    @field_validator("unanswered_probabilities")
+    @classmethod
+    def validate_unanswered_probabilities(cls, values: list[int]) -> list[int]:
+        if not values or len(values) > 20 or any(value < 0 or value > 100 for value in values):
+            raise ValueError("主动聊天概率须为 1–20 个 0–100 的百分数")
+        if values[-1] != 0 or any(values[index] < values[index + 1] for index in range(len(values) - 1)):
+            raise ValueError("主动聊天概率必须逐步下降或持平，最后一项为 0")
+        return values
     intent: str = Field(
         default=(
             "请根据这个聊天流的最近对话、人物关系和已有记忆，找一个贴合上下文的话题，"
@@ -1090,6 +1103,9 @@ class MaiSecretaryPlugin(MaiBotPlugin):
         self, message: dict[str, Any] | None = None, **kwargs: Any,
     ) -> dict[str, str] | None:
         del kwargs
+        cancelled = self.proactive.suppress_cancelled_send(message)
+        if cancelled:
+            return cancelled
         return self.message_debounce.before_send(message)
 
     @HookHandler(

@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import types
 from datetime import UTC, datetime
+from zoneinfo import ZoneInfo
 
 import pytest
 from test_secretary import make_plugin, module
@@ -82,7 +83,10 @@ async def test_probability_boundaries_and_empty_allowlist(tmp_path):
 async def test_life_summary_uses_recorded_today_and_current_mood(tmp_path):
     plugin, _ = make_plugin(tmp_path, {"virtual_life": {"enabled": True}, "mood": {"enabled": True}})
     now = datetime.now(UTC)
-    plugin.virtual_life.scene_at(now)
+    day = now.astimezone(ZoneInfo(plugin.config.plugin.timezone)).date().isoformat()
+    scene = {"key": f"{day}:afternoon", "period": "下午", "activity": "在桌边拼乐高"}
+    plugin.virtual_life.history = [scene]
+    plugin.virtual_life.scene_at = lambda _now: scene
     prompts = []
     async def generate(**kwargs):
         prompts.append(kwargs["prompt"])
