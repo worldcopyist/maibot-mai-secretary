@@ -23,6 +23,7 @@ class FeatureControlModule:
         "life_photo": ("life_photo", "enabled", "生活照片", ("主动发图", "生图分享", "拍照分享")),
         "mood": ("mood", "enabled", "心情模块", ("心情", "情绪模块")),
         "mood_chat": ("mood", "chat_influence_enabled", "聊天影响心情", ("对话影响心情",)),
+        "mood_affection": ("mood", "affection_after_silence_enabled", "静默后撒娇", ("撒娇提醒", "撒娇求回应")),
         "mood_bullying": ("mood", "bullying_mood_enabled", "反霸凌影响心情", ("被辱骂后改变心情",)),
         "role_recognition": ("role_recognition", "enabled", "角色识别", ("身份识别",)),
         "qzone": ("qzone", "enabled", "QQ 空间", ("空间说说", "空间模块")),
@@ -62,6 +63,7 @@ class FeatureControlModule:
     PARENTS: ClassVar[dict[str, tuple[str, ...]]] = {
         "timetable": ("scheduled_tasks",),
         "virtual_life": ("proactive",), "mood_chat": ("mood",),
+        "mood_affection": ("mood", "proactive"),
         "qzone_auto": ("qzone",), "qzone_image": ("qzone", "life_photo"),
         "mood_bullying": ("mood", "anti_bullying"),
         "relationships": ("role_recognition",),

@@ -30,6 +30,8 @@ The four plugin pages also switch immediately with MaiBot's interface language: 
 
 ## Features and modules
 
+When both mood and proactive chat are enabled, the optional **affection after silence** setting allows one gentle invitation to respond after the normal proactive probability reaches zero. It respects the configured chat window and relationship, and resets when a user speaks. A queued task may still not result in a sent message; administrators can also say “关闭静默后撒娇” to turn it off.
+
 | Module | What it does | Main controls or tools |
 | --- | --- | --- |
 | `feature_control.py` | Lets a verified administrator list, enable, disable, or reset module and Boolean subfeature switches in natural language. Chat-set values persist in plugin state and override the WebUI configuration until reset. | `secretary_feature_switch`; workbench |

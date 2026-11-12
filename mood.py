@@ -79,6 +79,10 @@ class MoodSettings(PluginConfigBase):
         default=True,
         json_schema_extra={"label": "Chat affects mood", "hint": "A background model reviews private messages and group messages clearly addressed to MaiBot. It does not delay the current reply, but adds model calls and token use."},
     )
+    affection_after_silence_enabled: bool = Field(
+        default=True,
+        json_schema_extra={"label": "Affection after unanswered messages", "hint": "After proactive chat reaches zero probability, attempt one affectionate message within its allowed window. A new user message resets this limit."},
+    )
     chat_confidence_threshold: float = Field(
         default=0.75, ge=0.5, le=1.0,
         json_schema_extra={"label": "Chat influence confidence threshold", "hint": "Change the shared mood only when the model meets this confidence threshold. Higher values are more cautious."},

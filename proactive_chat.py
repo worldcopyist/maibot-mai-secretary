@@ -105,6 +105,13 @@ class ProactiveChatModule:
                 except Exception:
                     LOG.exception("主动聊天无法核对最近消息：%s", target)
                     continue
+            continuity = self.continuity.get(target, {})
+            unanswered = max(0, int(continuity.get("unanswered_count", 0)))
+            if (settings.scheduling_mode == "count" and isinstance(plan, dict) and not plan.get("slots")
+                    and unanswered and settings.unanswered_probabilities[min(unanswered, len(settings.unanswered_probabilities) - 1)] == 0
+                    and self.plugin.config.mood.enabled and self.plugin.config.mood.affection_after_silence_enabled
+                    and not continuity.get("affection_attempted")):
+                plan = None
             if (
                 not isinstance(plan, dict)
                 or plan.get("window_key") != window_key
@@ -113,12 +120,15 @@ class ProactiveChatModule:
                 continuity = self.continuity.get(target, {})
                 count_sent = int(continuity.get("count_sent", 0)) if continuity.get("count_window_key") == window_key else 0
                 count_remaining = max(0, settings.messages_per_window - count_sent)
+                unanswered = max(0, int(continuity.get("unanswered_count", 0)))
+                silent = bool(unanswered and settings.unanswered_probabilities[min(unanswered, len(settings.unanswered_probabilities) - 1)] == 0)
+                affection_due = silent and self.plugin.config.mood.enabled and self.plugin.config.mood.affection_after_silence_enabled and not continuity.get("affection_attempted")
                 plan = {
                     "window_key": window_key,
                     "signature": signature,
                     "slots": (
                         self._interval_slots(now, first, last, float(continuity.get("last_chat_at") or 0))
-                        if settings.scheduling_mode == "interval"
+                        if settings.scheduling_mode == "interval" or affection_due
                         else random_slots(
                             max(now, datetime.fromtimestamp(
                                 float(self.continuity.get(target, {}).get("last_chat_at") or 0)
@@ -154,19 +164,32 @@ class ProactiveChatModule:
                 unanswered = max(0, int(continuity.get("unanswered_count", 0)))
                 chances = settings.unanswered_probabilities
                 chance = chances[min(unanswered, len(chances) - 1)]
-                if self.rng.random() * 100 >= chance:
+                affection = bool(chance == 0 and unanswered and self.plugin.config.mood.enabled
+                                  and self.plugin.config.mood.affection_after_silence_enabled
+                                  and not continuity.get("affection_attempted"))
+                if not affection and self.rng.random() * 100 >= chance:
                     continue
+                if affection:
+                    continuity["affection_attempted"] = True
                 continuity["pending"] = {
                     "stream_id": stream_id,
                     "since": now.timestamp(),
                     "until": now.timestamp() + 180,
                     "message_ids": [],
                     "window_key": window_key,
+                    "affection": affection,
                 }
+                self.plugin._save_state()
                 try:
+                    affection_note = (
+                        "\n对方最近一直没有回应，这是静默之后唯一一次轻轻邀请回应的机会。"
+                        "结合当前心情、模拟生活、聊天上下文和已识别的关系，符合原有人设地自然撒娇，"
+                        "温柔邀请对方有空时回应；对陌生人保持礼貌距离。不要责备、施压、道德绑架，"
+                        "不要声称知道对方为什么没回复，也不要暗示对方必须照顾你的情绪。"
+                    ) if affection else ""
                     result = await self.plugin._trigger(
                         stream_id,
-                        self._proactive_intent(target, settings.intent, now) + self._context_note(recent, now),
+                        self._proactive_intent(target, settings.intent, now) + self._context_note(recent, now) + affection_note,
                         "预定的日常聊天时段",
                         f"{target}:{window_key}:{int(due_at)}",
                         target=target,
@@ -175,6 +198,8 @@ class ProactiveChatModule:
                         continuity["pending"]["host_task_id"] = str(result.get("task_id") or "")
                 except Exception:
                     continuity.pop("pending", None)
+                    if affection:
+                        continuity.pop("affection_attempted", None)
                     LOG.exception("随机主动聊天触发失败：%s", target)
                 self.plugin._save_state()
                 break
@@ -223,6 +248,7 @@ class ProactiveChatModule:
             continuity["last_user_at"] = last_user
             if last_user > float(continuity.get("last_sent_at") or 0):
                 continuity["unanswered_count"] = 0
+                continuity.pop("affection_attempted", None)
             changed = True
         if changed:
             self.plugin._save_state()
@@ -381,6 +407,7 @@ class ProactiveChatModule:
                     continuity["last_user_at"] = received_at
                     if received_at > float(continuity.get("last_sent_at") or 0):
                         continuity["unanswered_count"] = 0
+                        continuity.pop("affection_attempted", None)
                     if received_at > float(continuity.get("last_chat_at") or 0):
                         continuity["last_chat_at"] = received_at
                         self.plans.pop(target, None)

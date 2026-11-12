@@ -170,3 +170,45 @@ async def test_count_mode_does_not_reset_window_quota_after_sending(tmp_path):
     await plugin._tick(datetime.fromtimestamp(due + 3, UTC))
     assert len(calls.calls) == 1
     assert plugin.proactive.plans[target]["slots"] == []
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("mode", ["interval", "count"])
+async def test_affection_once_after_silence_and_reset_on_reply(tmp_path, mode):
+    config = settings()
+    config["mood"] = {"enabled": True}
+    config["proactive"].update(scheduling_mode=mode, messages_per_window=1)
+    plugin, calls = make_plugin(tmp_path, config)
+    start = datetime(2026, 11, 12, 9, 0, tzinfo=ZoneInfo("Asia/Shanghai"))
+    target = "qq:private:123"
+    plugin.proactive.continuity[target] = {"last_chat_at": start.timestamp(), "last_sent_at": start.timestamp(),
+                                          "unanswered_count": 3, "count_window_key": "2026-11-12", "count_sent": 1}
+    await plugin._tick(start)
+    due = plugin.proactive.plans[target]["slots"][0]
+    await plugin._tick(datetime.fromtimestamp(due + 1, UTC))
+    assert len(calls.calls) == 1 and "自然撒娇" in calls.calls[0]["intent"]
+    assert plugin.proactive.continuity[target]["affection_attempted"] is True
+    await plugin.capture_proactive_reply(message(due + 2, sender="bot-1", message_id="affection"), sent=True)
+    await plugin._tick(datetime.fromtimestamp(due + 3, UTC))
+    restored, restored_calls = make_plugin(tmp_path, config)
+    restored._load_state()
+    await restored._tick(datetime.fromtimestamp(due + 7205, UTC))
+    assert restored_calls.calls == []
+    await restored.cancel_pending_on_inbound(message(due + 7210, message_id="reply"))
+    assert restored.proactive.continuity[target]["unanswered_count"] == 0
+    assert "affection_attempted" not in restored.proactive.continuity[target]
+
+
+@pytest.mark.asyncio
+async def test_affection_disabled_with_mood_or_feature(tmp_path):
+    for mood in ({"enabled": False}, {"enabled": True, "affection_after_silence_enabled": False}):
+        config = settings()
+        config["mood"] = mood
+        plugin, calls = make_plugin(tmp_path, config)
+        now = datetime(2026, 11, 12, 9, 0, tzinfo=ZoneInfo("Asia/Shanghai"))
+        target = "qq:private:123"
+        plugin.proactive.continuity[target] = {"last_chat_at": now.timestamp(), "last_sent_at": now.timestamp(), "unanswered_count": 3}
+        await plugin._tick(now)
+        due = plugin.proactive.plans[target]["slots"][0]
+        await plugin._tick(datetime.fromtimestamp(due + 1, UTC))
+        assert calls.calls == []
